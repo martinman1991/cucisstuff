@@ -1,130 +1,148 @@
-# cucisstuff - Online Piactér Platform
+# cucisstuff — Online Piactér Platform
 
-Egy funkciókban gazdag magyar online piactér webalkalmazás valós idejű üzenetküldéssel, admin felülettel és két téma támogatással.
+Magyar apróhirdetési platform valós idejű üzenetküldéssel, admin terminállal és kétféle témával. PHP + MySQL alapú, lokálisan futtatható XAMPP/WAMP/MAMP segítségével.
 
-## 📋 Áttekintés
+---
 
-A **cucisstuff** egy komplett apróhirdetési platform, ahol a felhasználók termékeket hirdethetnek meg, valós idejű üzeneteket válthatnak, kezelhetik hirdetéseiket és kapcsolatba léphetnek az eladókkal. A platform tartalmaz egy adminisztrációs felületet moderációs képességekkel, jelentéskezeléssel és rendszerkarbantartó eszközökkel.
+## Funkciók
 
-## ✨ Funkciók
+### Felhasználói funkciók (`index.php`, `main.php`, `account.php`)
+- **Bejelentkezés / regisztráció** — session-alapú hitelesítés bcrypt jelszóhasheléssel (`PASSWORD_DEFAULT`); külön `passwords` tábla a hash-eknek
+- **Hirdetés feladása** — cím, leírás, ár + több kép feltöltése (`JPEG`, `PNG`, `GIF`, `WebP`, max 5 MB/kép); képek az `uploads/<item_id>/` könyvtárba kerülnek
+- **Hirdetések böngészése** — véletlenszerű sorrendű rács (oldalonként 24 termék), lapozással
+- **Termék modal** — teljes képernyős nézet galériával, lightboxszal, eladói profillal, szerkesztéssel és törléssel
+- **AJAX-keresés** — valós idejű keresés cím és leírás alapján, legördülő eredménylistával
+- **Eladói profil popup** — teljes képernyős nézet az eladó statisztikáival és legutóbbi hirdetéseivel
+- **Fiók szerkesztése** — felhasználónév, e-mail és jelszó módosítása AJAX-on keresztül; saját hirdetések kezelése
+- **Bejelentés** — hirdetések és üzenetek bejelentése moderálásra
 
-### 👤 Felhasználói funkciók
-- **Hitelesítési rendszer** - Biztonságos bejelentkezés/regisztráció jelszó hasheléssel
-- **Termék hirdetések** - Hirdetések létrehozása, szerkesztése és törlése több kép feltöltésével (JPEG, PNG, GIF, WebP, max 5MB/kép)
-- **Képgaléria** - Fő kép kiválasztása és bélyegkép navigáció
-- **Keresés** - AJAX-alapú keresés a termékcímekben és leírásokban
-- **Felhasználói profilok** - Eladói profilok megtekintése hirdetéseikkel és statisztikáikkal
-- **Reszponzív design** - Adaptív rács elrendezés minden eszközön (asztali gép, tablet, mobil)
+### Üzenetküldő rendszer (`uzenetek.php`)
+- **Valós idejű chat** — AJAX polling 500 ms-es intervallummal (háttérben 3 s), időbélyeg alapú szinkronizációval
+- **Optimista UI** — az elküldött üzenet azonnal megjelenik, a szerver válasz után cserélődik a valós ID-ra
+- **Sidebar frissítés** — a partnerek listája 5 másodpercenként frissül AJAX-on keresztül
+- **Üzenet műveletek** — szerkesztés és törlés saját üzenetekre; bejelentés a fogadott üzenetekre
+- **Új beszélgetés** — modálból indítható azokkal a felhasználókkal, akikkel még nincs aktív csevegés
+- **Olvasási visszaigazolás** — ✓ / ✓✓ jelzés az elküldött üzeneteknél
 
-### 💬 Üzenetküldő rendszer
-- **Valós idejű üzenetek** - AJAX polling az azonnali üzenetkézbesítésért
-- **Beszélgetéskezelés** - Csevegési előzmények, olvasatlan üzenet jelzők
-- **Üzenet műveletek** - Saját üzenetek szerkesztése, törlése, nem megfelelő üzenetek jelentése
-- **Toast értesítések** - Vizuális figyelmeztetések új üzenetekhez
-- **Olvasási visszaigazolás** - Dupla pipa jelzés az olvasott üzeneteknél
+### Admin felület (`admin.php`)
+- **Katonai terminál stílus** — CRT scanlines, foszforeszcens zöld/amber szín, VT323 és Share Tech Mono betűtípus
+- **Irányítópult** — felhasználók, hirdetések és reportok összesítése
+- **Felhasználókezelés** — felhasználók listázása, szerkesztése, törlése; admin-státusz jelzése
+- **Hirdetéskezelés** — bármely hirdetés szerkesztése vagy törlése (képfájlok törlésével együtt)
+- **Reportok** — termék- és üzenetbejelentések kezelése, forrással együtt megtekinthető termékmodálban
 
-### 🔧 Admin funkciók
-- **Admin irányítópult** - Rendszerstatisztikák és gyors navigáció
-- **Felhasználókezelés** - Felhasználók megtekintése, szerkesztése és törlése hirdetésszámokkal
-- **Hirdetéskezelés** - Bármely hirdetés szerkesztése vagy eltávolítása, részletek megtekintése
-- **Jelentésrendszer** - Felhasználói jelentések kezelése termékekre és üzenetekre
+### Témarendszer
+- **Sötét mód** — narancs (`#ff9a1f`) akcentszín, üvegmorfológiai effektek
+- **Világos mód** — zöld (`#B0CB1F`) akcentszín, krémszínű háttér
+- A témaváltó `localStorage`-ban menti a beállítást; FOUC-megelőzés inline `<script>`-tel az `<head>`-ben
 
-### 🎨 Téma rendszer
-- **Sötét/Világos módok** - Váltás sötét (narancs) és világos (zöld) témák között
-- **Preferencia mentés** - A téma választás localStorage-ben tárolódik
-- **CSS változók** - Könnyű téma testreszabás
+---
 
-## 🛠️ Technológiai stack
+## Technológiai stack
 
 | Összetevő | Technológia |
-|-----------|-------------|
-| Backend | PHP 7.4+ (PDO adatbázishoz) |
+|---|---|
+| Backend | PHP 7.4+ (PDO + MySQLi) |
 | Adatbázis | MySQL / MariaDB |
-| Frontend | HTML5, CSS3, JavaScript (ES6) |
-| Stílusok | Egyedi CSS üvegmorfológiai effektekkel |
-| AJAX | Fetch API valós idejű funkciókhoz |
-| Képek | PHP GD (fájlfeltöltésen keresztül) |
-| Hitelesítés | Session-alapú bcrypt jelszó hasheléssel |
+| Frontend | HTML5, CSS3, JavaScript ES6 |
+| AJAX | Fetch API (polling + optimistic UI) |
+| Hitelesítés | Session + `password_hash()` / `password_verify()` |
+| Képkezelés | PHP native `move_uploaded_file()` |
+| Admin betűtípus | VT323, Share Tech Mono (Google Fonts) |
 | Helyi szerver | XAMPP / WAMP / MAMP |
 
-## 📦 Telepítés
+---
+
+## Adatbázis-struktúra
+
+```
+passwords       id, password_hash (UNIQUE)
+users           id, email (UNIQUE), username (UNIQUE), password_id (FK), created_at
+admins          user_id (FK → users)
+items           id CHAR(12), user_id (FK), title, description, price, created_at, updated_at
+item_images     id, item_id (FK), image_path, image_filename, is_primary, sort_order, uploaded_at
+reports         id, item_id (FK), user_id (FK), reason, status (pending/resolved/dismissed), created_at
+uzenetek        id CHAR(25), sender_id (FK), receiver_id (FK), message, sent_at, is_read
+message_reports id, message_id (FK → uzenetek), reporter_user_id (FK), reason, status, created_at
+```
+
+Az üzenet ID-k 25 karakteres, véletlenszerűen generált alfanumerikus stringek. A termék ID-k 12 karakteresek, ütközés-ellenőrzéssel szúródnak be.
+
+---
+
+## Telepítés
 
 ### Követelmények
-- **XAMPP** (vagy WAMP/MAMP) PHP 7.4+ és MySQL tartalommal
-- PHP kiterjesztések: PDO, MySQLi, GD, fileinfo
-- JavaScript-et támogató webböngésző
-- **Git**
+- XAMPP (vagy WAMP / MAMP) PHP 7.4+ és MySQL tartalommal
+- PHP kiterjesztések: `PDO`, `MySQLi`, `fileinfo`
+- JavaScript-et támogató böngésző
 
-### Lépésről lépésre telepítés (XAMPP)
+### Lépések
 
-#### 1. XAMPP elindítása
-Indítsd el a XAMPP Vezérlőpultot. Kattints az **Apache** és a **MySQL** melletti **Start** gombokra. Győződj meg róla, hogy mindkét szolgáltatás zöld háttérrel fut.
+**1. XAMPP elindítása**
 
-#### 2. Projekt letöltése a htdocs mappába
-Nyiss egy parancssort (CMD, PowerShell vagy Git Bash), majd navigálj el a XAMPP telepítési könyvtárán belül a `htdocs` mappába.
+Indítsd el a XAMPP Vezérlőpultot, és kattints az **Apache** és **MySQL** melletti **Start** gombra.
+
+**2. Repo klónozása**
 
 ```bash
+cd C:/xampp/htdocs
 git clone https://github.com/martinman1991/cucisstuff
+```
 
-### 3. Adatbázis importálása
-Nyisd meg a böngésződben a phpMyAdmin felületet: [http://localhost/phpmyadmin](http://localhost/phpmyadmin)
+**3. Adatbázis létrehozása**
 
-- Kattints az **Új adatbázis** gombra (bal oldali menüben)
-- Adj neki egy nevet (pl. `cucisstuff_db`), karakterkészletnek hagyd `utf8mb4_general_ci` értéken
-- Kattints a **Létrehozás** gombra
-- A frissen létrehozott adatbázisban kattints az **SQL** fülre
-- Nyisd meg a projektben található `db.sql` fájlt, másold ki a teljes tartalmát
-- Illeszd be a phpMyAdmin SQL szövegmezőjébe, majd kattints az **Indítás** gombra
+Nyisd meg a [phpMyAdmin](http://localhost/phpmyadmin) felületet, hozz létre egy új adatbázist (pl. `cuci_ady_pepa_hu`), majd importáld a `db.sql` fájl tartalmát az **SQL** fülön.
 
-### 4. Konfigurációs fájl beállítása
-A projekt gyökérkönyvtárában keresd meg a konfigurációs fájlt (pl. `config.php`, `.env`, `includes/config.php`). Nyisd meg egy szövegszerkesztővel (pl. Notepad++, VS Code).
+**4. Konfigurációs fájl beállítása**
 
-Állítsd be az adatbázis kapcsolat paramétereit az alábbiak szerint:
+Nyisd meg a `config.php` fájlt, és írd át az adatbázis-adatokat:
 
 ```php
 define('DB_HOST', 'localhost');
-define('DB_NAME', 'cucisstuff_db');   // a korábban létrehozott adatbázis neve
-define('DB_USER', 'root');            // XAMPP alapértelmezett felhasználó
-define('DB_PASS', '');                // XAMPP alapértelmezett jelszó (üres)
+define('DB_USER', 'root');         // XAMPP alapértelmezett
+define('DB_PASS', '');             // XAMPP alapértelmezett (üres)
+define('DB_NAME', 'cuci_ady_pepa_hu');
+```
 
-### 5. Webalkalmazás megnyitása
-Nyisd meg a böngészőt, és navigálj a következő címre:
-http://localhost/cucisstuff
+> **Fontos:** Ne töltsd fel éles adatbázis-jelszót nyilvános repóba. Vedd fel a `config.php`-t a `.gitignore`-ba.
 
-Ha minden jól működik, a cucisstuff kezdőlapja fogad.
+**5. Megnyitás böngészőben**
 
-### 🧪 Hibaelhárítási tippek
+Navigálj a [http://localhost/cucisstuff](http://localhost/cucisstuff) címre.
+
+---
+
+## Hibaelhárítás
 
 | Hiba | Megoldás |
-|------|----------|
-| **404 Not Found** | Ellenőrizd, hogy a projekt mappa neve helyes-e (`cucisstuff`), és hogy a fájlok valóban a `htdocs` alatt vannak. |
-| **Adatbázis kapcsolódási hiba** | Nézd át a konfigurációs fájl beállításait, és győződj meg róla, hogy a MySQL fut a XAMPP-ban. |
-| **Üres oldal / PHP hibák** | Kapcsold be a PHP hibajelentést a `php.ini` fájlban, vagy a projekt elején add hozzá: `error_reporting(E_ALL); ini_set('display_errors', 1);` |
-| **Feltöltés nem működik** | Ellenőrizd a `php.ini` `upload_max_filesize` és `post_max_size` értékeit (a projekt max 5MB-os képeket enged). |
+|---|---|
+| **404 Not Found** | Ellenőrizd, hogy a mappa neve `cucisstuff`, és a fájlok a `htdocs` alatt vannak. |
+| **DB kapcsolódási hiba** | Ellenőrizd a `config.php` konstansokat, és hogy a MySQL fut a XAMPP-ban. |
+| **Üres oldal / PHP hiba** | Adj hozzá `error_reporting(E_ALL); ini_set('display_errors', 1);` sort az oldal tetejére. |
+| **Feltöltés nem működik** | Ellenőrizd a `php.ini` `upload_max_filesize` és `post_max_size` értékeit (min. 5 MB). |
+| **`message_reports` tábla hiányzik** | Az admin felület automatikusan létrehozza az első betöltéskor `CREATE TABLE IF NOT EXISTS`-szal. |
 
-## 📁 Projekt struktúra
+---
+
+## Projekt struktúra
+
+```
 cucisstuff/
-├── admin/ # Admin felület fájljai
-├── assets/ # Statikus fájlok (CSS, JS, képek)
-│ ├── css/
-│ ├── js/
-│ └── images/
-├── includes/ # PHP segédfüggvények és konfigurációk
-│ ├── config.php
-│ ├── functions.php
-│ └── auth.php
-├── uploads/ # Felhasználók által feltöltött képek
-├── database/ # SQL séma fájlok
-│ └── cucisstuff.sql
-├── index.php # Kezdőlap
-├── product.php # Termék részletek oldal
-├── profile.php # Felhasználói profil oldal
-├── messages.php # Üzenetküldő felület
-├── login.php # Bejelentkezés
-├── register.php # Regisztráció
-├── logout.php # Kijelentkezés
-└── README.md # Ez a dokumentáció
+├── config.php          # DB konstansok (DB_HOST, DB_USER, DB_PASS, DB_NAME)
+├── db.sql              # Teljes adatbázis-séma (CREATE TABLE + admin seed)
+├── index.php           # Bejelentkezés / regisztráció
+├── main.php            # Főoldal — hirdetésrács, feltöltés, keresés
+├── account.php         # Fiókom — adatmódosítás, saját hirdetések
+├── uzenetek.php        # Valós idejű üzenetküldő
+├── admin.php           # Admin terminál (csak admin szerepkörrel)
+├── theme-dark.css      # Sötét téma (narancs akcentszín)
+├── theme-light.css     # Világos téma (zöld akcentszín)
+└── uploads/            # Feltöltött képek (<item_id>/<filename>)
+```
 
-## 🤝 Közreműködés
+---
 
-A projekt fejlesztés alatt áll. Ha hibát találsz vagy fejlesztési javaslatod van, nyiss egy issue-t a GitHub repository-ban.
+## Közreműködés
+
+A projekt fejlesztés alatt áll. Ha hibát találsz vagy fejlesztési javaslatod van, nyiss egy [issue-t a GitHub repository-ban](https://github.com/martinman1991/cucisstuff/issues).
