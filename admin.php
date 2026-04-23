@@ -345,7 +345,7 @@ function pgLink($v, $p)
             --font-vt: 'VT323', 'Courier New', monospace;
         }
 
-        /* LIGHT MODE — Amber CRT (VILÁGOSABB SZÍNEK) */
+        /* LIGHT MODE — Sárgás / borostyán, világosabb a sötét módnál, de nem fehér */
         body.light-mode {
             --c-bg: #2a1a00;
             --c-panel: #3a2400;
@@ -498,11 +498,6 @@ function pgLink($v, $p)
             gap: 0;
             padding: 0 8px;
             overflow-x: auto;
-            scrollbar-width: none;
-        }
-
-        .chrome-nav::-webkit-scrollbar {
-            display: none;
         }
 
         .nav-btn {
@@ -1484,7 +1479,8 @@ function pgLink($v, $p)
             position: fixed;
             inset: 0;
             z-index: 5000;
-            background: rgba(0, 0, 0, 0.97);
+            background: rgba(0, 0, 0, 0.98);
+            backdrop-filter: blur(8px);
             display: none;
             align-items: center;
             justify-content: center;
@@ -1564,33 +1560,6 @@ function pgLink($v, $p)
             background: var(--c-panel);
             border: 1px solid var(--c-border2);
             overflow-y: auto;
-        }
-
-        /* ═══════════ CONVERSATION SIDEBAR SCROLLBAR ═══════════ */
-        .conversation-sidebar::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        .conversation-sidebar::-webkit-scrollbar-track {
-            background: var(--c-panel);
-            border-left: 1px solid var(--c-border);
-        }
-
-        .conversation-sidebar::-webkit-scrollbar-thumb {
-            background: var(--c-border2);
-            border-radius: 4px;
-            border: 1px solid var(--c-green-dim);
-        }
-
-        .conversation-sidebar::-webkit-scrollbar-thumb:hover {
-            background: var(--c-green-mid);
-            border-color: var(--c-green);
-        }
-
-        /* Firefox scrollbar */
-        .conversation-sidebar {
-            scrollbar-width: thin;
-            scrollbar-color: var(--c-border2) var(--c-panel);
         }
 
         .conversation-item {
