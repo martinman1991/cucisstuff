@@ -275,14 +275,15 @@ try {
         try {
             $sellerId = (int)$_GET['get_seller'];
 
+            // --- MÓDOSÍTÁS: profile_picture lekérése ---
             $sellerStmt = $conn->prepare("
-                SELECT u.id, u.username, u.created_at,
+                SELECT u.id, u.username, u.created_at, u.profile_picture,
                        COUNT(DISTINCT i.id) AS item_count,
                        (SELECT COUNT(*) FROM admins WHERE user_id = u.id) AS is_admin
                 FROM users u
                 LEFT JOIN items i ON i.user_id = u.id
                 WHERE u.id = ?
-                GROUP BY u.id, u.username, u.created_at
+                GROUP BY u.id, u.username, u.created_at, u.profile_picture
             ");
             $sellerStmt->execute([$sellerId]);
             $seller = $sellerStmt->fetch(PDO::FETCH_ASSOC);
@@ -2735,6 +2736,13 @@ try {
             color: #000;
             margin: 0 auto 1.2rem;
             box-shadow: 0 0 40px rgba(255, 140, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .seller-popup-avatar-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
 
         .seller-popup-name {
@@ -3617,7 +3625,7 @@ try {
                     if (isOwner || isAdmin) {
                         deleteBtn.style.display = 'block';
                         deleteBtn.onclick = () => {
-                            if (confirm('Biztosan törölni szeretnéd ezt a hirdetést?')) {
+                            if (confirm('Biztosan törlöd ezt a terméket?')) {
                                 const form = document.createElement('form');
                                 form.method = 'POST';
                                 form.innerHTML = `
@@ -3977,6 +3985,14 @@ try {
                     // Update topbar title
                     document.querySelector('.seller-popup-topbar-title').textContent = '👤 ' + data.username;
 
+                    // Avatar: profilkép vagy kezdőbetű
+                    let avatarHtml;
+                    if (data.profile_picture && data.profile_picture.trim() !== '') {
+                        avatarHtml = `<img src="${escapeHtml(data.profile_picture)}" class="seller-popup-avatar-img" alt="${escapeHtml(data.username)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+                    } else {
+                        avatarHtml = `<div class="seller-popup-avatar unselectable">${initial}</div>`;
+                    }
+
                     let itemsHtml = '';
                     if (data.latest_items && data.latest_items.length > 0) {
                         itemsHtml = `<div class="seller-popup-items-title unselectable">Legutóbbi hirdetések</div>
@@ -4002,7 +4018,9 @@ try {
                         `<div style="text-align:center;color:rgba(255,255,255,0.3);font-size:0.85rem;padding:1rem 0;" class="unselectable">Ez a saját profilod</div>`;
 
                     sellerContent.innerHTML = `
-                        <div class="seller-popup-avatar unselectable">${initial}</div>
+                        <div class="seller-popup-avatar unselectable" style="display: flex; align-items: center; justify-content: center;">
+                            ${avatarHtml}
+                        </div>
                         <div class="seller-popup-name unselectable">${escapeHtml(data.username)}${adminBadge}</div>
                         <div class="seller-popup-meta unselectable">Tag azóta: ${memberSince}</div>
                         <div class="seller-popup-stats">
