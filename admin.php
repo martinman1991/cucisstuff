@@ -345,22 +345,22 @@ function pgLink($v, $p)
             --font-vt: 'VT323', 'Courier New', monospace;
         }
 
-        /* LIGHT MODE — Amber CRT (VILÁGOSABB SZÍNEK) */
+        /* LIGHT MODE — Amber CRT (VILÁGOSABB, HALVÁNYABB SZÍNEK) */
         body.light-mode {
-            --c-bg: #2a1a00;
-            --c-panel: #3a2400;
-            --c-border: #6a4500;
-            --c-border2: #9a6500;
-            --c-green: #ffcc00;
-            --c-green-dim: #9a7000;
-            --c-green-mid: #e69900;
-            --c-amber: #ff8533;
-            --c-red: #ff4433;
-            --c-text: #f0c080;
-            --c-muted: #9a6a45;
-            --c-scan: rgba(255, 204, 0, 0.05);
-            --c-glow: 0 0 10px rgba(255, 204, 0, 0.5);
-            --c-glow-strong: 0 0 25px rgba(255, 204, 0, 0.7);
+            --c-bg: #3a2a10;
+            --c-panel: #4a3410;
+            --c-border: #7a5500;
+            --c-border2: #aa7500;
+            --c-green: #ffdd33;
+            --c-green-dim: #aa8800;
+            --c-green-mid: #f0b000;
+            --c-amber: #ffaa55;
+            --c-red: #ff6655;
+            --c-text: #ffe8c0;
+            --c-muted: #b08050;
+            --c-scan: rgba(255, 220, 0, 0.05);
+            --c-glow: 0 0 12px rgba(255, 220, 0, 0.6);
+            --c-glow-strong: 0 0 30px rgba(255, 220, 0, 0.8);
         }
 
         html {
@@ -1566,7 +1566,7 @@ function pgLink($v, $p)
             overflow-y: auto;
         }
 
-        /* ═══════════ CONVERSATION SIDEBAR SCROLLBAR ═══════════ */
+        /* ═══════════ CONVERSATION SIDEBAR SCROLLBAR (megtartva referenciaként) ═══════════ */
         .conversation-sidebar::-webkit-scrollbar {
             width: 8px;
         }
@@ -1736,6 +1736,37 @@ function pgLink($v, $p)
             font-family: var(--font-vt);
             font-size: 1.2rem;
             letter-spacing: 2px;
+        }
+
+        /* ═══════════════════════════════════════════════
+           GLOBÁLIS SCROLLBAR – EGYSÉGES MILITARY STÍLUS
+           (mint a .conversation-sidebar)
+        ═══════════════════════════════════════════════ */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--c-panel);
+            border-left: 1px solid var(--c-border);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--c-border2);
+            border-radius: 4px;
+            border: 1px solid var(--c-green-dim);
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--c-green-mid);
+            border-color: var(--c-green);
+        }
+
+        /* Firefox globális scrollbar */
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: var(--c-border2) var(--c-panel);
         }
 
         /* Responsive */

@@ -90,51 +90,9 @@ CREATE TABLE
     ) ENGINE = InnoDB;
 
 -- Admin felhasznalo keresese es beszurasa az adminok tablaba
-INSERT INTO
-    admins (user_id, assigned_at)
-SELECT
-    id,
-    CURRENT_TIMESTAMP
-FROM
-    users
-WHERE
-    username = 'admin'
-    AND id NOT IN (
-        SELECT
-            user_id
-        FROM
-            admins
-    )
-    AND EXISTS (
-        SELECT
-            1
-        FROM
-            users
-        WHERE
-            username = 'admin'
-    );
-
--- Admin felhasználó keresése és beszúrása az adminok táblába
-INSERT INTO
-    admins (user_id, assigned_at)
-SELECT
-    id,
-    CURRENT_TIMESTAMP
-FROM
-    users
-WHERE
-    username = 'admin'
-    AND id NOT IN (
-        SELECT
-            user_id
-        FROM
-            admins
-    )
-    AND EXISTS (
-        SELECT
-            1
-        FROM
-            users
-        WHERE
-            username = 'admin'
-    );
+INSERT INTO admins (user_id, assigned_at)
+SELECT id, CURRENT_TIMESTAMP
+FROM users
+WHERE username = 'admin'
+  AND id NOT IN (SELECT user_id FROM admins)
+  AND EXISTS (SELECT 1 FROM users WHERE username = 'admin');

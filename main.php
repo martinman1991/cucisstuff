@@ -437,7 +437,7 @@ try {
         }
     }
 
-    // Pagination settings
+// Pagination settings
     $itemsPerPage = 24;
     $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
     $offset = ($page - 1) * $itemsPerPage;
@@ -447,14 +447,21 @@ try {
     $totalItems = $totalStmt->fetchColumn();
     $totalPages = ceil($totalItems / $itemsPerPage);
 
-    // Fetch items for current page with RANDOM ordering
+    // Session-alapú véletlenszerű sorrend (kijelentkezésig vagy oldal újratöltéséig megmarad)
+    if (!isset($_SESSION['items_seed'])) {
+        $_SESSION['items_seed'] = mt_rand(1, 999999);
+    }
+    $seed = $_SESSION['items_seed'];
+
+    // Fetch items for current page with session-based RAND seed
     $stmt = $conn->prepare("
         SELECT i.*, u.username as seller_name
         FROM items i
         JOIN users u ON i.user_id = u.id
-        ORDER BY RAND()
+        ORDER BY RAND(:seed)
         LIMIT :offset, :itemsPerPage
     ");
+    $stmt->bindParam(':seed', $seed, PDO::PARAM_INT);
     $stmt->bindParam(':offset', $offset, PDO::PARAM_INT);
     $stmt->bindParam(':itemsPerPage', $itemsPerPage, PDO::PARAM_INT);
     $stmt->execute();
