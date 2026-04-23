@@ -34,6 +34,118 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 // Database connection
 require_once 'config.php';
 
+// === ÚJ: KÉP ÁTMÉRETEZŐ FÜGGVÉNY ===
+/**
+ * Átméretezi a képet, ha bármelyik oldala nagyobb a megadott maximumnál.
+ * A nagyobbik oldal a maxDim lesz, a másik arányosan változik.
+ * Ha a kép már kisebb vagy egyenlő, akkor csak másolja.
+ *
+ * @param string $source Forrásfájl elérési útja
+ * @param string $destination Célfájl elérési útja
+ * @param int $maxDim Maximális szélesség/magasság (alapértelmezett 1024)
+ * @return bool Sikeres volt-e a művelet
+ */
+function resizeImage($source, $destination, $maxDim = 1024)
+{
+    // Kép adatainak lekérése
+    $info = getimagesize($source);
+    if (!$info) return false;
+
+    $mime = $info['mime'];
+    $srcWidth = $info[0];
+    $srcHeight = $info[1];
+
+    // Ha a kép egyik oldala sem nagyobb a maximumnál, csak másoljuk
+    if ($srcWidth <= $maxDim && $srcHeight <= $maxDim) {
+        return copy($source, $destination);
+    }
+
+    // Új méretek számítása arányosan
+    $ratio = $srcWidth / $srcHeight;
+    if ($srcWidth > $srcHeight) {
+        $newWidth = $maxDim;
+        $newHeight = (int) round($maxDim / $ratio);
+    } else {
+        $newHeight = $maxDim;
+        $newWidth = (int) round($maxDim * $ratio);
+    }
+
+    // Kép betöltése a megfelelő GD függvénnyel
+    switch ($mime) {
+        case 'image/jpeg':
+            $srcImg = imagecreatefromjpeg($source);
+            break;
+        case 'image/png':
+            $srcImg = imagecreatefrompng($source);
+            break;
+        case 'image/gif':
+            $srcImg = imagecreatefromgif($source);
+            break;
+        case 'image/webp':
+            if (function_exists('imagecreatefromwebp')) {
+                $srcImg = imagecreatefromwebp($source);
+            } else {
+                // Ha nincs WebP támogatás, akkor marad az eredeti másolása
+                return copy($source, $destination);
+            }
+            break;
+        default:
+            return false;
+    }
+
+    if (!$srcImg) return false;
+
+    // Új, truecolor kép létrehozása
+    $dstImg = imagecreatetruecolor($newWidth, $newHeight);
+
+    // Átlátszóság megőrzése PNG és WebP esetén
+    if ($mime == 'image/png' || $mime == 'image/webp') {
+        imagealphablending($dstImg, false);
+        imagesavealpha($dstImg, true);
+        $transparent = imagecolorallocatealpha($dstImg, 0, 0, 0, 127);
+        imagefilledrectangle($dstImg, 0, 0, $newWidth, $newHeight, $transparent);
+    } elseif ($mime == 'image/gif') {
+        // GIF esetén az átlátszó szín kezelése
+        $transparentIndex = imagecolortransparent($srcImg);
+        if ($transparentIndex >= 0) {
+            $transparentColor = imagecolorsforindex($srcImg, $transparentIndex);
+            $transparentIndex = imagecolorallocate($dstImg, $transparentColor['red'], $transparentColor['green'], $transparentColor['blue']);
+            imagefill($dstImg, 0, 0, $transparentIndex);
+            imagecolortransparent($dstImg, $transparentIndex);
+        }
+    }
+
+    // Átméretezés és másolás
+    imagecopyresampled($dstImg, $srcImg, 0, 0, 0, 0, $newWidth, $newHeight, $srcWidth, $srcHeight);
+
+    // Kép mentése a megfelelő formátumban
+    $success = false;
+    switch ($mime) {
+        case 'image/jpeg':
+            $success = imagejpeg($dstImg, $destination, 85);
+            break;
+        case 'image/png':
+            $success = imagepng($dstImg, $destination, 8);
+            break;
+        case 'image/gif':
+            $success = imagegif($dstImg, $destination);
+            break;
+        case 'image/webp':
+            if (function_exists('imagewebp')) {
+                $success = imagewebp($dstImg, $destination, 85);
+            } else {
+                $success = false;
+            }
+            break;
+    }
+
+    // Takarítás
+    imagedestroy($srcImg);
+    imagedestroy($dstImg);
+
+    return $success;
+}
+
 // Hibaüzenetek és űrlapadatok kiolvasása a session-ből
 $uploadError = $_SESSION['upload_error'] ?? '';
 $formData = $_SESSION['form_data'] ?? [];
@@ -304,11 +416,11 @@ try {
                     $filename = uniqid() . '_' . $i . '.' . $extension;
                     $filepath = $uploadDir . $filename;
 
-                    // Move uploaded file
-                    if (!move_uploaded_file($files['tmp_name'][$i], $filepath)) {
+                    // === MÓDOSÍTÁS: Átméretezés a feltöltött képen ===
+                    if (!resizeImage($files['tmp_name'][$i], $filepath, 1024)) {
                         $lastError = error_get_last();
                         throw new Exception(
-                            'Nem sikerült áthelyezni a fájlt: ' . $files['name'][$i] .
+                            'Nem sikerült átméretezni/elmenteni a fájlt: ' . $files['name'][$i] .
                                 ' ide: ' . $filepath .
                                 ($lastError ? ' - Hiba: ' . $lastError['message'] : '')
                         );
