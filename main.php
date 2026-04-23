@@ -437,7 +437,7 @@ try {
         }
     }
 
-// Pagination settings
+    // Pagination settings
     $itemsPerPage = 24;
     $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
     $offset = ($page - 1) * $itemsPerPage;

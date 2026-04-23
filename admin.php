@@ -1109,7 +1109,8 @@ function pgLink($v, $p)
         .purge-modal-card {
             width: 100%;
             max-width: 500px;
-            background: var(--c-panel);
+            /* 🔴 PIROS TÉMA, TÉMÁTÓL FÜGGETLEN */
+            background: #1a0505;
             border: 2px solid #ff3333;
             border-radius: 24px;
             padding: 2rem;
@@ -1140,7 +1141,7 @@ function pgLink($v, $p)
         }
 
         .purge-modal-text {
-            color: var(--c-text);
+            color: #f0c0c0;
             margin-bottom: 1.8rem;
             line-height: 1.6;
             font-size: 0.95rem;
@@ -1178,23 +1179,27 @@ function pgLink($v, $p)
             transform: scale(1.02);
         }
 
+        /* 🟢 MÉGSE GOMB – ZÖLD STÍLUS, MINT A VÉGREHAJT, CSAK ZÖLDBEN */
         .purge-btn-cancel {
             padding: 0.75rem 2rem;
-            background: transparent;
-            border: 1px solid var(--c-border2);
+            background: #00aa3a;
+            border: none;
             border-radius: 40px;
-            color: var(--c-muted);
+            color: #000;
             font-family: var(--font-mono);
+            font-weight: bold;
             font-size: 0.9rem;
             letter-spacing: 2px;
             text-transform: uppercase;
             cursor: pointer;
             transition: all 0.2s;
+            box-shadow: 0 0 15px #00ff66;
         }
 
         .purge-btn-cancel:hover {
-            border-color: var(--c-green);
-            color: var(--c-green);
+            background: #33cc66;
+            box-shadow: 0 0 25px #33ff77;
+            transform: scale(1.02);
         }
 
         /* ═══════════ PRODUCT MODAL ═══════════ */
@@ -1749,6 +1754,55 @@ function pgLink($v, $p)
             .chrome-top-right .sys-time-full {
                 display: none;
             }
+        }
+
+        /* ═══════════════════════════════════════════════
+           SCROLLBAR STYLING – TERMINAL THEME
+           ═══════════════════════════════════════════════ */
+        /* WebKit (Chrome, Edge, Safari) */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--c-panel);
+            border: 1px solid var(--c-border);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--c-green-dim);
+            border: 1px solid var(--c-border2);
+            border-radius: 0;
+            box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.5);
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--c-green-mid);
+        }
+
+        ::-webkit-scrollbar-corner {
+            background: var(--c-panel);
+        }
+
+        /* Firefox */
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: var(--c-green-dim) var(--c-panel);
+        }
+
+        /* Light mode overrides for scrollbar (variables already handle colors) */
+        body.light-mode * {
+            scrollbar-color: var(--c-green-dim) var(--c-panel);
+        }
+
+        body.light-mode ::-webkit-scrollbar-thumb {
+            background: var(--c-green-dim);
+            border-color: var(--c-border2);
+        }
+
+        body.light-mode ::-webkit-scrollbar-thumb:hover {
+            background: var(--c-green-mid);
         }
     </style>
 </head>
