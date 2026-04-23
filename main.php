@@ -452,7 +452,7 @@ try {
     // 2. Oldalfrissítés történt (nincs ?page= a GET-ben, és a referer nem main.php lapozás)
     // 3. Másik oldalról jött vissza (referer nem main.php)
     $referer = $_SERVER['HTTP_REFERER'] ?? '';
-    $comingFromPagination = isset($_GET['page']) && strpos($referer, 'main.php') !== false;
+    $comingFromPagination = strpos($referer, 'main.php') !== false;
     if (!isset($_SESSION['items_seed']) || !$comingFromPagination) {
         $_SESSION['items_seed'] = mt_rand(1, 999999);
     }
