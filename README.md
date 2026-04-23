@@ -1,4 +1,4 @@
-# cucisstuff — Online Piactér Platform
+# Cuci's Stuff — Online Piactér Platform
 
 Magyar apróhirdetési platform valós idejű üzenetküldéssel, admin terminállal és kétféle témával. PHP + MySQL alapú, lokálisan futtatható XAMPP/WAMP/MAMP segítségével.
 
