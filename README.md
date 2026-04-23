@@ -102,7 +102,7 @@ Nyisd meg a `config.php` fájlt, és írd át az adatbázis-adatokat:
 define('DB_HOST', 'localhost');
 define('DB_USER', 'root');         // XAMPP alapértelmezett
 define('DB_PASS', '');             // XAMPP alapértelmezett (üres)
-define('DB_NAME', 'cuci_ady_pepa_hu');
+define('DB_NAME', 'adatbazisnev');
 ```
 
 > **Fontos:** Ne töltsd fel éles adatbázis-jelszót nyilvános repóba. Vedd fel a `config.php`-t a `.gitignore`-ba.
