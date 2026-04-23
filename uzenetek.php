@@ -21,7 +21,8 @@ $dbname     = DB_NAME;
 
 $currentUserId = (int)$_SESSION['user_id'];
 
-function generateMessageId(): string {
+function generateMessageId(): string
+{
     $chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     $id = '';
     for ($i = 0; $i < 25; $i++) {
@@ -106,6 +107,65 @@ try {
             'msg_id'  => $success ? $newMsgId : null,
             'sent_at' => $success ? $newRow['sent_at'] : null,
         ]);
+        exit;
+    }
+
+    // ================================
+    // AJAX – Elérhető felhasználók listája (akikkel még nincs beszélgetés)
+    // ================================
+    if (isset($_GET['ajax_get_available_users'])) {
+        header('Content-Type: application/json');
+        $stmt = $conn->prepare("
+            SELECT id, username 
+            FROM users 
+            WHERE id != ? 
+              AND id NOT IN (
+                  SELECT DISTINCT 
+                      CASE 
+                          WHEN sender_id = ? THEN receiver_id 
+                          ELSE sender_id 
+                      END 
+                  FROM uzenetek 
+                  WHERE sender_id = ? OR receiver_id = ?
+              )
+            ORDER BY username
+        ");
+        $stmt->execute([$currentUserId, $currentUserId, $currentUserId, $currentUserId]);
+        $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        echo json_encode($users);
+        exit;
+    }
+
+    // ================================
+    // AJAX – Partnerek listájának lekérése (realtime sidebar frissítés)
+    // ================================
+    if (isset($_GET['ajax_get_partners'])) {
+        header('Content-Type: application/json');
+        $partnersStmt = $conn->prepare("
+            SELECT
+                u.id,
+                u.username,
+                u.created_at AS member_since,
+                MAX(m.sent_at) AS last_message_at,
+                SUM(CASE WHEN m.receiver_id = :me AND m.is_read = 0 THEN 1 ELSE 0 END) AS unread_count
+            FROM users u
+            JOIN uzenetek m ON (
+                (m.sender_id = u.id AND m.receiver_id = :me2)
+                OR
+                (m.receiver_id = u.id AND m.sender_id = :me3)
+            )
+            WHERE u.id != :me4
+            GROUP BY u.id, u.username, u.created_at
+            ORDER BY last_message_at DESC
+        ");
+        $partnersStmt->execute([
+            ':me'  => $currentUserId,
+            ':me2' => $currentUserId,
+            ':me3' => $currentUserId,
+            ':me4' => $currentUserId,
+        ]);
+        $partners = $partnersStmt->fetchAll(PDO::FETCH_ASSOC);
+        echo json_encode($partners);
         exit;
     }
 
@@ -211,7 +271,7 @@ try {
             $msgStmt->execute([
                 ':me'    => $currentUserId,
                 ':other' => $withUserId,
-                ':other2'=> $withUserId,
+                ':other2' => $withUserId,
                 ':me2'   => $currentUserId,
             ]);
             $messages = $msgStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -265,7 +325,7 @@ try {
     if (isset($_GET['get_item']) && !empty($_GET['get_item'])) {
         header('Content-Type: application/json');
         $itemId = $_GET['get_item'];
-        
+
         $stmt = $conn->prepare("
             SELECT i.id, i.title, i.description, i.price, i.created_at, u.username as seller_name, i.user_id
             FROM items i
@@ -274,70 +334,74 @@ try {
         ");
         $stmt->execute([$itemId]);
         $item = $stmt->fetch(PDO::FETCH_ASSOC);
-        
+
         if (!$item) {
             echo json_encode(['error' => 'Termék nem található']);
             exit;
         }
-        
+
         $imgStmt = $conn->prepare("SELECT image_path FROM item_images WHERE item_id = ? ORDER BY sort_order");
         $imgStmt->execute([$itemId]);
         $item['images'] = $imgStmt->fetchAll(PDO::FETCH_COLUMN);
-        
+
         echo json_encode($item);
         exit;
     }
-
 } catch (PDOException $e) {
     die("DB hiba: " . $e->getMessage());
 }
 ?>
 <!DOCTYPE html>
 <html lang="hu">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Üzenetek – Valós idejű</title>
     <link rel="stylesheet" id="themeStylesheet" href="theme-dark.css">
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
         :root {
             --accent: #ff8c00;
-            --accent-glow: rgba(255,140,0,0.3);
+            --accent-glow: rgba(255, 140, 0, 0.3);
             --accent-gradient: linear-gradient(135deg, #ff8c00, #ff5500);
-            --bg-glass: rgba(0,0,0,0.7);
-            --border-glass: rgba(255,140,0,0.2);
+            --bg-glass: rgba(0, 0, 0, 0.7);
+            --border-glass: rgba(255, 140, 0, 0.2);
             --text-primary: #ffffff;
-            --bg-sidebar: rgba(5,5,5,0.8);
-            --bg-chat: rgba(8,8,8,0.95);
-            --bg-header: rgba(5,5,5,0.8);
-            --bg-input: rgba(255,255,255,0.05);
-            --msg-sent: linear-gradient(135deg, rgba(255,140,0,0.85), rgba(200,80,0,0.85));
-            --msg-received-bg: rgba(30,30,30,0.85);
-            --msg-received-border: rgba(255,140,0,0.15);
+            --bg-sidebar: rgba(5, 5, 5, 0.8);
+            --bg-chat: rgba(8, 8, 8, 0.95);
+            --bg-header: rgba(5, 5, 5, 0.8);
+            --bg-input: rgba(255, 255, 255, 0.05);
+            --msg-sent: linear-gradient(135deg, rgba(255, 140, 0, 0.85), rgba(200, 80, 0, 0.85));
+            --msg-received-bg: rgba(30, 30, 30, 0.85);
+            --msg-received-border: rgba(255, 140, 0, 0.15);
             --msg-received-color: #ffffff;
-            --partner-time: rgba(255,255,255,0.4);
+            --partner-time: rgba(255, 255, 255, 0.4);
             --avatar-bg: linear-gradient(135deg, #ff8c00, #ff5500);
             --avatar-color: #000;
         }
 
         body[data-theme="light"] {
             --accent: #7a9200;
-            --accent-glow: rgba(122,146,0,0.3);
+            --accent-glow: rgba(122, 146, 0, 0.3);
             --accent-gradient: linear-gradient(135deg, #B0CB1F, #8aA000);
-            --bg-glass: rgba(240,240,235,0.9);
-            --border-glass: rgba(122,146,0,0.3);
+            --bg-glass: rgba(240, 240, 235, 0.9);
+            --border-glass: rgba(122, 146, 0, 0.3);
             --text-primary: #1a1f00;
-            --bg-sidebar: rgba(240,240,235,0.9);
-            --bg-chat: rgba(250,250,248,0.98);
-            --bg-header: rgba(240,240,238,0.9);
-            --bg-input: rgba(0,0,0,0.05);
+            --bg-sidebar: rgba(240, 240, 235, 0.9);
+            --bg-chat: rgba(250, 250, 248, 0.98);
+            --bg-header: rgba(240, 240, 238, 0.9);
+            --bg-input: rgba(0, 0, 0, 0.05);
             --msg-sent: linear-gradient(135deg, #B0CB1F, #8aA000);
-            --msg-received-bg: rgba(220,220,215,0.85);
-            --msg-received-border: rgba(122,146,0,0.3);
+            --msg-received-bg: rgba(220, 220, 215, 0.85);
+            --msg-received-border: rgba(122, 146, 0, 0.3);
             --msg-received-color: #1a1f00;
-            --partner-time: rgba(0,0,0,0.4);
+            --partner-time: rgba(0, 0, 0, 0.4);
             --avatar-bg: linear-gradient(135deg, #B0CB1F, #8aA000);
             --avatar-color: #1a1f00;
             background: #f5f5f0;
@@ -420,7 +484,7 @@ try {
             align-items: center;
             gap: 0.3rem;
             user-select: none;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
         }
 
         .account-summary:hover {
@@ -442,7 +506,7 @@ try {
             border: 1px solid var(--border-glass);
             border-radius: 16px;
             padding: 0.75rem;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5), 0 0 20px rgba(255,140,0,0.2);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 140, 0, 0.2);
             z-index: 1001;
             animation: dropdownFade 0.2s ease;
         }
@@ -450,13 +514,13 @@ try {
         /* Light mode account dropdown */
         body[data-theme="light"] .account-dropdown {
             background: #f0f5e0 !important;
-            border-color: rgba(122,146,0,0.4) !important;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1), 0 0 20px rgba(176,203,31,0.2) !important;
+            border-color: rgba(122, 146, 0, 0.4) !important;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1), 0 0 20px rgba(176, 203, 31, 0.2) !important;
         }
 
         body[data-theme="light"] .account-summary {
             background: rgba(240, 252, 200, 0.85) !important;
-            border-color: rgba(122,146,0,0.5) !important;
+            border-color: rgba(122, 146, 0, 0.5) !important;
             color: #7a9200 !important;
         }
 
@@ -487,8 +551,15 @@ try {
         }
 
         @keyframes dropdownFade {
-            from { opacity: 0; transform: translateY(-10px); }
-            to   { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .user-info {
@@ -549,7 +620,7 @@ try {
             cursor: pointer;
         }
 
-        .theme-switch input:checked + .theme-switch-track {
+        .theme-switch input:checked+.theme-switch-track {
             background: rgba(176, 203, 31, 0.25);
             border-color: #B0CB1F;
         }
@@ -566,7 +637,7 @@ try {
             pointer-events: none;
         }
 
-        .theme-switch input:checked ~ .theme-switch-thumb {
+        .theme-switch input:checked~.theme-switch-thumb {
             transform: translateX(18px);
             background: #B0CB1F;
         }
@@ -614,6 +685,9 @@ try {
         }
 
         .sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             padding: 1rem 1.2rem;
             font-size: 0.85rem;
             color: var(--partner-time);
@@ -622,13 +696,33 @@ try {
             border-bottom: 1px solid var(--border-glass);
         }
 
+        .new-chat-btn {
+            background: transparent;
+            border: 1px solid var(--border-glass);
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent);
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .new-chat-btn:hover {
+            background: color-mix(in srgb, var(--accent) 15%, transparent);
+            border-color: var(--accent);
+        }
+
         .partner-item {
             display: flex;
             align-items: center;
             gap: 0.9rem;
             padding: 0.9rem 1.2rem;
             cursor: pointer;
-            border-bottom: 1px solid rgba(255,140,0,0.06);
+            border-bottom: 1px solid rgba(255, 140, 0, 0.06);
             border-bottom-color: color-mix(in srgb, var(--border-glass) 20%, transparent);
             transition: background 0.18s;
             text-decoration: none;
@@ -649,10 +743,13 @@ try {
         }
 
         .partner-avatar {
-            width: 42px; height: 42px;
+            width: 42px;
+            height: 42px;
             border-radius: 50%;
             background: var(--avatar-bg);
-            display: flex; align-items: center; justify-content: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             font-weight: 700;
             font-size: 1.1rem;
             color: var(--avatar-color);
@@ -660,7 +757,11 @@ try {
             position: relative;
         }
 
-        .partner-info { flex: 1; min-width: 0; }
+        .partner-info {
+            flex: 1;
+            min-width: 0;
+        }
+
         .partner-name {
             font-weight: 600;
             font-size: 0.95rem;
@@ -668,27 +769,118 @@ try {
             overflow: hidden;
             text-overflow: ellipsis;
         }
+
         .partner-time {
             font-size: 0.75rem;
             color: var(--partner-time);
             margin-top: 2px;
         }
+
         .unread-badge {
             background: var(--accent);
             color: var(--avatar-color);
             border-radius: 50%;
-            width: 20px; height: 20px;
-            display: flex; align-items: center; justify-content: center;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             font-size: 0.72rem;
             font-weight: 700;
             flex-shrink: 0;
         }
+
         .no-partners {
             padding: 2rem 1.2rem;
             text-align: center;
             color: var(--partner-time);
             font-size: 0.9rem;
             line-height: 1.6;
+        }
+
+        /* Új beszélgetés modál */
+        .new-chat-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+            align-items: center;
+            justify-content: center;
+            z-index: 4000;
+        }
+
+        .new-chat-modal.open {
+            display: flex;
+        }
+
+        .new-chat-modal-content {
+            background: var(--bg-glass);
+            border: 1px solid var(--accent);
+            border-radius: 16px;
+            width: 90%;
+            max-width: 400px;
+            max-height: 70vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .new-chat-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.2rem;
+            border-bottom: 1px solid var(--border-glass);
+        }
+
+        .new-chat-modal-header h3 {
+            color: var(--accent);
+            margin: 0;
+            font-size: 1.1rem;
+        }
+
+        .new-chat-modal-close {
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        .new-chat-search {
+            padding: 0.8rem 1.2rem;
+            background: var(--bg-input);
+            border: none;
+            border-bottom: 1px solid var(--border-glass);
+            color: var(--text-primary);
+            font-size: 1rem;
+            outline: none;
+        }
+
+        .new-chat-user-list {
+            overflow-y: auto;
+            padding: 0.5rem 0;
+        }
+
+        .new-chat-user-item {
+            padding: 0.8rem 1.2rem;
+            cursor: pointer;
+            transition: background 0.2s;
+            color: var(--text-primary);
+        }
+
+        .new-chat-user-item:hover {
+            background: color-mix(in srgb, var(--accent) 10%, transparent);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: var(--partner-time);
         }
 
         .chat-area {
@@ -710,10 +902,13 @@ try {
         }
 
         .chat-partner-avatar {
-            width: 40px; height: 40px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
             background: var(--avatar-bg);
-            display: flex; align-items: center; justify-content: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             font-weight: 700;
             color: var(--avatar-color);
         }
@@ -722,12 +917,12 @@ try {
             font-weight: 700;
             font-size: 1.05rem;
         }
-        
+
         .chat-partner-name.clickable {
             cursor: pointer;
             transition: color 0.2s;
         }
-        
+
         .chat-partner-name.clickable:hover {
             color: var(--accent);
             text-decoration: underline;
@@ -753,10 +948,12 @@ try {
             align-items: flex-end;
             gap: 6px;
         }
+
         .msg-row.sent {
             flex-direction: row;
             justify-content: flex-end;
         }
+
         .msg-row.received {
             flex-direction: row;
             justify-content: flex-start;
@@ -814,7 +1011,7 @@ try {
 
         .msg-menu-btn:hover {
             opacity: 1 !important;
-            background: rgba(128,128,128,0.2);
+            background: rgba(128, 128, 128, 0.2);
         }
 
         .msg-dropdown {
@@ -830,7 +1027,7 @@ try {
             display: none;
             flex-direction: column;
             overflow: hidden;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
         }
 
         .msg-row.sent .msg-dropdown {
@@ -856,21 +1053,23 @@ try {
         }
 
         .msg-dropdown-item:hover {
-            background: rgba(255,140,0,0.2);
+            background: rgba(255, 140, 0, 0.2);
             color: var(--accent);
         }
 
         .msg-dropdown-item.delete-msg {
             color: #ff6b6b;
         }
+
         .msg-dropdown-item.delete-msg:hover {
-            background: rgba(255,0,0,0.2);
+            background: rgba(255, 0, 0, 0.2);
             color: #ff4444;
         }
 
         .msg-dropdown-item.edit-msg {
             color: var(--accent);
         }
+
         .msg-dropdown-item.edit-msg:hover {
             background: color-mix(in srgb, var(--accent) 20%, transparent);
         }
@@ -878,15 +1077,21 @@ try {
         .edit-modal {
             display: none;
             position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8);
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
             backdrop-filter: blur(8px);
             align-items: center;
             justify-content: center;
             z-index: 4000;
         }
-        .edit-modal.open { display: flex; }
+
+        .edit-modal.open {
+            display: flex;
+        }
+
         .edit-modal-content {
             background: var(--bg-glass);
             border: 1px solid var(--accent);
@@ -895,17 +1100,20 @@ try {
             max-width: 460px;
             width: 90%;
         }
+
         .edit-modal-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 1rem;
         }
+
         .edit-modal-title {
             color: var(--accent);
             font-size: 1rem;
             font-weight: 700;
         }
+
         .edit-modal-close {
             background: none;
             border: none;
@@ -914,6 +1122,7 @@ try {
             cursor: pointer;
             line-height: 1;
         }
+
         .edit-textarea {
             width: 100%;
             background: var(--bg-input);
@@ -930,12 +1139,17 @@ try {
             margin-bottom: 1rem;
             user-select: text;
         }
-        .edit-textarea:focus { border-color: var(--accent); }
+
+        .edit-textarea:focus {
+            border-color: var(--accent);
+        }
+
         .edit-modal-actions {
             display: flex;
             gap: 0.6rem;
             justify-content: flex-end;
         }
+
         .edit-cancel-btn {
             padding: 0.5rem 1.2rem;
             border-radius: 40px;
@@ -946,6 +1160,7 @@ try {
             font-size: 0.9rem;
             font-family: inherit;
         }
+
         .edit-save-btn {
             padding: 0.5rem 1.4rem;
             border-radius: 40px;
@@ -961,15 +1176,21 @@ try {
         .delete-modal {
             display: none;
             position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8);
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
             backdrop-filter: blur(8px);
             align-items: center;
             justify-content: center;
             z-index: 4000;
         }
-        .delete-modal.open { display: flex; }
+
+        .delete-modal.open {
+            display: flex;
+        }
+
         .delete-modal-content {
             background: var(--bg-glass);
             border: 1px solid var(--accent);
@@ -978,17 +1199,20 @@ try {
             max-width: 380px;
             width: 90%;
         }
+
         .delete-modal-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 1rem;
         }
+
         .delete-modal-title {
             color: var(--accent);
             font-size: 1rem;
             font-weight: 700;
         }
+
         .delete-modal-close {
             background: none;
             border: none;
@@ -997,16 +1221,19 @@ try {
             cursor: pointer;
             line-height: 1;
         }
+
         .delete-modal-text {
             color: var(--text-primary);
             margin-bottom: 1.5rem;
             font-size: 0.95rem;
         }
+
         .delete-modal-actions {
             display: flex;
             gap: 0.6rem;
             justify-content: flex-end;
         }
+
         .delete-cancel-btn {
             padding: 0.5rem 1.2rem;
             border-radius: 40px;
@@ -1017,6 +1244,7 @@ try {
             font-size: 0.9rem;
             font-family: inherit;
         }
+
         .delete-confirm-btn {
             padding: 0.5rem 1.4rem;
             border-radius: 40px;
@@ -1056,22 +1284,30 @@ try {
             user-select: text;
         }
 
-        .msg-textarea:focus { border-color: var(--accent); }
+        .msg-textarea:focus {
+            border-color: var(--accent);
+        }
 
         .send-btn {
-            width: 44px; height: 44px;
+            width: 44px;
+            height: 44px;
             background: var(--accent-gradient);
             border: none;
             border-radius: 50%;
             color: var(--avatar-color);
             font-size: 1.2rem;
             cursor: pointer;
-            display: flex; align-items: center; justify-content: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             transition: all 0.2s;
             flex-shrink: 0;
         }
 
-        .send-btn:hover { transform: scale(1.08); box-shadow: 0 0 16px var(--accent-glow); }
+        .send-btn:hover {
+            transform: scale(1.08);
+            box-shadow: 0 0 16px var(--accent-glow);
+        }
 
         .empty-chat {
             flex: 1;
@@ -1082,8 +1318,14 @@ try {
             gap: 1rem;
             color: var(--partner-time);
         }
-        .empty-chat-icon { font-size: 3.5rem; }
-        .empty-chat-text { font-size: 1rem; }
+
+        .empty-chat-icon {
+            font-size: 3.5rem;
+        }
+
+        .empty-chat-text {
+            font-size: 1rem;
+        }
 
         .report-modal {
             display: none;
@@ -1092,15 +1334,17 @@ try {
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.8);
+            background: rgba(0, 0, 0, 0.8);
             backdrop-filter: blur(8px);
             align-items: center;
             justify-content: center;
             z-index: 4000;
         }
+
         .report-modal.show {
             display: flex;
         }
+
         .report-modal-content {
             background: var(--bg-glass);
             border: 1px solid var(--accent);
@@ -1109,6 +1353,7 @@ try {
             max-width: 400px;
             width: 90%;
         }
+
         .report-form-textarea {
             width: 100%;
             background: var(--bg-input);
@@ -1120,6 +1365,7 @@ try {
             resize: vertical;
             font-family: inherit;
         }
+
         .report-submit-btn {
             background: var(--accent-gradient);
             border: none;
@@ -1143,12 +1389,13 @@ try {
             border-radius: 50px;
             font-size: 0.92rem;
             z-index: 9999;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.4), 0 0 20px var(--accent-glow);
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4), 0 0 20px var(--accent-glow);
             transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.35s ease;
             opacity: 0;
             white-space: nowrap;
             pointer-events: none;
         }
+
         .toast-notification.show {
             transform: translateX(-50%) translateY(0);
             opacity: 1;
@@ -1761,34 +2008,63 @@ try {
         }
 
         @media (max-width: 640px) {
-            .messages-layout { grid-template-columns: 1fr; }
-            .sidebar { display: <?php echo $withUserId > 0 ? 'none' : 'flex'; ?>; height: calc(100vh - 64px); }
-            .chat-area { display: <?php echo $withUserId > 0 ? 'flex' : 'none'; ?>; }
-            .msg-bubble { max-width: 85%; }
+            .messages-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                display: <?php echo $withUserId > 0 ? 'none' : 'flex'; ?>;
+                height: calc(100vh - 64px);
+            }
+
+            .chat-area {
+                display: <?php echo $withUserId > 0 ? 'flex' : 'none'; ?>;
+            }
+
+            .msg-bubble {
+                max-width: 85%;
+            }
+
             .product-modal-card {
                 grid-template-columns: 1fr;
                 gap: 1rem;
                 padding: 1rem;
                 overflow-y: auto;
             }
+
             .product-gallery {
                 height: 50vh;
             }
+
             .product-title {
                 font-size: 2rem;
             }
+
             .product-price {
                 font-size: 2.5rem;
             }
+
             .product-description {
                 max-height: 300px;
             }
         }
 
-        ::-webkit-scrollbar { width: 5px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--accent) 50%, transparent); }
+        ::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: color-mix(in srgb, var(--accent) 30%, transparent);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: color-mix(in srgb, var(--accent) 50%, transparent);
+        }
 
         .unselectable {
             user-select: none;
@@ -1796,6 +2072,7 @@ try {
         }
     </style>
 </head>
+
 <body>
     <div class="top-bar">
         <a href="main.php" class="back-btn unselectable">← Vissza</a>
@@ -1834,58 +2111,63 @@ try {
     </div>
 
     <div class="messages-layout">
-        <div class="sidebar">
-            <div class="sidebar-header">Beszélgetések</div>
-            <?php if (empty($partners)): ?>
-                <div class="no-partners">
-                    Még nincsenek üzeneteid.<br>
-                    Kattints egy eladóra a főoldalon az üzenetküldéshez.
-                </div>
-            <?php else: ?>
-                <?php foreach ($partners as $p): ?>
-                    <?php if ($withUserId == $p['id']): ?>
-                        <div class="partner-item active">
-                            <div class="partner-avatar"><?php echo strtoupper(substr($p['username'], 0, 1)); ?></div>
-                            <div class="partner-info">
-                                <div class="partner-name"><?php echo htmlspecialchars($p['username']); ?></div>
-                                <div class="partner-time">
-                                    <?php
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <span>Beszélgetések</span>
+                <button class="new-chat-btn" id="newChatBtn" title="Új beszélgetés">+</button>
+            </div>
+            <div id="sidebarContent">
+                <?php if (empty($partners)): ?>
+                    <div class="no-partners">
+                        Még nincsenek üzeneteid.<br>
+                        Kattints egy eladóra a főoldalon az üzenetküldéshez.
+                    </div>
+                <?php else: ?>
+                    <?php foreach ($partners as $p): ?>
+                        <?php if ($withUserId == $p['id']): ?>
+                            <div class="partner-item active" data-partner-id="<?php echo $p['id']; ?>">
+                                <div class="partner-avatar"><?php echo strtoupper(substr($p['username'], 0, 1)); ?></div>
+                                <div class="partner-info">
+                                    <div class="partner-name"><?php echo htmlspecialchars($p['username']); ?></div>
+                                    <div class="partner-time">
+                                        <?php
                                         $ts = strtotime($p['last_message_at']);
                                         $diff = time() - $ts;
                                         if ($diff < 60) echo 'Az imént';
-                                        elseif ($diff < 3600) echo round($diff/60) . ' perce';
-                                        elseif ($diff < 86400) echo round($diff/3600) . ' órája';
+                                        elseif ($diff < 3600) echo round($diff / 60) . ' perce';
+                                        elseif ($diff < 86400) echo round($diff / 3600) . ' órája';
                                         else echo date('Y.m.d', $ts);
-                                    ?>
+                                        ?>
+                                    </div>
                                 </div>
+                                <?php if ($p['unread_count'] > 0): ?>
+                                    <div class="unread-badge"><?php echo $p['unread_count']; ?></div>
+                                <?php endif; ?>
                             </div>
-                            <?php if ($p['unread_count'] > 0): ?>
-                                <div class="unread-badge"><?php echo $p['unread_count']; ?></div>
-                            <?php endif; ?>
-                        </div>
-                    <?php else: ?>
-                        <a href="uzenetek.php?with=<?php echo $p['id']; ?>" class="partner-item">
-                            <div class="partner-avatar"><?php echo strtoupper(substr($p['username'], 0, 1)); ?></div>
-                            <div class="partner-info">
-                                <div class="partner-name"><?php echo htmlspecialchars($p['username']); ?></div>
-                                <div class="partner-time">
-                                    <?php
+                        <?php else: ?>
+                            <a href="uzenetek.php?with=<?php echo $p['id']; ?>" class="partner-item" data-partner-id="<?php echo $p['id']; ?>">
+                                <div class="partner-avatar"><?php echo strtoupper(substr($p['username'], 0, 1)); ?></div>
+                                <div class="partner-info">
+                                    <div class="partner-name"><?php echo htmlspecialchars($p['username']); ?></div>
+                                    <div class="partner-time">
+                                        <?php
                                         $ts = strtotime($p['last_message_at']);
                                         $diff = time() - $ts;
                                         if ($diff < 60) echo 'Az imént';
-                                        elseif ($diff < 3600) echo round($diff/60) . ' perce';
-                                        elseif ($diff < 86400) echo round($diff/3600) . ' órája';
+                                        elseif ($diff < 3600) echo round($diff / 60) . ' perce';
+                                        elseif ($diff < 86400) echo round($diff / 3600) . ' órája';
                                         else echo date('Y.m.d', $ts);
-                                    ?>
+                                        ?>
+                                    </div>
                                 </div>
-                            </div>
-                            <?php if ($p['unread_count'] > 0): ?>
-                                <div class="unread-badge"><?php echo $p['unread_count']; ?></div>
-                            <?php endif; ?>
-                        </a>
-                    <?php endif; ?>
-                <?php endforeach; ?>
-            <?php endif; ?>
+                                <?php if ($p['unread_count'] > 0): ?>
+                                    <div class="unread-badge"><?php echo $p['unread_count']; ?></div>
+                                <?php endif; ?>
+                            </a>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
         </div>
 
         <div class="chat-area">
@@ -1910,7 +2192,7 @@ try {
                             Még nincs üzenet. Küldj egyet!
                         </div>
                     <?php else: ?>
-                        <?php foreach ($messages as $msg): 
+                        <?php foreach ($messages as $msg):
                             $isOwn = ($msg['sender_id'] == $currentUserId);
                         ?>
                             <div class="msg-row <?php echo $isOwn ? 'sent' : 'received'; ?>" data-msg-id="<?php echo htmlspecialchars($msg['id']); ?>">
@@ -2015,6 +2297,20 @@ try {
         </div>
     </div>
 
+    <!-- Új beszélgetés modál -->
+    <div class="new-chat-modal" id="newChatModal">
+        <div class="new-chat-modal-content">
+            <div class="new-chat-modal-header">
+                <h3>Új beszélgetés</h3>
+                <button class="new-chat-modal-close" id="newChatModalClose">&times;</button>
+            </div>
+            <input type="text" class="new-chat-search" id="newChatSearch" placeholder="Keresés...">
+            <div class="new-chat-user-list" id="newChatUserList">
+                <div class="loading">Betöltés...</div>
+            </div>
+        </div>
+    </div>
+
     <!-- Seller Profile Popup Overlay -->
     <div class="seller-popup-overlay" id="sellerPopupOverlay">
         <div class="seller-popup-card" id="sellerPopupCard">
@@ -2067,6 +2363,7 @@ try {
         const partnerId = <?php echo $withUserId ?: 0; ?>;
         let lastTimestamp = '';
         let pollInterval = null;
+        let partnersPollInterval = null;
 
         const messagesList = document.getElementById('messagesList');
         const msgInput = document.getElementById('msgInput');
@@ -2118,9 +2415,12 @@ try {
             const msgDiv = document.createElement('div');
             msgDiv.className = `msg-row ${isOwn ? 'sent' : 'received'}`;
             msgDiv.setAttribute('data-msg-id', msg.id);
-            
-            const timeStr = new Date(msg.sent_at).toLocaleTimeString('hu-HU', {hour: '2-digit', minute:'2-digit'});
-            
+
+            const timeStr = new Date(msg.sent_at).toLocaleTimeString('hu-HU', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
             if (!isOwn) {
                 msgDiv.innerHTML = `
                     <div class="msg-bubble received" data-sent-at="${escapeHtml(msg.sent_at)}">
@@ -2177,6 +2477,107 @@ try {
             }
         }
 
+        // ========== REALTIME PARTNERS LIST ==========
+        async function pollPartners() {
+            try {
+                const response = await fetch('?ajax_get_partners=1');
+                const partners = await response.json();
+                updateSidebar(partners);
+            } catch (e) {
+                console.error('Partners poll error:', e);
+            }
+        }
+
+        function updateSidebar(partners) {
+            const sidebarContent = document.getElementById('sidebarContent');
+            const currentActiveId = document.querySelector('.partner-item.active')?.dataset.partnerId;
+            let activePartnerExists = false;
+
+            if (partners.length === 0) {
+                sidebarContent.innerHTML = `
+                    <div class="no-partners">
+                        Még nincsenek üzeneteid.<br>
+                        Kattints egy eladóra a főoldalon az üzenetküldéshez.
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            for (const p of partners) {
+                const isActive = (currentActiveId == p.id);
+                if (isActive) activePartnerExists = true;
+
+                const lastMessageAt = new Date(p.last_message_at.replace(/-/g, '/'));
+                const now = new Date();
+                const diffMs = now - lastMessageAt;
+                const diffMins = Math.floor(diffMs / 60000);
+                let timeStr;
+                if (diffMins < 1) timeStr = 'Az imént';
+                else if (diffMins < 60) timeStr = diffMins + ' perce';
+                else if (diffMins < 1440) timeStr = Math.floor(diffMins / 60) + ' órája';
+                else timeStr = lastMessageAt.toISOString().slice(0, 10).replace(/-/g, '.');
+
+                const avatarLetter = p.username.charAt(0).toUpperCase();
+                const unreadBadge = p.unread_count > 0 ? `<div class="unread-badge">${p.unread_count}</div>` : '';
+
+                if (isActive) {
+                    html += `
+                        <div class="partner-item active" data-partner-id="${p.id}">
+                            <div class="partner-avatar">${avatarLetter}</div>
+                            <div class="partner-info">
+                                <div class="partner-name">${escapeHtml(p.username)}</div>
+                                <div class="partner-time">${timeStr}</div>
+                            </div>
+                            ${unreadBadge}
+                        </div>
+                    `;
+                } else {
+                    html += `
+                        <a href="uzenetek.php?with=${p.id}" class="partner-item" data-partner-id="${p.id}">
+                            <div class="partner-avatar">${avatarLetter}</div>
+                            <div class="partner-info">
+                                <div class="partner-name">${escapeHtml(p.username)}</div>
+                                <div class="partner-time">${timeStr}</div>
+                            </div>
+                            ${unreadBadge}
+                        </a>
+                    `;
+                }
+            }
+
+            sidebarContent.innerHTML = html;
+
+            // Ha az aktív partner időközben eltűnt (pl. törölték), akkor nincs aktív kiemelés
+            if (!activePartnerExists) {
+                const activeEl = document.querySelector('.partner-item.active');
+                if (activeEl) activeEl.classList.remove('active');
+            }
+        }
+
+        function startPartnersPolling() {
+            if (partnersPollInterval) clearInterval(partnersPollInterval);
+            pollPartners(); // azonnal frissít
+            partnersPollInterval = setInterval(pollPartners, 5000); // 5 másodpercenként
+        }
+
+        startPartnersPolling();
+
+        // Amikor az oldal láthatósága változik, állítsuk be a pollozást
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                if (pollInterval) clearInterval(pollInterval);
+                if (partnersPollInterval) clearInterval(partnersPollInterval);
+            } else {
+                if (partnerId) {
+                    startPolling();
+                }
+                startPartnersPolling();
+            }
+        });
+
+        // =========================================
+
         let isSending = false;
 
         async function sendMessage() {
@@ -2215,7 +2616,9 @@ try {
             try {
                 const response = await fetch('uzenetek.php', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
                     body: formData
                 });
                 const data = await response.json();
@@ -2232,6 +2635,9 @@ try {
                         });
                     }
                     if (data.sent_at > lastTimestamp) lastTimestamp = data.sent_at;
+
+                    // Azonnal frissítjük a partnerek listáját, hogy az üzenet hatása látszódjon
+                    pollPartners();
                 } else if (!data.success) {
                     // Ha sikertelen, töröljük az optimista elemet
                     const tempRow = document.querySelector(`.msg-row[data-msg-id="${tempId}"]`);
@@ -2285,6 +2691,7 @@ try {
         const saved = localStorage.getItem('theme');
         const themeStylesheet = document.getElementById('themeStylesheet');
         const themeSwitch = document.getElementById('themeSwitchMsg');
+
         function applyTheme(theme) {
             themeStylesheet.href = theme === 'light' ? 'theme-light.css' : 'theme-dark.css';
             document.body.setAttribute('data-theme', theme);
@@ -2328,7 +2735,9 @@ try {
 
         deleteCloseBtn.addEventListener('click', closeDeleteModal);
         deleteCancelBtn.addEventListener('click', closeDeleteModal);
-        deleteModal.addEventListener('click', (e) => { if (e.target === deleteModal) closeDeleteModal(); });
+        deleteModal.addEventListener('click', (e) => {
+            if (e.target === deleteModal) closeDeleteModal();
+        });
 
         deleteConfirmBtn.addEventListener('click', function() {
             if (pendingDeleteMsgId) {
@@ -2352,15 +2761,21 @@ try {
             editMsgId.value = msgId;
             editMsgTA.value = msgText;
             editModal.classList.add('open');
-            setTimeout(() => { editMsgTA.focus(); editMsgTA.setSelectionRange(editMsgTA.value.length, editMsgTA.value.length); }, 50);
+            setTimeout(() => {
+                editMsgTA.focus();
+                editMsgTA.setSelectionRange(editMsgTA.value.length, editMsgTA.value.length);
+            }, 50);
         }
+
         function closeEditModal() {
             editModal.classList.remove('open');
         }
 
         document.getElementById('editModalClose').addEventListener('click', closeEditModal);
         document.getElementById('editCancelBtn').addEventListener('click', closeEditModal);
-        editModal.addEventListener('click', (e) => { if (e.target === editModal) closeEditModal(); });
+        editModal.addEventListener('click', (e) => {
+            if (e.target === editModal) closeEditModal();
+        });
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && editModal.classList.contains('open')) closeEditModal();
         });
@@ -2369,9 +2784,13 @@ try {
         const reportMsgId = document.getElementById('reportMsgId');
         const closeReportBtn = reportModal.querySelector('.close-report-modal');
 
-        function closeReportModal() { reportModal.style.display = 'none'; }
+        function closeReportModal() {
+            reportModal.style.display = 'none';
+        }
         closeReportBtn.addEventListener('click', closeReportModal);
-        reportModal.addEventListener('click', (e) => { if (e.target === reportModal) closeReportModal(); });
+        reportModal.addEventListener('click', (e) => {
+            if (e.target === reportModal) closeReportModal();
+        });
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && reportModal.style.display === 'flex') closeReportModal();
         });
@@ -2401,6 +2820,63 @@ try {
         <?php if (isset($_SESSION['report_success'])): unset($_SESSION['report_success']); ?>
             showToast('✅ Bejelentésedet rögzítettük. Köszönjük!');
         <?php endif; ?>
+
+        // ========== ÚJ BESZÉLGETÉS MODÁL ==========
+        const newChatBtn = document.getElementById('newChatBtn');
+        const newChatModal = document.getElementById('newChatModal');
+        const newChatClose = document.getElementById('newChatModalClose');
+        const newChatSearch = document.getElementById('newChatSearch');
+        const newChatUserList = document.getElementById('newChatUserList');
+
+        let availableUsers = [];
+
+        newChatBtn.addEventListener('click', async () => {
+            newChatModal.classList.add('open');
+            newChatUserList.innerHTML = '<div class="loading">Betöltés...</div>';
+            newChatSearch.value = '';
+            try {
+                const resp = await fetch('?ajax_get_available_users=1');
+                const users = await resp.json();
+                availableUsers = users;
+                renderUserList(users);
+            } catch (e) {
+                newChatUserList.innerHTML = '<div class="loading">Hiba történt.</div>';
+            }
+        });
+
+        function renderUserList(users) {
+            if (users.length === 0) {
+                newChatUserList.innerHTML = '<div class="loading">Nincs elérhető felhasználó.</div>';
+                return;
+            }
+            const html = users.map(u => `
+                <div class="new-chat-user-item" data-user-id="${u.id}">
+                    ${escapeHtml(u.username)}
+                </div>
+            `).join('');
+            newChatUserList.innerHTML = html;
+        }
+
+        newChatUserList.addEventListener('click', (e) => {
+            const item = e.target.closest('.new-chat-user-item');
+            if (!item) return;
+            const userId = item.dataset.userId;
+            window.location.href = `uzenetek.php?with=${userId}`;
+        });
+
+        newChatSearch.addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            const filtered = availableUsers.filter(u => u.username.toLowerCase().includes(term));
+            renderUserList(filtered);
+        });
+
+        newChatClose.addEventListener('click', () => {
+            newChatModal.classList.remove('open');
+        });
+        newChatModal.addEventListener('click', (e) => {
+            if (e.target === newChatModal) newChatModal.classList.remove('open');
+        });
+        // ==========================================
 
         // Seller popup
         const sellerOverlay = document.getElementById('sellerPopupOverlay');
@@ -2654,4 +3130,5 @@ try {
         scrollToBottom();
     </script>
 </body>
+
 </html>

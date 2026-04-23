@@ -21,7 +21,7 @@ if (isset($_POST['logout'])) {
 // =============================================
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     // Ha AJAX kérés (JSON választ vár), akkor ne redirecteljünk, hanem küldjünk JSON hibát
-    if (isset($_GET['search_query']) || isset($_GET['get_item']) || isset($_GET['get_seller'])) {
+    if (isset($_GET['search_query']) || isset($_GET['get_item']) || isset($_GET['get_seller']) || isset($_GET['get_unread_count'])) {
         header('Content-Type: application/json');
         echo json_encode(['error' => 'Nincs bejelentkezve']);
         exit();
@@ -49,6 +49,48 @@ try {
         $adminCheck = $conn->prepare("SELECT COUNT(*) FROM admins WHERE user_id = ?");
         $adminCheck->execute([$_SESSION['user_id']]);
         $isAdmin = $adminCheck->fetchColumn() > 0;
+    }
+
+    // =============================================
+    // GET UNREAD MESSAGES COUNT (JSON output) - REALTIME BADGE FRISSÍTÉSHEZ
+    // =============================================
+    if (isset($_GET['get_unread_count'])) {
+        header('Content-Type: application/json');
+        try {
+            if (!isset($_SESSION['user_id'])) {
+                echo json_encode(['error' => 'Nincs bejelentkezve']);
+                exit;
+            }
+
+            // Olvasatlan üzenetek száma
+            $unreadStmt = $conn->prepare("SELECT COUNT(*) FROM uzenetek WHERE receiver_id = ? AND is_read = 0");
+            $unreadStmt->execute([$_SESSION['user_id']]);
+            $unreadCount = (int)$unreadStmt->fetchColumn();
+
+            // Legutolsó üzenet adatai (opcionális, toast értesítéshez)
+            $lastMsgStmt = $conn->prepare("
+                SELECT u.username AS sender_name, m.message, m.sent_at
+                FROM uzenetek m
+                JOIN users u ON m.sender_id = u.id
+                WHERE m.receiver_id = ? AND m.is_read = 0
+                ORDER BY m.sent_at DESC
+                LIMIT 1
+            ");
+            $lastMsgStmt->execute([$_SESSION['user_id']]);
+            $lastMsg = $lastMsgStmt->fetch(PDO::FETCH_ASSOC);
+
+            echo json_encode([
+                'unread_count' => $unreadCount,
+                'last_message' => $lastMsg ? [
+                    'sender' => $lastMsg['sender_name'],
+                    'preview' => mb_substr($lastMsg['message'], 0, 50) . (mb_strlen($lastMsg['message']) > 50 ? '…' : ''),
+                    'sent_at' => $lastMsg['sent_at']
+                ] : null
+            ]);
+        } catch (PDOException $e) {
+            echo json_encode(['error' => 'Adatbázis hiba: ' . $e->getMessage()]);
+        }
+        exit;
     }
 
     // =============================================
@@ -267,8 +309,8 @@ try {
                         $lastError = error_get_last();
                         throw new Exception(
                             'Nem sikerült áthelyezni a fájlt: ' . $files['name'][$i] .
-                            ' ide: ' . $filepath .
-                            ($lastError ? ' - Hiba: ' . $lastError['message'] : '')
+                                ' ide: ' . $filepath .
+                                ($lastError ? ' - Hiba: ' . $lastError['message'] : '')
                         );
                     }
 
@@ -280,7 +322,7 @@ try {
                     $imageInsert->execute([
                         ':item_id'       => $newId,
                         ':image_path'    => $filepath,
-                        ':image_filename'=> $filename,
+                        ':image_filename' => $filename,
                         ':is_primary'    => ($i === 0) ? 1 : 0,
                         ':sort_order'    => $sortOrder
                     ]);
@@ -425,7 +467,8 @@ try {
 }
 
 // Függvény a readmore-hoz
-function formatMessage($msg) {
+function formatMessage($msg)
+{
     $msg = htmlspecialchars($msg);
     $msg = preg_replace('/\*(.*?)\*/', '<strong>$1</strong>', $msg);
     $msg = preg_replace('/\-(.*?)\-/', '<em>$1</em>', $msg);
@@ -450,7 +493,7 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <title>Főoldal - Termékek</title>
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" id="themeStylesheet" href="theme-dark.css">
+    <link rel="stylesheet" id="themeStylesheet" href="theme-dark.css?v=2">
     <style>
         /* ═══════════════════════════════════════════════════════════════════
         MAIN STYLES (dark mode default)
@@ -502,19 +545,51 @@ try {
         }
 
         @keyframes noise {
-            0%, 100% { transform: translate(0, 0); }
-            10% { transform: translate(-5%, -5%); }
-            20% { transform: translate(-10%, 5%); }
-            30% { transform: translate(5%, -10%); }
-            40% { transform: translate(-5%, 15%); }
-            50% { transform: translate(-10%, 5%); }
-            60% { transform: translate(15%, 0); }
-            70% { transform: translate(0, 10%); }
-            80% { transform: translate(-15%, 0); }
-            90% { transform: translate(10%, 5%); }
+
+            0%,
+            100% {
+                transform: translate(0, 0);
+            }
+
+            10% {
+                transform: translate(-5%, -5%);
+            }
+
+            20% {
+                transform: translate(-10%, 5%);
+            }
+
+            30% {
+                transform: translate(5%, -10%);
+            }
+
+            40% {
+                transform: translate(-5%, 15%);
+            }
+
+            50% {
+                transform: translate(-10%, 5%);
+            }
+
+            60% {
+                transform: translate(15%, 0);
+            }
+
+            70% {
+                transform: translate(0, 10%);
+            }
+
+            80% {
+                transform: translate(-15%, 0);
+            }
+
+            90% {
+                transform: translate(10%, 5%);
+            }
         }
 
-        .orb-1, .orb-2 {
+        .orb-1,
+        .orb-2 {
             position: fixed;
             width: min(60vw, 600px);
             height: min(60vw, 600px);
@@ -540,15 +615,35 @@ try {
         }
 
         @keyframes float1 {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            33% { transform: translate(10vw, 10vh) scale(1.1); }
-            66% { transform: translate(-5vw, 15vh) scale(0.9); }
+
+            0%,
+            100% {
+                transform: translate(0, 0) scale(1);
+            }
+
+            33% {
+                transform: translate(10vw, 10vh) scale(1.1);
+            }
+
+            66% {
+                transform: translate(-5vw, 15vh) scale(0.9);
+            }
         }
 
         @keyframes float2 {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            33% { transform: translate(-10vw, -10vh) scale(1.2); }
-            66% { transform: translate(5vw, -15vh) scale(0.8); }
+
+            0%,
+            100% {
+                transform: translate(0, 0) scale(1);
+            }
+
+            33% {
+                transform: translate(-10vw, -10vh) scale(1.2);
+            }
+
+            66% {
+                transform: translate(5vw, -15vh) scale(0.8);
+            }
         }
 
         /* Top bar - KÖZÉPRE IGAZÍTOTT VERZIÓ */
@@ -2363,7 +2458,7 @@ try {
         }
 
         /* =====================
-        FLOATING MESSAGES BTN
+        FLOATING MESSAGES BTN - VÉGLEGES KÉK VERZIÓ
         ===================== */
         .floating-messages-btn {
             position: fixed;
@@ -2373,22 +2468,23 @@ try {
             width: 58px;
             height: 58px;
             border-radius: 50%;
-            background: linear-gradient(135deg, var(--orange-bright), #ff5500);
+            background: linear-gradient(135deg, #007bff, #0056b3) !important;
             border: none;
-            color: #fff;
+            color: #fff !important;
             font-size: 1.5rem;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 6px 24px rgba(255, 140, 0, 0.5);
+            box-shadow: 0 6px 24px rgba(0, 123, 255, 0.5) !important;
             transition: all 0.25s ease;
             text-decoration: none;
         }
 
         .floating-messages-btn:hover {
             transform: scale(1.1) translateY(-2px);
-            box-shadow: 0 10px 32px rgba(255, 140, 0, 0.7);
+            box-shadow: 0 10px 32px rgba(0, 123, 255, 0.7) !important;
+            background: linear-gradient(135deg, #0069d9, #004085) !important;
         }
 
         .floating-messages-badge {
@@ -2957,7 +3053,9 @@ try {
     <a href="uzenetek.php" class="floating-messages-btn unselectable" title="Üzenetek">
         💬
         <?php if ($unreadMsgCount > 0): ?>
-            <span class="floating-messages-badge"><?php echo $unreadMsgCount > 9 ? '9+' : $unreadMsgCount; ?></span>
+            <span class="floating-messages-badge" id="floatingMessagesBadge"><?php echo $unreadMsgCount > 9 ? '9+' : $unreadMsgCount; ?></span>
+        <?php else: ?>
+            <span class="floating-messages-badge" id="floatingMessagesBadge" style="display: none;"></span>
         <?php endif; ?>
     </a>
 
@@ -3495,7 +3593,7 @@ try {
             const themeLink = document.getElementById('themeStylesheet');
 
             function applyTheme(theme) {
-                themeLink.href = theme === 'light' ? 'theme-light.css' : 'theme-dark.css';
+                themeLink.href = theme === 'light' ? 'theme-light.css?v=2' : 'theme-dark.css?v=2';
                 localStorage.setItem('theme', theme);
                 checkbox.checked = (theme === 'light');
                 document.documentElement.setAttribute('data-theme', theme);
@@ -3840,6 +3938,109 @@ try {
             accountDropdown.addEventListener('click', (e) => e.stopPropagation());
             document.addEventListener('click', closeDropdown);
         }
+
+        // =====================
+        // UNREAD MESSAGES POLLING (realtime badge frissítés)
+        // =====================
+        let lastUnreadCount = <?php echo $unreadMsgCount; ?>;
+        const msgBadge = document.getElementById('floatingMessagesBadge');
+        const msgButton = document.querySelector('.floating-messages-btn');
+
+        // Toast értesítés (ha még nincs ilyen elem, létrehozzuk)
+        let toastMsgElement = document.getElementById('messageToast');
+        if (!toastMsgElement) {
+            toastMsgElement = document.createElement('div');
+            toastMsgElement.id = 'messageToast';
+            toastMsgElement.style.cssText = `
+                position: fixed;
+                bottom: 100px;
+                right: 30px;
+                z-index: 9999;
+                background: var(--orange-bright);
+                color: #000;
+                padding: 12px 20px;
+                border-radius: 50px;
+                box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+                font-weight: bold;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                opacity: 0;
+                transform: translateY(20px);
+                pointer-events: none;
+            `;
+            document.body.appendChild(toastMsgElement);
+
+            // Kattintásra ugorjon az üzenetek oldalra
+            toastMsgElement.addEventListener('click', () => {
+                window.location.href = 'uzenetek.php';
+            });
+        }
+
+        function showMessageToast(sender, preview) {
+            toastMsgElement.textContent = `💬 Új üzenet: ${sender} - "${preview}"`;
+            toastMsgElement.style.opacity = '1';
+            toastMsgElement.style.transform = 'translateY(0)';
+            toastMsgElement.style.pointerEvents = 'auto';
+
+            // 5 másodperc után eltűnik
+            setTimeout(() => {
+                toastMsgElement.style.opacity = '0';
+                toastMsgElement.style.transform = 'translateY(20px)';
+                toastMsgElement.style.pointerEvents = 'none';
+            }, 5000);
+        }
+
+        async function checkUnreadMessages() {
+            try {
+                const response = await fetch('?get_unread_count=1');
+                const data = await response.json();
+
+                if (data.error) {
+                    console.error('Unread count error:', data.error);
+                    return;
+                }
+
+                const newCount = data.unread_count;
+
+                // Badge frissítése
+                if (msgBadge) {
+                    if (newCount > 0) {
+                        msgBadge.textContent = newCount > 9 ? '9+' : newCount;
+                        msgBadge.style.display = 'flex';
+                    } else {
+                        msgBadge.style.display = 'none';
+                    }
+                }
+
+                // Ha nőtt az olvasatlan szám és van új üzenet adat, toast megjelenítése
+                if (newCount > lastUnreadCount && data.last_message) {
+                    showMessageToast(data.last_message.sender, data.last_message.preview);
+                }
+
+                lastUnreadCount = newCount;
+            } catch (err) {
+                console.error('Polling hiba:', err);
+            }
+        }
+
+        // Polling indítása (15 másodpercenként, hogy ne terhelje túl a szervert)
+        let unreadPollInterval = setInterval(checkUnreadMessages, 15000);
+
+        // Ha az oldal inaktívvá válik, lassíthatjuk a pollingot
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                clearInterval(unreadPollInterval);
+                unreadPollInterval = setInterval(checkUnreadMessages, 60000); // 1 perc
+            } else {
+                clearInterval(unreadPollInterval);
+                unreadPollInterval = setInterval(checkUnreadMessages, 15000);
+                // Visszatéréskor azonnal ellenőrizzük
+                checkUnreadMessages();
+            }
+        });
+
+        // Azonnali első ellenőrzés (ha esetleg közben érkezett üzenet)
+        checkUnreadMessages();
     </script>
 </body>
 
