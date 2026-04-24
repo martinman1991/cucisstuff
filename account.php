@@ -1527,10 +1527,10 @@ try {
 
         <!-- Profilkép megjelenítés -->
         <div class="info-card" style="display: flex; flex-direction: column; align-items: center; text-align: center;">
-            <label>Profilkép</label>
+            <label class="unselectable">Profilkép</label>
             <div class="profile-pic-container">
                 <?php if ($profilePic && file_exists($profilePic)): ?>
-                    <img src="<?= htmlspecialchars($profilePic) ?>" class="profile-pic" id="profileImgPreview" alt="Profilkép">
+                    <img src="<?= htmlspecialchars($profilePic) ?>" class="profile-pic unselectable" id="profileImgPreview" alt="Profilkép">
                 <?php else: ?>
                     <div class="no-profile-pic unselectable" id="profileImgPreview">📷</div>
                 <?php endif; ?>
