@@ -3642,6 +3642,16 @@ try {
                     }
                 <?php endif; ?>
 
+                // --- VÁSÁRLÁS GOMB MŰKÖDÉSE ---
+                // A termék azonosító már be van állítva (currentProductId), így átirányít a vasarlas.php-ra
+                document.getElementById('productBuyBtn').onclick = function() {
+                    if (currentProductId) {
+                        window.location.href = 'vasarlas.php?item_id=' + encodeURIComponent(currentProductId);
+                    } else {
+                        alert('Hiba: nincs termék kiválasztva.');
+                    }
+                };
+
                 openProductModal();
             });
         });
@@ -3682,8 +3692,15 @@ try {
             if (e.key === 'Escape' && productModal.classList.contains('active')) closeProductModal();
         });
 
-        document.getElementById('productBuyBtn').addEventListener('click', () => {
-            alert('Vásárlás funkció még nem elérhető!');
+        // A termékmodál alapértelmezett vásárlás gomb kezelő (ha nincs megnyitott termék, akkor a kártyaklikkel állítódik be)
+        // A fenti kártya kattintás felülírja, de ha a modált más módon (pl. keresésből) nyitjuk, akkor ott is be kell állítani.
+        // Az alábbi sor biztonsági tartalék, de az onClick a kártyákból már be van állítva.
+        document.getElementById('productBuyBtn').addEventListener('click', function() {
+            if (currentProductId) {
+                window.location.href = 'vasarlas.php?item_id=' + encodeURIComponent(currentProductId);
+            } else {
+                alert('Hiba: nincs termék kiválasztva.');
+            }
         });
 
         function toggleProductMenu(button) {
@@ -3913,6 +3930,11 @@ try {
                         editBtn.style.display = 'none';
                         deleteBtn.style.display = 'none';
                     }
+
+                    // Vásárlás gomb frissítése
+                    document.getElementById('productBuyBtn').onclick = function() {
+                        window.location.href = 'vasarlas.php?item_id=' + encodeURIComponent(item.id);
+                    };
 
                     openProductModal();
                 })
