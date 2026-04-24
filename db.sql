@@ -97,8 +97,8 @@ CREATE TABLE
         reason TEXT NOT NULL,
         status ENUM ('pending', 'resolved', 'dismissed') DEFAULT 'pending',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (message_id) REFERENCES uzenetek(id) ON DELETE CASCADE,
-        FOREIGN KEY (reporter_user_id) REFERENCES users(id) ON DELETE CASCADE
+        FOREIGN KEY (message_id) REFERENCES uzenetek (id) ON DELETE CASCADE,
+        FOREIGN KEY (reporter_user_id) REFERENCES users (id) ON DELETE CASCADE
     ) ENGINE = InnoDB;
 
 -- Admin felhasználó keresése és beszúrása az adminok táblába

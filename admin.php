@@ -1890,9 +1890,17 @@ function pgLink($v, $p)
                     <?php foreach (['REPORTOK' => 'reports', 'FELHASZNÁLÓK' => 'users', 'TERMÉKEK' => 'items'] as $label => $key): ?>
                         <a href="admin.php?view=<?= $key ?>" style="text-decoration:none">
                             <div class="dash-card">
-                                <div class="dash-label"><?= match($key) { 'reports' => '⚠', 'users' => '◈', 'items' => '◧' } ?> <?= $label ?></div>
+                                <div class="dash-label"><?= match ($key) {
+                                                            'reports' => '⚠',
+                                                            'users' => '◈',
+                                                            'items' => '◧'
+                                                        } ?> <?= $label ?></div>
                                 <div class="dash-number"><?= number_format($counts[$key]) ?></div>
-                                <div class="dash-sublabel"><?= match($key) { 'reports' => 'Bejelentett hirdetések', 'users' => 'Regisztrált fiókok', 'items' => 'Aktív hirdetések' } ?></div>
+                                <div class="dash-sublabel"><?= match ($key) {
+                                                                'reports' => 'Bejelentett hirdetések',
+                                                                'users' => 'Regisztrált fiókok',
+                                                                'items' => 'Aktív hirdetések'
+                                                            } ?></div>
                             </div>
                         </a>
                     <?php endforeach; ?>
