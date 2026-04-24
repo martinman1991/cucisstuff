@@ -425,7 +425,7 @@ try {
 
         .back-btn:hover {
             background: var(--orange-bright);
-            color: #2b1500;
+            color: #FFF3E0;
         }
 
         .admin-btn {
