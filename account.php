@@ -44,14 +44,21 @@ function resizeImage($source, $destination, $maxDim = 1024)
     }
 
     switch ($mime) {
-        case 'image/jpeg': $srcImg = imagecreatefromjpeg($source); break;
-        case 'image/png':  $srcImg = imagecreatefrompng($source); break;
-        case 'image/gif':  $srcImg = imagecreatefromgif($source); break;
+        case 'image/jpeg':
+            $srcImg = imagecreatefromjpeg($source);
+            break;
+        case 'image/png':
+            $srcImg = imagecreatefrompng($source);
+            break;
+        case 'image/gif':
+            $srcImg = imagecreatefromgif($source);
+            break;
         case 'image/webp':
             if (function_exists('imagecreatefromwebp')) $srcImg = imagecreatefromwebp($source);
             else return copy($source, $destination);
             break;
-        default: return false;
+        default:
+            return false;
     }
     if (!$srcImg) return false;
 
@@ -74,10 +81,18 @@ function resizeImage($source, $destination, $maxDim = 1024)
     imagecopyresampled($dstImg, $srcImg, 0, 0, 0, 0, $newWidth, $newHeight, $srcWidth, $srcHeight);
     $success = false;
     switch ($mime) {
-        case 'image/jpeg': $success = imagejpeg($dstImg, $destination, 85); break;
-        case 'image/png':  $success = imagepng($dstImg, $destination, 8); break;
-        case 'image/gif':  $success = imagegif($dstImg, $destination); break;
-        case 'image/webp': if (function_exists('imagewebp')) $success = imagewebp($dstImg, $destination, 85); break;
+        case 'image/jpeg':
+            $success = imagejpeg($dstImg, $destination, 85);
+            break;
+        case 'image/png':
+            $success = imagepng($dstImg, $destination, 8);
+            break;
+        case 'image/gif':
+            $success = imagegif($dstImg, $destination);
+            break;
+        case 'image/webp':
+            if (function_exists('imagewebp')) $success = imagewebp($dstImg, $destination, 85);
+            break;
     }
     imagedestroy($srcImg);
     imagedestroy($dstImg);
@@ -332,6 +347,7 @@ try {
 ?>
 <!DOCTYPE html>
 <html lang="hu">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -340,7 +356,14 @@ try {
     <link rel="icon" type="image/png" href="logo.png">
     <style>
         /* ========== GLOBÁLIS RESET (a meglévőből) ========== */
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
         body {
             min-height: 100vh;
             margin: 0;
@@ -350,6 +373,7 @@ try {
             color: var(--text-primary);
             transition: background 0.3s, color 0.3s;
         }
+
         .container {
             max-width: 1100px;
             margin: 70px auto 0 auto;
@@ -358,6 +382,7 @@ try {
             gap: 1.5rem;
             padding: 0 1rem;
         }
+
         /* top-bar (a meglévőből) */
         .top-bar {
             position: fixed;
@@ -375,7 +400,14 @@ try {
             border-bottom: 1px solid var(--glass-border);
             pointer-events: auto;
         }
-        .top-bar-left, .top-bar-right { display: flex; gap: 0.5rem; pointer-events: auto; }
+
+        .top-bar-left,
+        .top-bar-right {
+            display: flex;
+            gap: 0.5rem;
+            pointer-events: auto;
+        }
+
         .back-btn {
             padding: 0.5rem 1rem;
             background: var(--orange-subtle);
@@ -390,7 +422,12 @@ try {
             align-items: center;
             gap: 0.3rem;
         }
-        .back-btn:hover { background: var(--orange-bright); color: #000; }
+
+        .back-btn:hover {
+            background: var(--orange-bright);
+            color: #000;
+        }
+
         .admin-btn {
             padding: 0.5rem 1.1rem;
             border: 1px solid rgba(255, 215, 0, 0.3);
@@ -407,9 +444,19 @@ try {
             text-decoration: none;
             white-space: nowrap;
         }
-        .admin-btn:hover { background: rgba(255, 215, 0, 0.25); border-color: #ffd700; transform: translateY(-1px); }
+
+        .admin-btn:hover {
+            background: rgba(255, 215, 0, 0.25);
+            border-color: #ffd700;
+            transform: translateY(-1px);
+        }
+
         /* Account dropdown (a meglévőből) */
-        .account-menu { position: relative; display: inline-block; }
+        .account-menu {
+            position: relative;
+            display: inline-block;
+        }
+
         .account-menu-btn {
             display: flex;
             align-items: center;
@@ -425,7 +472,12 @@ try {
             white-space: nowrap;
             cursor: pointer;
         }
-        .account-menu-btn:hover { background: rgba(255, 140, 0, 0.1); border-color: var(--orange-bright); }
+
+        .account-menu-btn:hover {
+            background: rgba(255, 140, 0, 0.1);
+            border-color: var(--orange-bright);
+        }
+
         .account-dropdown {
             position: absolute;
             right: 0;
@@ -438,7 +490,13 @@ try {
             transform: translateY(-4px);
             transition: opacity 0.18s ease, transform 0.18s ease;
         }
-        .account-dropdown.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
+
+        .account-dropdown.show {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(0);
+        }
+
         .account-dropdown-panel {
             border-radius: 14px;
             padding: 0.5rem;
@@ -447,9 +505,21 @@ try {
             backdrop-filter: blur(16px);
             border: 1px solid var(--glass-border);
         }
-        .dropdown-username { font-size: 0.85rem; font-weight: 700; padding: 0.6rem 0.8rem 0.5rem; }
-        .dropdown-divider { height: 1px; margin: 0.3rem 0.4rem; background: linear-gradient(90deg, transparent, var(--orange-bright), transparent); }
-        .dropdown-item, .logout-form-btn {
+
+        .dropdown-username {
+            font-size: 0.85rem;
+            font-weight: 700;
+            padding: 0.6rem 0.8rem 0.5rem;
+        }
+
+        .dropdown-divider {
+            height: 1px;
+            margin: 0.3rem 0.4rem;
+            background: linear-gradient(90deg, transparent, var(--orange-bright), transparent);
+        }
+
+        .dropdown-item,
+        .logout-form-btn {
             display: flex;
             align-items: center;
             gap: 0.5rem;
@@ -464,7 +534,13 @@ try {
             transition: background 0.15s, color 0.15s;
             text-align: left;
         }
-        .logout-form { width: 100%; margin: 0; padding: 0; }
+
+        .logout-form {
+            width: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
         .dropdown-theme-row {
             display: flex;
             align-items: center;
@@ -472,13 +548,21 @@ try {
             padding: 0.6rem 0.8rem;
             font-size: 0.85rem;
         }
+
         .theme-switch {
             position: relative;
             width: 42px;
             height: 24px;
             flex-shrink: 0;
         }
-        .theme-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+
+        .theme-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            position: absolute;
+        }
+
         .theme-switch-track {
             position: absolute;
             inset: 0;
@@ -488,7 +572,12 @@ try {
             transition: background 0.3s, border-color 0.3s;
             cursor: pointer;
         }
-        .theme-switch input:checked + .theme-switch-track { background: rgba(176, 203, 31, 0.25); border-color: #B0CB1F; }
+
+        .theme-switch input:checked+.theme-switch-track {
+            background: rgba(176, 203, 31, 0.25);
+            border-color: #B0CB1F;
+        }
+
         .theme-switch-thumb {
             position: absolute;
             top: 3px;
@@ -500,13 +589,36 @@ try {
             transition: transform 0.3s, background 0.3s;
             pointer-events: none;
         }
-        .theme-switch input:checked ~ .theme-switch-thumb { transform: translateX(18px); background: #B0CB1F; }
+
+        .theme-switch input:checked~.theme-switch-thumb {
+            transform: translateX(18px);
+            background: #B0CB1F;
+        }
+
         /* light mode overrides */
-        body[data-theme="light"] .account-dropdown-panel { background: rgba(248, 252, 235, 0.98); border: 1px solid rgba(122, 146, 0, 0.3); }
-        body[data-theme="light"] .account-menu-btn { background: rgba(240, 252, 200, 0.85); border-color: rgba(122, 146, 0, 0.5); color: #7a9200; }
-        body[data-theme="light"] .account-menu-btn:hover { background: rgba(210, 240, 100, 0.95); border-color: #B0CB1F; }
+        body[data-theme="light"] .account-dropdown-panel {
+            background: rgba(248, 252, 235, 0.98);
+            border: 1px solid rgba(122, 146, 0, 0.3);
+        }
+
+        body[data-theme="light"] .account-menu-btn {
+            background: rgba(240, 252, 200, 0.85);
+            border-color: rgba(122, 146, 0, 0.5);
+            color: #7a9200;
+        }
+
+        body[data-theme="light"] .account-menu-btn:hover {
+            background: rgba(210, 240, 100, 0.95);
+            border-color: #B0CB1F;
+        }
+
         /* info-grid, items-section stb. (a meglévőből) */
-        .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+        }
+
         .info-card {
             background: var(--glass-bg);
             border: 1px solid var(--glass-border);
@@ -514,8 +626,22 @@ try {
             padding: 1.2rem;
             backdrop-filter: blur(10px);
         }
-        .info-card label { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; display: block; margin-bottom: 0.3rem; }
-        .info-card .val { font-size: 1.1rem; font-weight: 500; color: var(--text-primary); word-break: break-all; }
+
+        .info-card label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            display: block;
+            margin-bottom: 0.3rem;
+        }
+
+        .info-card .val {
+            font-size: 1.1rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            word-break: break-all;
+        }
+
         .edit-btn {
             padding: 0.7rem 1.2rem;
             background: linear-gradient(135deg, var(--orange-bright), var(--orange-mid));
@@ -527,7 +653,12 @@ try {
             transition: 0.3s;
             margin-top: auto;
         }
-        .edit-btn:hover { transform: translateY(-2px); box-shadow: 0 0 20px var(--orange-glow); }
+
+        .edit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 20px var(--orange-glow);
+        }
+
         .items-section {
             background: var(--glass-bg);
             border: 1px solid var(--glass-border);
@@ -537,8 +668,19 @@ try {
             overflow-y: auto;
             backdrop-filter: blur(10px);
         }
-        .items-section h2 { color: var(--orange-bright); margin: 0 0 1rem 0; font-size: 1.3rem; }
-        .items-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; }
+
+        .items-section h2 {
+            color: var(--orange-bright);
+            margin: 0 0 1rem 0;
+            font-size: 1.3rem;
+        }
+
+        .items-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 1rem;
+        }
+
         .mini-card {
             background: rgba(0, 0, 0, 0.2);
             border: 1px solid var(--glass-border);
@@ -547,11 +689,40 @@ try {
             transition: 0.3s;
             cursor: pointer;
         }
-        .mini-card:hover { border-color: var(--orange-bright); transform: translateY(-3px); }
-        .mini-card img { width: 100%; height: 140px; object-fit: cover; background: var(--placeholder-bg); pointer-events: none; }
-        .mini-card .info { padding: 0.7rem; }
-        .mini-card .title { margin: 0; font-size: 0.9rem; color: var(--orange-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .mini-card .price { margin: 0.3rem 0 0; font-size: 0.85rem; color: var(--text-primary); opacity: 0.8; }
+
+        .mini-card:hover {
+            border-color: var(--orange-bright);
+            transform: translateY(-3px);
+        }
+
+        .mini-card img {
+            width: 100%;
+            height: 140px;
+            object-fit: cover;
+            background: var(--placeholder-bg);
+            pointer-events: none;
+        }
+
+        .mini-card .info {
+            padding: 0.7rem;
+        }
+
+        .mini-card .title {
+            margin: 0;
+            font-size: 0.9rem;
+            color: var(--orange-bright);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .mini-card .price {
+            margin: 0.3rem 0 0;
+            font-size: 0.85rem;
+            color: var(--text-primary);
+            opacity: 0.8;
+        }
+
         /* ---------- ÚJ MODÁLOK STÍLUSAI ---------- */
         .modal-overlay {
             position: fixed;
@@ -563,7 +734,11 @@ try {
             justify-content: center;
             z-index: 2000;
         }
-        .modal-overlay.active { display: flex; }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
         .modal-card {
             background: var(--glass-bg);
             border: 1px solid var(--glass-border);
@@ -574,6 +749,7 @@ try {
             box-shadow: var(--shadow-deep);
             position: relative;
         }
+
         .modal-close {
             position: absolute;
             top: 1rem;
@@ -584,11 +760,30 @@ try {
             font-size: 1.4rem;
             cursor: pointer;
         }
-        .modal-close:hover { color: var(--orange-bright); }
-        .modal-title { color: var(--orange-bright); margin: 0 0 1.5rem 0; font-size: 1.4rem; }
-        .form-group { margin-bottom: 1rem; }
-        .form-group label { display: block; margin-bottom: 0.4rem; font-size: 0.85rem; color: var(--text-muted); }
-        .form-group input, .form-group textarea {
+
+        .modal-close:hover {
+            color: var(--orange-bright);
+        }
+
+        .modal-title {
+            color: var(--orange-bright);
+            margin: 0 0 1.5rem 0;
+            font-size: 1.4rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.4rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .form-group input,
+        .form-group textarea {
             width: 100%;
             padding: 0.75rem;
             background: var(--input-bg);
@@ -597,7 +792,14 @@ try {
             color: var(--text-primary);
             font-size: 0.95rem;
         }
-        .form-group input:focus, .form-group textarea:focus { outline: none; border-color: var(--orange-bright); box-shadow: 0 0 0 3px var(--orange-subtle); }
+
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--orange-bright);
+            box-shadow: 0 0 0 3px var(--orange-subtle);
+        }
+
         .submit-btn {
             width: 100%;
             padding: 0.8rem;
@@ -610,10 +812,32 @@ try {
             margin-top: 0.5rem;
             transition: 0.3s;
         }
-        .submit-btn:hover { opacity: 0.9; transform: translateY(-1px); }
-        .status-msg { padding: 0.75rem; border-radius: 10px; margin-bottom: 1rem; font-size: 0.9rem; display: none; }
-        .status-msg.error { background: rgba(255, 50, 50, 0.15); border: 1px solid #ff4d4d; color: #ff8080; }
-        .status-msg.success { background: rgba(0, 200, 100, 0.15); border: 1px solid #00c851; color: #5dffa0; }
+
+        .submit-btn:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .status-msg {
+            padding: 0.75rem;
+            border-radius: 10px;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            display: none;
+        }
+
+        .status-msg.error {
+            background: rgba(255, 50, 50, 0.15);
+            border: 1px solid #ff4d4d;
+            color: #ff8080;
+        }
+
+        .status-msg.success {
+            background: rgba(0, 200, 100, 0.15);
+            border: 1px solid #00c851;
+            color: #5dffa0;
+        }
+
         /* Profilkép megjelenítés */
         .profile-pic-container {
             display: flex;
@@ -621,6 +845,7 @@ try {
             align-items: center;
             margin-bottom: 0.5rem;
         }
+
         .profile-pic {
             width: 80px;
             height: 80px;
@@ -629,6 +854,7 @@ try {
             border: 2px solid var(--orange-bright);
             background: var(--placeholder-bg);
         }
+
         .no-profile-pic {
             width: 80px;
             height: 80px;
@@ -641,15 +867,36 @@ try {
             color: var(--orange-bright);
             border: 2px solid var(--orange-bright);
         }
+
         /* light theme */
-        body[data-theme="light"] .modal-card { background: rgba(248, 252, 230, 0.98); border: 1px solid rgba(140, 170, 10, 0.35); }
-        body[data-theme="light"] .modal-title { color: #7a9200; }
-        body[data-theme="light"] .form-group input, body[data-theme="light"] .form-group textarea { background: rgba(245, 252, 215, 0.95); border-color: rgba(140, 170, 10, 0.3); color: #1a1f00; }
-        body[data-theme="light"] .submit-btn { background: linear-gradient(135deg, #B0CB1F, #8aA000); color: #1a1f00; }
+        body[data-theme="light"] .modal-card {
+            background: rgba(248, 252, 230, 0.98);
+            border: 1px solid rgba(140, 170, 10, 0.35);
+        }
+
+        body[data-theme="light"] .modal-title {
+            color: #7a9200;
+        }
+
+        body[data-theme="light"] .form-group input,
+        body[data-theme="light"] .form-group textarea {
+            background: rgba(245, 252, 215, 0.95);
+            border-color: rgba(140, 170, 10, 0.3);
+            color: #1a1f00;
+        }
+
+        body[data-theme="light"] .submit-btn {
+            background: linear-gradient(135deg, #B0CB1F, #8aA000);
+            color: #1a1f00;
+        }
+
         /* Edit modal (termék szerkesztő) - a meglévőből */
         .edit-modal {
             position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
             background: rgba(0, 0, 0, 0.85);
             backdrop-filter: blur(12px);
             display: none;
@@ -659,7 +906,12 @@ try {
             opacity: 0;
             transition: opacity 0.25s ease;
         }
-        .edit-modal.show { display: flex; opacity: 1; }
+
+        .edit-modal.show {
+            display: flex;
+            opacity: 1;
+        }
+
         .edit-modal-content {
             width: 100%;
             max-width: 560px;
@@ -670,14 +922,57 @@ try {
             transition: transform 0.3s ease;
             overflow: hidden;
         }
-        .edit-modal.show .edit-modal-content { transform: translateY(0) scale(1); }
-        .edit-modal-header { display: flex; justify-content: space-between; padding: 1.25rem 1.8rem; background: rgba(255, 140, 0, 0.08); border-bottom: 1px solid rgba(255, 140, 0, 0.2); }
-        .edit-modal-title { font-size: 1.3rem; font-weight: 600; color: var(--orange-bright); }
-        .edit-modal-close { background: rgba(255, 255, 255, 0.08); border: none; border-radius: 40px; width: 36px; height: 36px; font-size: 1.2rem; color: var(--orange-bright); cursor: pointer; }
-        .edit-modal-body { padding: 1.8rem 1.8rem 2rem; }
-        .edit-form-group { margin-bottom: 1.5rem; }
-        .edit-form-label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--orange-bright); margin-bottom: 0.6rem; }
-        .edit-form-input, .edit-form-textarea {
+
+        .edit-modal.show .edit-modal-content {
+            transform: translateY(0) scale(1);
+        }
+
+        .edit-modal-header {
+            display: flex;
+            justify-content: space-between;
+            padding: 1.25rem 1.8rem;
+            background: rgba(255, 140, 0, 0.08);
+            border-bottom: 1px solid rgba(255, 140, 0, 0.2);
+        }
+
+        .edit-modal-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: var(--orange-bright);
+        }
+
+        .edit-modal-close {
+            background: rgba(255, 255, 255, 0.08);
+            border: none;
+            border-radius: 40px;
+            width: 36px;
+            height: 36px;
+            font-size: 1.2rem;
+            color: var(--orange-bright);
+            cursor: pointer;
+        }
+
+        .edit-modal-body {
+            padding: 1.8rem 1.8rem 2rem;
+        }
+
+        .edit-form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .edit-form-label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: var(--orange-bright);
+            margin-bottom: 0.6rem;
+        }
+
+        .edit-form-input,
+        .edit-form-textarea {
             width: 100%;
             background: rgba(0, 0, 0, 0.5);
             border: 1px solid rgba(255, 140, 0, 0.25);
@@ -687,12 +982,48 @@ try {
             font-family: inherit;
             font-size: 0.95rem;
         }
-        .edit-price-wrapper { position: relative; display: flex; align-items: center; }
-        .edit-price-suffix { position: absolute; right: 1.2rem; color: var(--orange-bright); font-weight: 600; }
-        .edit-modal-actions { display: flex; gap: 1rem; margin-top: 2rem; }
-        .btn-edit-cancel, .btn-edit-save { flex: 1; padding: 0.9rem; border-radius: 40px; font-weight: 700; text-align: center; cursor: pointer; border: none; }
-        .btn-edit-cancel { background: rgba(255, 255, 255, 0.05); color: var(--text-muted); border: 1px solid rgba(255, 140, 0, 0.2); }
-        .btn-edit-save { background: linear-gradient(105deg, #ff9a1f, #ff5500); color: #0a0500; }
+
+        .edit-price-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .edit-price-suffix {
+            position: absolute;
+            right: 1.2rem;
+            color: var(--orange-bright);
+            font-weight: 600;
+        }
+
+        .edit-modal-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .btn-edit-cancel,
+        .btn-edit-save {
+            flex: 1;
+            padding: 0.9rem;
+            border-radius: 40px;
+            font-weight: 700;
+            text-align: center;
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn-edit-cancel {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-muted);
+            border: 1px solid rgba(255, 140, 0, 0.2);
+        }
+
+        .btn-edit-save {
+            background: linear-gradient(105deg, #ff9a1f, #ff5500);
+            color: #0a0500;
+        }
+
         /* ========== TERMÉKMODÁL TELJES STÍLUSOK (JAVÍTVA) ========== */
         .product-modal-overlay {
             position: fixed;
@@ -707,10 +1038,12 @@ try {
             transition: opacity 0.3s ease;
             padding: 0;
         }
+
         .product-modal-overlay.active {
             display: flex;
             opacity: 1;
         }
+
         .product-modal-card {
             width: 100vw;
             height: 100vh;
@@ -725,9 +1058,11 @@ try {
             box-shadow: none;
             overflow: hidden;
         }
+
         .product-modal-overlay.active .product-modal-card {
             transform: scale(1);
         }
+
         .product-modal-header {
             position: absolute;
             top: 1.5rem;
@@ -736,6 +1071,7 @@ try {
             gap: 1rem;
             z-index: 100;
         }
+
         .product-modal-close {
             background: rgba(20, 20, 20, 0.8);
             border: 1px solid var(--orange-bright);
@@ -751,14 +1087,17 @@ try {
             transition: all 0.2s ease;
             backdrop-filter: blur(5px);
         }
+
         .product-modal-close:hover {
             background: var(--orange-bright);
             color: black;
             transform: scale(1.1);
         }
+
         .product-menu {
             position: relative;
         }
+
         .product-menu-button {
             width: 48px;
             height: 48px;
@@ -775,11 +1114,13 @@ try {
             transition: all 0.2s ease;
             backdrop-filter: blur(5px);
         }
+
         .product-menu-button:hover {
             background: var(--orange-bright);
             color: black;
             transform: scale(1.1);
         }
+
         .product-menu-content {
             position: absolute;
             top: 55px;
@@ -794,9 +1135,11 @@ try {
             display: none;
             z-index: 101;
         }
+
         .product-menu-content.show {
             display: block;
         }
+
         .product-menu-item {
             width: 100%;
             padding: 0.75rem 1rem;
@@ -809,14 +1152,17 @@ try {
             border-radius: 6px;
             transition: all 0.2s ease;
         }
+
         .product-menu-item:hover {
             background: rgba(255, 140, 0, 0.2);
             color: var(--orange-bright);
         }
+
         .product-menu-item.delete:hover {
             background: rgba(255, 0, 0, 0.2);
             color: #ff0000;
         }
+
         .product-gallery {
             position: relative;
             height: 100%;
@@ -827,6 +1173,7 @@ try {
             padding: 1rem;
             min-height: 0;
         }
+
         .product-main-image-container {
             position: relative;
             width: 100%;
@@ -840,6 +1187,7 @@ try {
             justify-content: center;
             min-height: 300px;
         }
+
         .product-main-image {
             max-width: 100%;
             max-height: 100%;
@@ -849,9 +1197,11 @@ try {
             cursor: pointer;
             transition: opacity 0.2s ease;
         }
+
         .product-main-image:hover {
             opacity: 0.9;
         }
+
         .product-no-image-placeholder {
             text-align: center;
             font-size: 1.2rem;
@@ -859,6 +1209,7 @@ try {
             user-select: none;
             -webkit-user-select: none;
         }
+
         .gallery-nav {
             position: absolute;
             top: 50%;
@@ -878,20 +1229,25 @@ try {
             z-index: 10;
             backdrop-filter: blur(5px);
         }
+
         .gallery-nav:hover {
             background: var(--orange-bright);
             color: black;
             transform: translateY(-50%) scale(1.1);
         }
+
         .gallery-nav.prev {
             left: 20px;
         }
+
         .gallery-nav.next {
             right: 20px;
         }
+
         .gallery-nav.hidden {
             display: none;
         }
+
         .product-thumbnails {
             display: flex;
             gap: 1rem;
@@ -899,6 +1255,7 @@ try {
             padding: 0.5rem 0;
             min-height: 100px;
         }
+
         .product-thumbnail {
             width: 100px;
             height: 100px;
@@ -909,19 +1266,23 @@ try {
             transition: all 0.2s ease;
             flex-shrink: 0;
         }
+
         .product-thumbnail:hover {
             border-color: var(--orange-bright);
             transform: translateY(-2px);
         }
+
         .product-thumbnail.active {
             border-color: var(--orange-bright);
             box-shadow: 0 0 20px var(--orange-glow);
         }
+
         .product-thumbnail img {
             width: 100%;
             height: 100%;
             object-fit: cover;
         }
+
         .product-details {
             display: flex;
             flex-direction: column;
@@ -934,12 +1295,14 @@ try {
             overflow-y: auto;
             user-select: none;
         }
+
         .product-details-header {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
             gap: 1rem;
         }
+
         .product-title {
             font-size: 2.5rem;
             color: var(--orange-bright);
@@ -948,25 +1311,30 @@ try {
             line-height: 1.2;
             font-weight: bold;
         }
+
         .product-price {
             font-size: 3rem;
             font-weight: bold;
             color: var(--orange-bright);
             text-shadow: 0 0 30px var(--orange-glow);
         }
+
         .product-seller {
             font-size: 1.2rem;
             color: rgba(255, 255, 255, 0.7);
             cursor: pointer;
         }
+
         .product-seller strong {
             color: var(--orange-bright);
             font-size: 1.4rem;
         }
+
         .product-date {
             font-size: 1rem;
             color: rgba(255, 255, 255, 0.4);
         }
+
         .product-description {
             font-size: 1.1rem;
             line-height: 1.8;
@@ -980,6 +1348,7 @@ try {
             white-space: pre-wrap;
             user-select: none;
         }
+
         .product-buy-btn {
             background: linear-gradient(135deg, #00c851, #007e33);
             border: none;
@@ -997,10 +1366,12 @@ try {
             gap: 1rem;
             user-select: none;
         }
+
         .product-buy-btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 10px 30px rgba(0, 200, 0, 0.4);
         }
+
         .lightbox-overlay {
             position: fixed;
             inset: 0;
@@ -1013,10 +1384,12 @@ try {
             opacity: 0;
             transition: opacity 0.3s ease;
         }
+
         .lightbox-overlay.active {
             display: flex;
             opacity: 1;
         }
+
         .lightbox-content {
             display: flex;
             align-items: flex-start;
@@ -1024,6 +1397,7 @@ try {
             max-width: 95vw;
             max-height: 95vh;
         }
+
         .lightbox-image {
             max-width: calc(95vw - 70px);
             max-height: 95vh;
@@ -1033,6 +1407,7 @@ try {
             border: 2px solid var(--orange-bright);
             border-radius: 8px;
         }
+
         .lightbox-close {
             background: rgba(20, 20, 20, 0.9);
             border: 1px solid var(--orange-bright);
@@ -1048,12 +1423,17 @@ try {
             transition: all 0.2s ease;
             flex-shrink: 0;
         }
+
         .lightbox-close:hover {
             background: var(--orange-bright);
             color: black;
             transform: scale(1.1);
         }
-        .unselectable { user-select: none; }
+
+        .unselectable {
+            user-select: none;
+        }
+
         @media (max-width: 900px) {
             .product-modal-card {
                 grid-template-columns: 1fr;
@@ -1061,21 +1441,46 @@ try {
                 padding: 1rem;
                 overflow-y: auto;
             }
+
             .product-gallery {
                 height: 50vh;
             }
+
             .product-title {
                 font-size: 2rem;
             }
+
             .product-price {
                 font-size: 2.5rem;
             }
+
             .product-description {
                 max-height: 300px;
             }
         }
+
+        /* ---- SCROLLBAR STYLING a termékmodálhoz ---- */
+        .product-modal-card ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        .product-modal-card ::-webkit-scrollbar-track {
+            background: var(--scrollbar-track, #0a0a0a);
+            border-radius: 4px;
+        }
+
+        .product-modal-card ::-webkit-scrollbar-thumb {
+            background: var(--scrollbar-thumb, rgba(255, 120, 0, 0.3));
+            border-radius: 4px;
+        }
+
+        .product-modal-card ::-webkit-scrollbar-thumb:hover {
+            background: var(--scrollbar-thumb-hover, rgba(255, 140, 0, 0.5));
+        }
     </style>
 </head>
+
 <body data-theme="dark">
     <div class="top-bar">
         <div class="top-bar-left">
@@ -1346,8 +1751,15 @@ try {
         // Account dropdown
         const accountMenuBtn = document.getElementById('accountMenuBtn');
         const accountDropdown = document.getElementById('accountDropdown');
-        function closeDropdown() { accountDropdown.classList.remove('show'); }
-        function toggleDropdown(e) { e.stopPropagation(); accountDropdown.classList.toggle('show'); }
+
+        function closeDropdown() {
+            accountDropdown.classList.remove('show');
+        }
+
+        function toggleDropdown(e) {
+            e.stopPropagation();
+            accountDropdown.classList.toggle('show');
+        }
         if (accountMenuBtn && accountDropdown) {
             accountMenuBtn.addEventListener('click', toggleDropdown);
             accountDropdown.addEventListener('click', (e) => e.stopPropagation());
@@ -1361,24 +1773,75 @@ try {
         const emailModal = document.getElementById('emailModal');
         const passwordModal = document.getElementById('passwordModal');
 
-        function openAccountSettingsModal() { accountSettingsModal.classList.add('active'); document.body.style.overflow = 'hidden'; }
-        function closeAccountSettingsModal() { accountSettingsModal.classList.remove('active'); document.body.style.overflow = ''; }
-        function closeProfilePicModal() { profilePicModal.classList.remove('active'); document.body.style.overflow = ''; }
-        function closeUsernameModal() { usernameModal.classList.remove('active'); document.body.style.overflow = ''; }
-        function closeEmailModal() { emailModal.classList.remove('active'); document.body.style.overflow = ''; }
-        function closePasswordModal() { passwordModal.classList.remove('active'); document.body.style.overflow = ''; }
+        function openAccountSettingsModal() {
+            accountSettingsModal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeAccountSettingsModal() {
+            accountSettingsModal.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        function closeProfilePicModal() {
+            profilePicModal.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        function closeUsernameModal() {
+            usernameModal.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        function closeEmailModal() {
+            emailModal.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        function closePasswordModal() {
+            passwordModal.classList.remove('active');
+            document.body.style.overflow = '';
+        }
 
         document.getElementById('openAccountSettingsBtn').addEventListener('click', openAccountSettingsModal);
-        document.getElementById('changeProfilePicBtn').addEventListener('click', () => { closeAccountSettingsModal(); profilePicModal.classList.add('active'); document.body.style.overflow = 'hidden'; });
-        document.getElementById('changeUsernameBtn').addEventListener('click', () => { closeAccountSettingsModal(); usernameModal.classList.add('active'); document.body.style.overflow = 'hidden'; });
-        document.getElementById('changeEmailBtn').addEventListener('click', () => { closeAccountSettingsModal(); emailModal.classList.add('active'); document.body.style.overflow = 'hidden'; });
-        document.getElementById('changePasswordBtn').addEventListener('click', () => { closeAccountSettingsModal(); passwordModal.classList.add('active'); document.body.style.overflow = 'hidden'; });
+        document.getElementById('changeProfilePicBtn').addEventListener('click', () => {
+            closeAccountSettingsModal();
+            profilePicModal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        });
+        document.getElementById('changeUsernameBtn').addEventListener('click', () => {
+            closeAccountSettingsModal();
+            usernameModal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        });
+        document.getElementById('changeEmailBtn').addEventListener('click', () => {
+            closeAccountSettingsModal();
+            emailModal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        });
+        document.getElementById('changePasswordBtn').addEventListener('click', () => {
+            closeAccountSettingsModal();
+            passwordModal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        });
 
         // Modálok bezárása background kattintásra
         document.querySelectorAll('.modal-overlay').forEach(modal => {
-            modal.addEventListener('click', function(e) { if (e.target === modal) { this.classList.remove('active'); document.body.style.overflow = ''; } });
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    this.classList.remove('active');
+                    document.body.style.overflow = '';
+                }
+            });
         });
-        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { document.querySelectorAll('.modal-overlay.active').forEach(m => { m.classList.remove('active'); document.body.style.overflow = ''; }); } });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                document.querySelectorAll('.modal-overlay.active').forEach(m => {
+                    m.classList.remove('active');
+                    document.body.style.overflow = '';
+                });
+            }
+        });
 
         // --- Profilkép feltöltés AJAX ---
         const profilePicForm = document.getElementById('profilePicForm');
@@ -1394,7 +1857,10 @@ try {
             profilePicStatus.className = 'status-msg';
             profilePicStatus.textContent = 'Feltöltés...';
             try {
-                const res = await fetch('account.php', { method: 'POST', body: formData });
+                const res = await fetch('account.php', {
+                    method: 'POST',
+                    body: formData
+                });
                 const data = await res.json();
                 if (data.success) {
                     profilePicStatus.classList.add('success');
@@ -1412,7 +1878,9 @@ try {
                             profileImgPreview.parentNode.replaceChild(newImg, profileImgPreview);
                         }
                     }
-                    setTimeout(() => { closeProfilePicModal(); }, 1500);
+                    setTimeout(() => {
+                        closeProfilePicModal();
+                    }, 1500);
                 } else {
                     profilePicStatus.classList.add('error');
                     profilePicStatus.textContent = data.message;
@@ -1434,7 +1902,10 @@ try {
             usernameStatus.className = 'status-msg';
             usernameStatus.textContent = 'Feldolgozás...';
             try {
-                const res = await fetch('account.php', { method: 'POST', body: formData });
+                const res = await fetch('account.php', {
+                    method: 'POST',
+                    body: formData
+                });
                 const data = await res.json();
                 if (data.success) {
                     usernameStatus.classList.add('success');
@@ -1442,7 +1913,9 @@ try {
                     document.getElementById('displayUsername').textContent = document.getElementById('newUsername').value;
                     // Frissítjük a dropdownban is
                     document.querySelector('.dropdown-username').textContent = document.getElementById('newUsername').value;
-                    setTimeout(() => { closeUsernameModal(); }, 1500);
+                    setTimeout(() => {
+                        closeUsernameModal();
+                    }, 1500);
                 } else {
                     usernameStatus.classList.add('error');
                     usernameStatus.textContent = data.message;
@@ -1464,13 +1937,18 @@ try {
             emailStatus.className = 'status-msg';
             emailStatus.textContent = 'Feldolgozás...';
             try {
-                const res = await fetch('account.php', { method: 'POST', body: formData });
+                const res = await fetch('account.php', {
+                    method: 'POST',
+                    body: formData
+                });
                 const data = await res.json();
                 if (data.success) {
                     emailStatus.classList.add('success');
                     emailStatus.textContent = data.message;
                     document.getElementById('displayEmail').textContent = document.getElementById('newEmail').value;
-                    setTimeout(() => { closeEmailModal(); }, 1500);
+                    setTimeout(() => {
+                        closeEmailModal();
+                    }, 1500);
                 } else {
                     emailStatus.classList.add('error');
                     emailStatus.textContent = data.message;
@@ -1492,7 +1970,10 @@ try {
             passwordStatus.className = 'status-msg';
             passwordStatus.textContent = 'Feldolgozás...';
             try {
-                const res = await fetch('account.php', { method: 'POST', body: formData });
+                const res = await fetch('account.php', {
+                    method: 'POST',
+                    body: formData
+                });
                 const data = await res.json();
                 if (data.success) {
                     passwordStatus.classList.add('success');
@@ -1500,7 +1981,9 @@ try {
                     document.getElementById('oldPassword').value = '';
                     document.getElementById('newPassword').value = '';
                     document.getElementById('confirmPassword').value = '';
-                    setTimeout(() => { closePasswordModal(); }, 1500);
+                    setTimeout(() => {
+                        closePasswordModal();
+                    }, 1500);
                 } else {
                     passwordStatus.classList.add('error');
                     passwordStatus.textContent = data.message;
@@ -1543,9 +2026,21 @@ try {
             }
         }
 
-        function openProductModal() { productModal.classList.add('active'); document.body.style.overflow = 'hidden'; }
-        function closeProductModal() { if (lightboxOverlay.classList.contains('active')) lightboxOverlay.classList.remove('active'); productModal.classList.remove('active'); document.body.style.overflow = ''; }
-        function closeLightbox() { lightboxOverlay.classList.remove('active'); }
+        function openProductModal() {
+            productModal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeProductModal() {
+            if (lightboxOverlay.classList.contains('active')) lightboxOverlay.classList.remove('active');
+            productModal.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        function closeLightbox() {
+            lightboxOverlay.classList.remove('active');
+        }
+
         function openEditItemModal(itemId, title, description, price) {
             editItemId.value = itemId;
             editTitle.value = title;
@@ -1554,8 +2049,14 @@ try {
             editItemModal.classList.add('show');
             document.body.style.overflow = 'hidden';
         }
-        function closeEditItemModal() { editItemModal.classList.remove('show'); document.body.style.overflow = ''; }
-        editItemModal.addEventListener('click', function(e) { if (e.target === editItemModal) closeEditItemModal(); });
+
+        function closeEditItemModal() {
+            editItemModal.classList.remove('show');
+            document.body.style.overflow = '';
+        }
+        editItemModal.addEventListener('click', function(e) {
+            if (e.target === editItemModal) closeEditItemModal();
+        });
 
         function fetchItemDetails(itemId) {
             fetch(`?get_item=${itemId}`).then(r => r.json()).then(item => {
@@ -1578,7 +2079,10 @@ try {
                         const thumbnail = document.createElement('div');
                         thumbnail.className = `product-thumbnail ${index === 0 ? 'active' : ''}`;
                         thumbnail.innerHTML = `<img src="${img}" alt="Thumbnail">`;
-                        thumbnail.addEventListener('click', (e) => { e.stopPropagation(); setMainImage(index); });
+                        thumbnail.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            setMainImage(index);
+                        });
                         thumbnailsContainer.appendChild(thumbnail);
                     });
                     setMainImage(0);
@@ -1595,27 +2099,76 @@ try {
                 menuContainer.style.display = 'block';
                 if (isOwner) {
                     editBtn.style.display = 'block';
-                    editBtn.onclick = () => { closeProductModal(); openEditItemModal(item.id, item.title, item.description, item.price); };
+                    editBtn.onclick = () => {
+                        closeProductModal();
+                        openEditItemModal(item.id, item.title, item.description, item.price);
+                    };
                     deleteBtn.style.display = 'block';
-                    deleteBtn.onclick = () => { if (confirm('Biztosan törlöd ezt a terméket?')) { const form = document.createElement('form'); form.method = 'POST'; form.innerHTML = `<input type="hidden" name="item_id" value="${item.id}"><input type="hidden" name="delete_item" value="1">`; document.body.appendChild(form); form.submit(); } };
-                } else { editBtn.style.display = 'none'; deleteBtn.style.display = 'none'; }
+                    deleteBtn.onclick = () => {
+                        if (confirm('Biztosan törlöd ezt a terméket?')) {
+                            const form = document.createElement('form');
+                            form.method = 'POST';
+                            form.innerHTML = `<input type="hidden" name="item_id" value="${item.id}"><input type="hidden" name="delete_item" value="1">`;
+                            document.body.appendChild(form);
+                            form.submit();
+                        }
+                    };
+                } else {
+                    editBtn.style.display = 'none';
+                    deleteBtn.style.display = 'none';
+                }
                 openProductModal();
             }).catch(err => console.error(err));
         }
 
-        function toggleProductMenu(button) { const menu = button.nextElementSibling; menu.classList.toggle('show'); }
+        function toggleProductMenu(button) {
+            const menu = button.nextElementSibling;
+            menu.classList.toggle('show');
+        }
         closeProductModalBtn.addEventListener('click', closeProductModal);
-        productModal.addEventListener('click', (e) => { if (e.target === productModal) closeProductModal(); });
-        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && productModal.classList.contains('active')) closeProductModal(); });
-        document.getElementById('galleryPrev').addEventListener('click', (e) => { e.stopPropagation(); setMainImage(currentImageIndex - 1 >= 0 ? currentImageIndex - 1 : currentProductImages.length - 1); });
-        document.getElementById('galleryNext').addEventListener('click', (e) => { e.stopPropagation(); setMainImage(currentImageIndex + 1 < currentProductImages.length ? currentImageIndex + 1 : 0); });
-        productMainImage.addEventListener('click', (e) => { if (productMainImage.src && productMainImage.style.display !== 'none') { lightboxImage.src = productMainImage.src; lightboxOverlay.classList.add('active'); } });
+        productModal.addEventListener('click', (e) => {
+            if (e.target === productModal) closeProductModal();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && productModal.classList.contains('active')) closeProductModal();
+        });
+        document.getElementById('galleryPrev').addEventListener('click', (e) => {
+            e.stopPropagation();
+            setMainImage(currentImageIndex - 1 >= 0 ? currentImageIndex - 1 : currentProductImages.length - 1);
+        });
+        document.getElementById('galleryNext').addEventListener('click', (e) => {
+            e.stopPropagation();
+            setMainImage(currentImageIndex + 1 < currentProductImages.length ? currentImageIndex + 1 : 0);
+        });
+        productMainImage.addEventListener('click', (e) => {
+            if (productMainImage.src && productMainImage.style.display !== 'none') {
+                lightboxImage.src = productMainImage.src;
+                lightboxOverlay.classList.add('active');
+            }
+        });
         lightboxClose.addEventListener('click', closeLightbox);
-        lightboxOverlay.addEventListener('click', (e) => { if (e.target === lightboxOverlay) closeLightbox(); });
+        lightboxOverlay.addEventListener('click', (e) => {
+            if (e.target === lightboxOverlay) closeLightbox();
+        });
         document.getElementById('productBuyBtn').addEventListener('click', () => alert('Vásárlás funkció még nem elérhető!'));
-        function escapeHtml(str) { if (!str) return ''; return str.replace(/[&<>]/g, function(m) { if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; return m; }); }
 
-        document.querySelectorAll('.mini-card').forEach(card => { card.addEventListener('click', function(e) { const itemId = this.dataset.itemId; if (itemId) fetchItemDetails(itemId); }); });
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, function(m) {
+                if (m === '&') return '&amp;';
+                if (m === '<') return '&lt;';
+                if (m === '>') return '&gt;';
+                return m;
+            });
+        }
+
+        document.querySelectorAll('.mini-card').forEach(card => {
+            card.addEventListener('click', function(e) {
+                const itemId = this.dataset.itemId;
+                if (itemId) fetchItemDetails(itemId);
+            });
+        });
     </script>
 </body>
+
 </html>

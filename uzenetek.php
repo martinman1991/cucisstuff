@@ -2564,9 +2564,9 @@ try {
                 const unreadBadge = p.unread_count > 0 ? `<div class="unread-badge">${p.unread_count}</div>` : '';
 
                 // Avatar: profile picture or initial
-                const avatarHtml = (p.profile_picture && p.profile_picture.trim() !== '')
-                    ? `<div class="partner-avatar"><img src="${escapeHtml(p.profile_picture)}" alt="${escapeHtml(p.username)}"></div>`
-                    : `<div class="partner-avatar">${avatarLetter}</div>`;
+                const avatarHtml = (p.profile_picture && p.profile_picture.trim() !== '') ?
+                    `<div class="partner-avatar"><img src="${escapeHtml(p.profile_picture)}" alt="${escapeHtml(p.username)}"></div>` :
+                    `<div class="partner-avatar">${avatarLetter}</div>`;
 
                 if (isActive) {
                     html += `
