@@ -361,6 +361,7 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Üzenetek – Valós idejű</title>
     <link rel="stylesheet" id="themeStylesheet" href="theme-dark.css">
+    <link rel="icon" type="image/png" href="logo.png">
     <style>
         * {
             box-sizing: border-box;

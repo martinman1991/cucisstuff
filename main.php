@@ -619,6 +619,7 @@ try {
     <title>Főoldal - Termékek</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" id="themeStylesheet" href="theme-dark.css?v=2">
+    <link rel="icon" type="image/png" href="logo.png">
     <style>
         /* ═══════════════════════════════════════════════════════════════════
         MAIN STYLES (dark mode default)

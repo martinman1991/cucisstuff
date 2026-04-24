@@ -337,6 +337,7 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fiókom</title>
     <link rel="stylesheet" id="themeStylesheet" href="theme-dark.css">
+    <link rel="icon" type="image/png" href="logo.png">
     <style>
         /* ========== GLOBÁLIS RESET (a meglévőből) ========== */
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
