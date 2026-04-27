@@ -13,6 +13,9 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     exit();
 }
 
+// IDŐZÓNA BEÁLLÍTÁSA A HELYI IDŐ MEGJELENÍTÉSÉHEZ
+date_default_timezone_set('Europe/Budapest');
+
 require_once 'config.php';
 $servername = DB_HOST;
 $username   = DB_USER;
@@ -34,6 +37,41 @@ function generateMessageId(): string
 try {
     $conn = new PDO("mysql:host=$servername;dbname=$dbname", $username, $password);
     $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+    // --- HIDDEN CONVERSATIONS TÁBLA LÉTREHOZÁSA ---
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS hidden_conversations (
+            user_id INT NOT NULL,
+            partner_id INT NOT NULL,
+            hidden_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, partner_id),
+            CONSTRAINT fk_hc_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            CONSTRAINT fk_hc_partner FOREIGN KEY (partner_id) REFERENCES users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB
+    ");
+
+    // ================================
+    // AJAX – Beszélgetés elrejtése
+    // ================================
+    if (isset($_POST['hide_conversation']) && isset($_POST['partner_id'])) {
+        header('Content-Type: application/json');
+        $partnerId = (int)$_POST['partner_id'];
+        $success = false;
+        if ($partnerId > 0 && $partnerId !== $currentUserId) {
+            try {
+                $insertHide = $conn->prepare("
+                    INSERT IGNORE INTO hidden_conversations (user_id, partner_id)
+                    VALUES (?, ?)
+                ");
+                $insertHide->execute([$currentUserId, $partnerId]);
+                $success = true;
+            } catch (Exception $e) {
+                // Sikertelen beszúrás
+            }
+        }
+        echo json_encode(['success' => $success]);
+        exit;
+    }
 
     // ================================
     // AJAX – Új üzenetek lekérése (polling) IDŐBÉLYEG ALAPJÁN
@@ -170,7 +208,8 @@ try {
                 OR
                 (m.receiver_id = u.id AND m.sender_id = :me3)
             )
-            WHERE u.id != :me4
+            LEFT JOIN hidden_conversations hc ON hc.user_id = :me4 AND hc.partner_id = u.id
+            WHERE u.id != :me5 AND hc.user_id IS NULL
             GROUP BY u.id, u.username, u.profile_picture, u.created_at
             ORDER BY last_message_at DESC
         ");
@@ -179,6 +218,7 @@ try {
             ':me2' => $currentUserId,
             ':me3' => $currentUserId,
             ':me4' => $currentUserId,
+            ':me5' => $currentUserId,
         ]);
         $partners = $partnersStmt->fetchAll(PDO::FETCH_ASSOC);
         echo json_encode($partners);
@@ -244,6 +284,7 @@ try {
         $markRead->execute([$withUserId, $currentUserId]);
     }
 
+    // Partnerek lekérése (szűrve a hidden_conversations alapján)
     $partnersStmt = $conn->prepare("
         SELECT
             u.id,
@@ -258,7 +299,8 @@ try {
             OR
             (m.receiver_id = u.id AND m.sender_id = :me3)
         )
-        WHERE u.id != :me4
+        LEFT JOIN hidden_conversations hc ON hc.user_id = :me4 AND hc.partner_id = u.id
+        WHERE u.id != :me5 AND hc.user_id IS NULL
         GROUP BY u.id, u.username, u.profile_picture, u.created_at
         ORDER BY last_message_at DESC
     ");
@@ -267,6 +309,7 @@ try {
         ':me2' => $currentUserId,
         ':me3' => $currentUserId,
         ':me4' => $currentUserId,
+        ':me5' => $currentUserId,
     ]);
     $partners = $partnersStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -366,6 +409,22 @@ try {
     }
 } catch (PDOException $e) {
     die("DB hiba: " . $e->getMessage());
+}
+
+// Segédfüggvény a dátumok formázásához a beállított időzónában
+function formatTime($datetime) {
+    if (!$datetime) return '';
+    return (new DateTime($datetime))->format('H:i');
+}
+function formatPartnerTime($datetime) {
+    if (!$datetime) return '';
+    $dt = new DateTime($datetime);
+    $now = new DateTime();
+    $diff = $now->getTimestamp() - $dt->getTimestamp();
+    if ($diff < 60) return 'Az imént';
+    if ($diff < 3600) return round($diff / 60) . ' perce';
+    if ($diff < 86400) return round($diff / 3600) . ' órája';
+    return $dt->format('Y.m.d');
 }
 ?>
 <!DOCTYPE html>
@@ -745,6 +804,7 @@ try {
             transition: background 0.18s;
             text-decoration: none;
             color: inherit;
+            position: relative;
         }
 
         .partner-item:hover,
@@ -813,6 +873,36 @@ try {
             font-size: 0.72rem;
             font-weight: 700;
             flex-shrink: 0;
+        }
+
+        /* Beszélgetés elrejtése gomb */
+        .hide-conversation-btn {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 24px;
+            height: 24px;
+            background: transparent;
+            border: none;
+            color: var(--partner-time);
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.2s;
+            z-index: 5;
+            opacity: 0;
+        }
+
+        .partner-item:hover .hide-conversation-btn {
+            opacity: 1;
+        }
+
+        .hide-conversation-btn:hover {
+            background: rgba(255, 80, 80, 0.15);
+            color: #ff5555;
         }
 
         .no-partners {
@@ -2167,6 +2257,7 @@ try {
                     <?php foreach ($partners as $p): ?>
                         <?php if ($withUserId == $p['id']): ?>
                             <div class="partner-item active" data-partner-id="<?php echo $p['id']; ?>">
+                                <button class="hide-conversation-btn" title="Beszélgetés elrejtése" onclick="hideConversation(event, <?php echo $p['id']; ?>)">✕</button>
                                 <div class="partner-avatar">
                                     <?php if (!empty($p['profile_picture'])): ?>
                                         <img src="<?php echo htmlspecialchars($p['profile_picture']); ?>" alt="<?php echo htmlspecialchars($p['username']); ?>">
@@ -2177,14 +2268,7 @@ try {
                                 <div class="partner-info">
                                     <div class="partner-name"><?php echo htmlspecialchars($p['username']); ?></div>
                                     <div class="partner-time">
-                                        <?php
-                                        $ts = strtotime($p['last_message_at']);
-                                        $diff = time() - $ts;
-                                        if ($diff < 60) echo 'Az imént';
-                                        elseif ($diff < 3600) echo round($diff / 60) . ' perce';
-                                        elseif ($diff < 86400) echo round($diff / 3600) . ' órája';
-                                        else echo date('Y.m.d', $ts);
-                                        ?>
+                                        <?php echo formatPartnerTime($p['last_message_at']); ?>
                                     </div>
                                 </div>
                                 <?php if ($p['unread_count'] > 0): ?>
@@ -2193,6 +2277,7 @@ try {
                             </div>
                         <?php else: ?>
                             <a href="uzenetek.php?with=<?php echo $p['id']; ?>" class="partner-item" data-partner-id="<?php echo $p['id']; ?>">
+                                <button class="hide-conversation-btn" title="Beszélgetés elrejtése" onclick="hideConversation(event, <?php echo $p['id']; ?>)">✕</button>
                                 <div class="partner-avatar">
                                     <?php if (!empty($p['profile_picture'])): ?>
                                         <img src="<?php echo htmlspecialchars($p['profile_picture']); ?>" alt="<?php echo htmlspecialchars($p['username']); ?>">
@@ -2203,14 +2288,7 @@ try {
                                 <div class="partner-info">
                                     <div class="partner-name"><?php echo htmlspecialchars($p['username']); ?></div>
                                     <div class="partner-time">
-                                        <?php
-                                        $ts = strtotime($p['last_message_at']);
-                                        $diff = time() - $ts;
-                                        if ($diff < 60) echo 'Az imént';
-                                        elseif ($diff < 3600) echo round($diff / 60) . ' perce';
-                                        elseif ($diff < 86400) echo round($diff / 3600) . ' órája';
-                                        else echo date('Y.m.d', $ts);
-                                        ?>
+                                        <?php echo formatPartnerTime($p['last_message_at']); ?>
                                     </div>
                                 </div>
                                 <?php if ($p['unread_count'] > 0): ?>
@@ -2256,7 +2334,7 @@ try {
                                 <?php if (!$isOwn): ?>
                                     <div class="msg-bubble received" data-sent-at="<?php echo $msg['sent_at']; ?>">
                                         <?php echo nl2br(htmlspecialchars($msg['message'])); ?>
-                                        <div class="msg-time"><?php echo date('H:i', strtotime($msg['sent_at'])); ?></div>
+                                        <div class="msg-time"><?php echo formatTime($msg['sent_at']); ?></div>
                                     </div>
                                     <div style="position:relative; align-self:center;">
                                         <button class="msg-menu-btn" onclick="toggleMsgMenu(this, event)">⋮</button>
@@ -2277,7 +2355,7 @@ try {
                                     <div class="msg-bubble sent" data-sent-at="<?php echo $msg['sent_at']; ?>">
                                         <?php echo nl2br(htmlspecialchars($msg['message'])); ?>
                                         <div class="msg-time">
-                                            <?php echo date('H:i', strtotime($msg['sent_at'])); ?>
+                                            <?php echo formatTime($msg['sent_at']); ?>
                                             <?php if ($msg['is_read']): ?>&nbsp;✓✓<?php endif; ?>
                                         </div>
                                     </div>
@@ -2467,6 +2545,44 @@ try {
             return maxTs;
         }
 
+        // Beszélgetés elrejtése AJAX-szal
+        async function hideConversation(event, partnerIdToHide) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const formData = new URLSearchParams();
+            formData.append('hide_conversation', '1');
+            formData.append('partner_id', partnerIdToHide);
+
+            try {
+                const response = await fetch('uzenetek.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: formData
+                });
+                const data = await response.json();
+                if (data.success) {
+                    // Eltávolítjuk a DOM-ból az adott partner elemet
+                    const partnerElement = document.querySelector(`.partner-item[data-partner-id="${partnerIdToHide}"]`);
+                    if (partnerElement) {
+                        partnerElement.remove();
+                    }
+                    // Ha éppen ezzel a partnerrel beszélgettünk, irányítsuk át a főoldalra
+                    if (partnerIdToHide === partnerId) {
+                        window.location.href = 'uzenetek.php';
+                    }
+                    showToast('Beszélgetés elrejtve.');
+                } else {
+                    showToast('Hiba történt az elrejtés során.');
+                }
+            } catch (err) {
+                console.error('Hide conversation error:', err);
+                showToast('Hálózati hiba.');
+            }
+        }
+
         function appendMessage(msg) {
             const isOwn = (parseInt(msg.sender_id) === currentUserId);
             const msgDiv = document.createElement('div');
@@ -2586,6 +2702,7 @@ try {
                 if (isActive) {
                     html += `
                         <div class="partner-item active" data-partner-id="${p.id}">
+                            <button class="hide-conversation-btn" title="Beszélgetés elrejtése" onclick="hideConversation(event, ${p.id})">✕</button>
                             ${avatarHtml}
                             <div class="partner-info">
                                 <div class="partner-name">${escapeHtml(p.username)}</div>
@@ -2597,6 +2714,7 @@ try {
                 } else {
                     html += `
                         <a href="uzenetek.php?with=${p.id}" class="partner-item" data-partner-id="${p.id}">
+                            <button class="hide-conversation-btn" title="Beszélgetés elrejtése" onclick="hideConversation(event, ${p.id})">✕</button>
                             ${avatarHtml}
                             <div class="partner-info">
                                 <div class="partner-name">${escapeHtml(p.username)}</div>
