@@ -1685,12 +1685,12 @@ try {
             box-shadow: 0 10px 30px rgba(0, 200, 0, 0.4);
         }
 
-        /* ========== ELKELT GOMB STÍLUSA (témafüggetlen) ========== */
+        /* ========== ELKELT GOMB – TELJESEN SZÜRKE ========== */
         .product-buy-btn.sold {
-            background: #555 !important;
-            color: #aaa !important;
+            background: #666 !important;
+            color: #ddd !important;
             cursor: not-allowed !important;
-            border: 1px solid #666 !important;
+            border: 1px solid #888 !important;
             box-shadow: none !important;
             pointer-events: none;
         }
@@ -3119,7 +3119,7 @@ try {
                     hasVisibleMenu = true;
                     buyBtn.style.display = 'flex';
 
-                    // ---- MÓDOSÍTÁS: a sold mező alapján állítjuk a gombot ----
+                    // ---- MÓDOSÍTÁS: sold alapján teljesen szürke gomb ----
                     if (item.sold == 1) {
                         buyBtn.textContent = 'Elkelt';
                         buyBtn.classList.add('sold');
@@ -3133,7 +3133,6 @@ try {
                             window.location.href = 'vasarlas.php?item_id=' + encodeURIComponent(item.id);
                         };
                     }
-                    // ---- MÓDOSÍTÁS VÉGE ----
                 }
 
                 menuContainer.style.display = hasVisibleMenu ? 'block' : 'none';
