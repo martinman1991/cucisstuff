@@ -2039,6 +2039,170 @@ try {
             user-select: none;
         }
 
+        /* ========== DELETE CONFIRM MODAL ========== */
+        .delete-confirm-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 5000;
+        }
+
+        .delete-confirm-modal.show {
+            display: flex;
+        }
+
+        .delete-confirm-modal-content {
+            background: rgba(20, 10, 10, 0.95);
+            border: 2px solid #ff4444;
+            border-radius: 20px;
+            padding: 2rem;
+            max-width: 450px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(255, 0, 0, 0.3);
+            position: relative;
+        }
+
+        .delete-confirm-modal-header {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .delete-confirm-modal-icon {
+            font-size: 2rem;
+        }
+
+        .delete-confirm-modal-title {
+            font-size: 1.3rem;
+            color: #ff4444;
+            margin: 0;
+            flex: 1;
+        }
+
+        .delete-confirm-modal-close {
+            background: transparent;
+            border: none;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0.2rem;
+        }
+
+        .delete-confirm-modal-close:hover {
+            color: #ff4444;
+        }
+
+        .delete-confirm-modal-body {
+            margin-bottom: 1.5rem;
+        }
+
+        .delete-confirm-modal-text {
+            font-size: 1rem;
+            color: #ffffff;
+            margin-bottom: 0.5rem;
+        }
+
+        .delete-confirm-modal-warning {
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .delete-confirm-modal-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+        }
+
+        .delete-confirm-cancel-btn {
+            padding: 0.7rem 1.5rem;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: transparent;
+            color: #ffffff;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .delete-confirm-cancel-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: #ffffff;
+        }
+
+        .delete-confirm-delete-btn {
+            padding: 0.7rem 1.5rem;
+            border-radius: 12px;
+            border: none;
+            background: #ff4444;
+            color: #ffffff;
+            font-size: 0.9rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .delete-confirm-delete-btn:hover {
+            background: #ff6666;
+            box-shadow: 0 4px 15px rgba(255, 0, 0, 0.4);
+        }
+
+        /* Light mode overrides for delete confirm modal */
+        body[data-theme="light"] .delete-confirm-modal {
+            background: rgba(220, 230, 180, 0.85) !important;
+        }
+
+        body[data-theme="light"] .delete-confirm-modal-content {
+            background: rgba(255, 245, 240, 0.98) !important;
+            border: 2px solid #d32f2f !important;
+            box-shadow: 0 20px 60px rgba(200, 0, 0, 0.2) !important;
+        }
+
+        body[data-theme="light"] .delete-confirm-modal-title {
+            color: #d32f2f !important;
+        }
+
+        body[data-theme="light"] .delete-confirm-modal-text {
+            color: #1a1f00 !important;
+        }
+
+        body[data-theme="light"] .delete-confirm-modal-warning {
+            color: rgba(26, 31, 0, 0.5) !important;
+        }
+
+        body[data-theme="light"] .delete-confirm-modal-close {
+            color: rgba(26, 31, 0, 0.5) !important;
+        }
+
+        body[data-theme="light"] .delete-confirm-modal-close:hover {
+            color: #d32f2f !important;
+        }
+
+        body[data-theme="light"] .delete-confirm-cancel-btn {
+            border-color: rgba(26, 31, 0, 0.3) !important;
+            color: #1a1f00 !important;
+        }
+
+        body[data-theme="light"] .delete-confirm-cancel-btn:hover {
+            background: rgba(0, 0, 0, 0.05) !important;
+        }
+
+        body[data-theme="light"] .delete-confirm-delete-btn {
+            background: #d32f2f !important;
+        }
+
+        body[data-theme="light"] .delete-confirm-delete-btn:hover {
+            background: #ff4444 !important;
+            box-shadow: 0 4px 15px rgba(200, 0, 0, 0.3) !important;
+        }
+
         @media (max-width: 900px) {
             .product-modal-card {
                 grid-template-columns: 1fr;
@@ -2455,6 +2619,25 @@ try {
         </div>
     </div>
 
+    <!-- Delete Confirm Modal -->
+    <div class="delete-confirm-modal" id="deleteConfirmModal">
+        <div class="delete-confirm-modal-content">
+            <div class="delete-confirm-modal-header">
+                <span class="delete-confirm-modal-icon">⚠️</span>
+                <h3 class="delete-confirm-modal-title unselectable">Hirdetés törlése</h3>
+                <button class="delete-confirm-modal-close unselectable" onclick="closeDeleteConfirmModal()">✕</button>
+            </div>
+            <div class="delete-confirm-modal-body">
+                <p class="delete-confirm-modal-text unselectable">Biztosan törölni szeretnéd ezt a hirdetést?</p>
+                <p class="delete-confirm-modal-warning unselectable">A törlés végleges, nem vonható vissza.</p>
+            </div>
+            <div class="delete-confirm-modal-actions">
+                <button class="delete-confirm-cancel-btn unselectable" onclick="closeDeleteConfirmModal()">Mégse</button>
+                <button class="delete-confirm-delete-btn unselectable" id="confirmDeleteBtn">Törlés</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Téma kezelés
         const themeLink = document.getElementById('themeStylesheet');
@@ -2592,6 +2775,7 @@ try {
                 if (productModal.classList.contains('active')) closeProductModal();
                 if (sellerOverlay.classList.contains('active')) closeSellerPopup();
                 if (editItemModal.classList.contains('show')) closeEditItemModal();
+                if (document.getElementById('deleteConfirmModal').classList.contains('show')) closeDeleteConfirmModal();
             }
         });
 
@@ -2798,7 +2982,6 @@ try {
             editDesc.value = description;
             editPrice.value = parseFloat(price) || price;
             editItemModal.classList.add('show');
-            // Ne zárjuk be a termékmodált, csak tegyük az edit modal-t fölé
             document.body.style.overflow = 'hidden';
         }
 
@@ -2824,6 +3007,46 @@ try {
 
         reportItemModal.addEventListener('click', function(e) {
             if (e.target === reportItemModal) closeReportModal();
+        });
+
+        // ========== DELETE CONFIRM MODAL ==========
+        let pendingDeleteItemId = null;
+        const deleteConfirmModal = document.getElementById('deleteConfirmModal');
+        const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+
+        function openDeleteConfirmModal(itemId) {
+            pendingDeleteItemId = itemId;
+            deleteConfirmModal.classList.add('show');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeDeleteConfirmModal() {
+            deleteConfirmModal.classList.remove('show');
+            document.body.style.overflow = '';
+            pendingDeleteItemId = null;
+        }
+
+        confirmDeleteBtn.addEventListener('click', function() {
+            if (pendingDeleteItemId) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.innerHTML = `
+                    <input type="hidden" name="item_id" value="${pendingDeleteItemId}">
+                    <input type="hidden" name="delete_item" value="1">
+                `;
+                document.body.appendChild(form);
+                form.submit();
+            }
+        });
+
+        deleteConfirmModal.addEventListener('click', function(e) {
+            if (e.target === deleteConfirmModal) closeDeleteConfirmModal();
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && deleteConfirmModal.classList.contains('show')) {
+                closeDeleteConfirmModal();
+            }
         });
 
         function fetchItemDetails(itemId) {
@@ -2867,7 +3090,6 @@ try {
                 const buyBtn = document.getElementById('productBuyBtn');
                 const isOwner = (parseInt(item.user_id) === <?php echo (int)$_SESSION['user_id']; ?>);
 
-                // Alapértelmezetten mindent elrejtünk
                 reportBtn.style.display = 'none';
                 editBtn.style.display = 'none';
                 deleteBtn.style.display = 'none';
@@ -2888,19 +3110,11 @@ try {
 
                 menuContainer.style.display = hasVisibleMenu ? 'block' : 'none';
 
-                // Események
                 editBtn.onclick = () => {
                     openEditItemModal(item.id, item.title, item.description, item.price);
-                    // A termékmodál marad nyitva a háttérben
                 };
                 deleteBtn.onclick = () => {
-                    if (confirm('Biztosan törlöd ezt a terméket?')) {
-                        const form = document.createElement('form');
-                        form.method = 'POST';
-                        form.innerHTML = `<input type="hidden" name="item_id" value="${item.id}"><input type="hidden" name="delete_item" value="1">`;
-                        document.body.appendChild(form);
-                        form.submit();
-                    }
+                    openDeleteConfirmModal(item.id);
                 };
                 reportBtn.onclick = () => {
                     openReportModal(item.id);
@@ -3013,7 +3227,6 @@ try {
             if (e.target === sellerOverlay) closeSellerPopup();
         });
 
-        // Product seller kattintás
         document.getElementById('productSeller').addEventListener('click', function() {
             const sellerId = this.getAttribute('data-seller-id');
             if (sellerId) openSellerPopup(sellerId);
