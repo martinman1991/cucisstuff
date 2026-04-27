@@ -130,6 +130,7 @@ try {
     $view   = $_GET['view']   ?? 'main';
     $editId = $_GET['id']     ?? null;
     $page   = max(1, intval($_GET['page'] ?? 1));
+    $search = trim($_GET['search'] ?? '');
     $perPage = 25;
     $offset = ($page - 1) * $perPage;
     $message = $error = '';
@@ -165,19 +166,20 @@ try {
             $t = trim($_POST['item_title'] ?? '');
             $d = trim($_POST['item_description'] ?? '');
             $p = trim($_POST['item_price'] ?? '');
+            $sold = isset($_POST['item_sold']) ? 1 : 0;
             if (!$t || !$d || !$p) {
                 $error = 'Minden mező kötelező!';
             } elseif (!is_numeric($p) || $p < 0) {
                 $error = 'Az ár csak pozitív szám lehet!';
             } else {
-                $conn->prepare("UPDATE items SET title=?,description=?,price=? WHERE id=?")->execute([$t, $d, (float)$p, $_POST['item_id']]);
+                $conn->prepare("UPDATE items SET title=?,description=?,price=?,sold=? WHERE id=?")->execute([$t, $d, (float)$p, $sold, $_POST['item_id']]);
                 $message = "Termék módosítva.";
                 if (isset($_POST['ajax'])) {
                     header('Content-Type: application/json');
-                    echo json_encode(['success' => true, 'title' => $t, 'description' => $d, 'price' => number_format((float)$p, 0, ',', ' ') . ' Ft']);
+                    echo json_encode(['success' => true, 'title' => $t, 'description' => $d, 'price' => number_format((float)$p, 0, ',', ' ') . ' Ft', 'sold' => (bool)$sold]);
                     exit();
                 }
-                header("Location: admin.php?view=items&page=$page");
+                header("Location: admin.php?view=items&page=$page" . ($search ? '&search=' . urlencode($search) : ''));
                 exit();
             }
         }
@@ -196,15 +198,22 @@ try {
                 } else {
                     $conn->prepare("UPDATE users SET username=?,email=? WHERE id=?")->execute([$u, $e, $_POST['user_id']]);
                     $message = "Felhasználó módosítva.";
-                    header("Location: admin.php?view=users&page=$page");
+                    header("Location: admin.php?view=users&page=$page" . ($search ? '&search=' . urlencode($search) : ''));
                     exit();
                 }
             }
         }
         // Rendelés törlése
         if (isset($_POST['delete_order'], $_POST['order_id'])) {
+            // Először visszaállítjuk a termék sold állapotát
+            $orderStmt = $conn->prepare("SELECT item_id FROM orders WHERE id = ?");
+            $orderStmt->execute([$_POST['order_id']]);
+            if ($orderData = $orderStmt->fetch(PDO::FETCH_ASSOC)) {
+                $conn->prepare("UPDATE items SET sold = FALSE WHERE id = ?")->execute([$orderData['item_id']]);
+            }
+            // Majd töröljük a rendelést
             $conn->prepare("DELETE FROM orders WHERE id=?")->execute([$_POST['order_id']]);
-            $message = "Rendelés törölve.";
+            $message = "Rendelés törölve. A termék ismét megvásárolható.";
         }
         // ---- VIZSGAPURGE ----
         if (isset($_POST['purge_confirm'])) {
@@ -301,18 +310,48 @@ try {
     $selectedUser1 = $selectedUser2 = 0;
     $user1Name = $user2Name = '';
     if ($view === 'items' && !$editId) {
-        $s = $conn->prepare("SELECT i.*,u.username AS seller_name FROM items i JOIN users u ON i.user_id=u.id ORDER BY i.created_at DESC LIMIT :o,:l");
+        $searchSql = '';
+        $params = [];
+        if ($search !== '') {
+            $searchSql = " AND (i.title LIKE :search OR i.description LIKE :search)";
+            $params[':search'] = '%' . $search . '%';
+        }
+        $countSql = "SELECT COUNT(*) FROM items i WHERE 1=1" . $searchSql;
+        $countStmt = $conn->prepare($countSql);
+        $countStmt->execute($params);
+        $totalItems = $countStmt->fetchColumn();
+        $totalPages = (int)ceil($totalItems / $perPage);
+        $s = $conn->prepare("SELECT i.*,u.username AS seller_name FROM items i JOIN users u ON i.user_id=u.id WHERE 1=1 $searchSql ORDER BY i.created_at DESC LIMIT :o,:l");
+        foreach ($params as $key => $val) {
+            $s->bindValue($key, $val);
+        }
         $s->bindValue(':o', $offset, PDO::PARAM_INT);
         $s->bindValue(':l', $perPage, PDO::PARAM_INT);
         $s->execute();
         $items = $s->fetchAll(PDO::FETCH_ASSOC);
     } elseif ($view === 'users' && !$editId) {
-        $s = $conn->prepare("SELECT u.*,(SELECT COUNT(*) FROM admins WHERE user_id=u.id) AS is_admin,(SELECT COUNT(*) FROM items WHERE user_id=u.id) AS item_count FROM users u ORDER BY u.created_at DESC LIMIT :o,:l");
+        $searchSql = '';
+        $params = [];
+        if ($search !== '') {
+            $searchSql = " AND (u.username LIKE :search OR u.email LIKE :search)";
+            $params[':search'] = '%' . $search . '%';
+        }
+        $countSql = "SELECT COUNT(*) FROM users u WHERE 1=1" . $searchSql;
+        $countStmt = $conn->prepare($countSql);
+        $countStmt->execute($params);
+        $totalItems = $countStmt->fetchColumn();
+        $totalPages = (int)ceil($totalItems / $perPage);
+        $s = $conn->prepare("SELECT u.*,(SELECT COUNT(*) FROM admins WHERE user_id=u.id) AS is_admin,(SELECT COUNT(*) FROM items WHERE user_id=u.id) AS item_count FROM users u WHERE 1=1 $searchSql ORDER BY u.created_at DESC LIMIT :o,:l");
+        foreach ($params as $key => $val) {
+            $s->bindValue($key, $val);
+        }
         $s->bindValue(':o', $offset, PDO::PARAM_INT);
         $s->bindValue(':l', $perPage, PDO::PARAM_INT);
         $s->execute();
         $users = $s->fetchAll(PDO::FETCH_ASSOC);
     } elseif ($view === 'reports') {
+        $totalItems = $counts['reports'];
+        $totalPages = (int)ceil($totalItems / $perPage);
         $s = $conn->prepare("
             SELECT r.id, 'item' AS report_type,
                    r.item_id AS ref_id,
@@ -390,8 +429,19 @@ try {
             }
         }
     } elseif ($view === 'orders') {
-        $totalPages = (int)ceil($counts['orders'] / $perPage);
-        // COLLATE használata a karakterkészlet- és kolláció-ütközés elkerülésére
+        $searchSql = '';
+        $params = [];
+        if ($search !== '') {
+            $searchSql = " AND (i.title LIKE :search OR o.id LIKE :search OR buyer.username LIKE :search2 OR seller.username LIKE :search3)";
+            $params[':search'] = '%' . $search . '%';
+            $params[':search2'] = '%' . $search . '%';
+            $params[':search3'] = '%' . $search . '%';
+        }
+        $countSql = "SELECT COUNT(*) FROM orders o JOIN items i ON o.item_id COLLATE utf8mb4_unicode_ci = i.id COLLATE utf8mb4_unicode_ci JOIN users buyer ON o.buyer_id = buyer.id JOIN users seller ON o.seller_id = seller.id WHERE 1=1" . $searchSql;
+        $countStmt = $conn->prepare($countSql);
+        $countStmt->execute($params);
+        $totalItems = $countStmt->fetchColumn();
+        $totalPages = (int)ceil($totalItems / $perPage);
         $oStmt = $conn->prepare("
             SELECT o.*, i.title AS item_title, i.price AS item_price,
                    buyer.username AS buyer_name, seller.username AS seller_name
@@ -399,9 +449,13 @@ try {
             JOIN items i ON o.item_id COLLATE utf8mb4_unicode_ci = i.id COLLATE utf8mb4_unicode_ci
             JOIN users buyer ON o.buyer_id = buyer.id
             JOIN users seller ON o.seller_id = seller.id
+            WHERE 1=1 $searchSql
             ORDER BY o.created_at DESC
             LIMIT :o, :l
         ");
+        foreach ($params as $key => $val) {
+            $oStmt->bindValue($key, $val);
+        }
         $oStmt->bindValue(':o', $offset, PDO::PARAM_INT);
         $oStmt->bindValue(':l', $perPage, PDO::PARAM_INT);
         $oStmt->execute();
@@ -427,9 +481,13 @@ try {
     $editItem = $editUser = null;
     $counts = ['users' => 0, 'items' => 0, 'reports' => 0, 'orders' => 0];
 }
-function pgLink($v, $p)
+function pgLink($v, $p, $search = '')
 {
-    return "admin.php?view=$v&page=$p";
+    $link = "admin.php?view=$v&page=$p";
+    if ($search !== '') {
+        $link .= '&search=' . urlencode($search);
+    }
+    return $link;
 }
 ?>
 <!DOCTYPE html>
@@ -885,6 +943,75 @@ function pgLink($v, $p)
             content: '[ERR]';
         }
 
+        /* ═══════════ SEARCH FORM ═══════════ */
+        .search-form {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.2rem;
+            align-items: center;
+        }
+
+        .search-input {
+            flex: 1;
+            max-width: 400px;
+            padding: 0.5rem 0.9rem;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--c-border2);
+            color: var(--c-green);
+            font-family: var(--font-mono);
+            font-size: 0.82rem;
+            letter-spacing: 1px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+            border-color: var(--c-green);
+            box-shadow: var(--c-glow);
+        }
+
+        .search-input::placeholder {
+            color: var(--c-green-dim);
+        }
+
+        .search-btn {
+            padding: 0.5rem 1.2rem;
+            background: transparent;
+            border: 1px solid var(--c-border2);
+            color: var(--c-green-mid);
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+
+        .search-btn:hover {
+            background: rgba(57, 255, 20, 0.07);
+            border-color: var(--c-green);
+            color: var(--c-green);
+            box-shadow: var(--c-glow);
+        }
+
+        .search-clear {
+            padding: 0.5rem 1rem;
+            background: transparent;
+            border: 1px solid var(--c-border);
+            color: var(--c-muted);
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            text-decoration: none;
+            letter-spacing: 1px;
+            transition: all 0.15s;
+        }
+
+        .search-clear:hover {
+            border-color: var(--c-amber);
+            color: var(--c-amber);
+        }
+
         .data-panel {
             border: 1px solid var(--c-border2);
             background: var(--c-panel);
@@ -906,7 +1033,7 @@ function pgLink($v, $p)
         /* ═══════════ VIZSGALOCK PANEL (MINDIG PIROS) ═══════════ */
         .vizsgalock-panel {
             border: 1px solid #ff3333 !important;
-            background: #2a0000 !important;
+            background: var(--c-panel) !important;
             overflow-x: auto;
             margin-bottom: 16px;
             position: relative;
@@ -1284,6 +1411,29 @@ function pgLink($v, $p)
         .field-input::placeholder,
         .field-textarea::placeholder {
             color: var(--c-green-dim);
+        }
+
+        /* Sold checkbox */
+        .field-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            margin-top: 0.3rem;
+        }
+
+        .field-checkbox input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--c-red);
+            cursor: pointer;
+        }
+
+        .field-checkbox label {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            color: var(--c-text);
+            cursor: pointer;
+            letter-spacing: 1px;
         }
 
         .edit-actions {
@@ -2898,9 +3048,15 @@ function pgLink($v, $p)
                                 <label class="field-label">Ár (Ft)</label>
                                 <input type="number" name="item_price" class="field-input" value="<?= $editItem['price'] ?>" min="0" step="1" required>
                             </div>
+                            <div class="field-row">
+                                <div class="field-checkbox">
+                                    <input type="checkbox" name="item_sold" id="item_sold" value="1" <?= $editItem['sold'] ? 'checked' : '' ?>>
+                                    <label for="item_sold">🔴 TERMÉK ELKELT (NEM VÁSÁROLHATÓ MEG)</label>
+                                </div>
+                            </div>
                             <div class="edit-actions">
                                 <button type="submit" name="update_item" class="btn-save">[ MENTÉS ]</button>
-                                <a href="admin.php?view=items&page=<?= $page ?>" class="btn-cancel">[ MÉGSE ]</a>
+                                <a href="admin.php?view=items&page=<?= $page ?><?= $search ? '&search=' . urlencode($search) : '' ?>" class="btn-cancel">[ MÉGSE ]</a>
                             </div>
                         </form>
                     </div>
@@ -2922,7 +3078,7 @@ function pgLink($v, $p)
                             </div>
                             <div class="edit-actions">
                                 <button type="submit" name="update_user" class="btn-save">[ MENTÉS ]</button>
-                                <a href="admin.php?view=users&page=<?= $page ?>" class="btn-cancel">[ MÉGSE ]</a>
+                                <a href="admin.php?view=users&page=<?= $page ?><?= $search ? '&search=' . urlencode($search) : '' ?>" class="btn-cancel">[ MÉGSE ]</a>
                             </div>
                         </form>
                     </div>
@@ -3021,8 +3177,18 @@ function pgLink($v, $p)
             <?php elseif ($view === 'users'): ?>
                 <div class="section-header">
                     <h2>FELHASZNÁLÓK</h2>
-                    <span class="record-count">TOTAL: <?= $counts['users'] ?> RECORD</span>
+                    <span class="record-count">TOTAL: <?= $totalItems ?> RECORD</span>
                 </div>
+                <!-- KERESŐ -->
+                <form method="get" class="search-form">
+                    <input type="hidden" name="view" value="users">
+                    <input type="hidden" name="page" value="1">
+                    <input type="text" name="search" class="search-input" value="<?= htmlspecialchars($search) ?>" placeholder="Keresés felhasználónév vagy email alapján...">
+                    <button type="submit" class="search-btn">KERESÉS</button>
+                    <?php if ($search): ?>
+                        <a href="admin.php?view=users" class="search-clear">✕ TÖRLÉS</a>
+                    <?php endif; ?>
+                </form>
                 <?php if (empty($users)): ?>
                     <div class="empty-state">NINCS ADAT</div>
                 <?php else: ?>
@@ -3051,7 +3217,7 @@ function pgLink($v, $p)
                                         <td><?= $u['item_count'] ?></td>
                                         <td class="mono"><?= date('Y-m-d', strtotime($u['created_at'])) ?></td>
                                         <td>
-                                            <a href="admin.php?view=users&id=<?= $u['id'] ?>&page=<?= $page ?>" class="act act-edit">EDIT</a>
+                                            <a href="admin.php?view=users&id=<?= $u['id'] ?>&page=<?= $page ?><?= $search ? '&search=' . urlencode($search) : '' ?>" class="act act-edit">EDIT</a>
                                             <?php if ($u['id'] != $_SESSION['user_id']): ?>
                                                 <button class="act act-del" onclick="confirmThenPost('delete_user', { user_id: <?= $u['id'] ?> })">TÖRL</button>
                                             <?php endif; ?>
@@ -3066,8 +3232,18 @@ function pgLink($v, $p)
             <?php elseif ($view === 'items'): ?>
                 <div class="section-header">
                     <h2>TERMÉKEK</h2>
-                    <span class="record-count">TOTAL: <?= $counts['items'] ?> RECORD</span>
+                    <span class="record-count">TOTAL: <?= $totalItems ?> RECORD</span>
                 </div>
+                <!-- KERESŐ -->
+                <form method="get" class="search-form">
+                    <input type="hidden" name="view" value="items">
+                    <input type="hidden" name="page" value="1">
+                    <input type="text" name="search" class="search-input" value="<?= htmlspecialchars($search) ?>" placeholder="Keresés cím vagy leírás alapján...">
+                    <button type="submit" class="search-btn">KERESÉS</button>
+                    <?php if ($search): ?>
+                        <a href="admin.php?view=items" class="search-clear">✕ TÖRLÉS</a>
+                    <?php endif; ?>
+                </form>
                 <?php if (empty($items)): ?>
                     <div class="empty-state">NINCS ADAT</div>
                 <?php else: ?>
@@ -3079,6 +3255,7 @@ function pgLink($v, $p)
                                     <th>CÍM</th>
                                     <th>ELADÓ</th>
                                     <th>ÁR</th>
+                                    <th>STÁTUSZ</th>
                                     <th>LEÍRÁS</th>
                                     <th>DÁTUM</th>
                                     <th>OPS</th>
@@ -3097,10 +3274,17 @@ function pgLink($v, $p)
                                             <a href="#" onclick="openUserProfile(<?= $it['user_id'] ?>); return false;" style="color: var(--c-green-mid); text-decoration: underline;"><?= htmlspecialchars($it['seller_name']) ?></a>
                                         </td>
                                         <td class="mono"><?= number_format($it['price'], 0, ',', ' ') ?> FT</td>
+                                        <td>
+                                            <?php if ($it['sold']): ?>
+                                                <span style="color:var(--c-red);letter-spacing:1px;">🔴 ELKELT</span>
+                                            <?php else: ?>
+                                                <span style="color:var(--c-green-mid);letter-spacing:1px;">🟢 AKTÍV</span>
+                                            <?php endif; ?>
+                                        </td>
                                         <td class="wrap"><?= htmlspecialchars(mb_substr($it['description'], 0, 50)) ?>...</td>
                                         <td class="mono"><?= date('Y-m-d', strtotime($it['created_at'])) ?></td>
                                         <td>
-                                            <a href="admin.php?view=items&id=<?= $it['id'] ?>&page=<?= $page ?>" class="act act-edit">EDIT</a>
+                                            <a href="admin.php?view=items&id=<?= $it['id'] ?>&page=<?= $page ?><?= $search ? '&search=' . urlencode($search) : '' ?>" class="act act-edit">EDIT</a>
                                             <button class="act act-del" onclick="confirmThenPost('delete_item', { item_id: '<?= $it['id'] ?>' })">TÖRL</button>
                                         </td>
                                     </tr>
@@ -3172,8 +3356,18 @@ function pgLink($v, $p)
             <?php elseif ($view === 'orders'): ?>
                 <div class="section-header">
                     <h2>RENDELÉSEK</h2>
-                    <span class="record-count">TOTAL: <?= $counts['orders'] ?? 0 ?> RECORD</span>
+                    <span class="record-count">TOTAL: <?= $totalItems ?> RECORD</span>
                 </div>
+                <!-- KERESŐ -->
+                <form method="get" class="search-form">
+                    <input type="hidden" name="view" value="orders">
+                    <input type="hidden" name="page" value="1">
+                    <input type="text" name="search" class="search-input" value="<?= htmlspecialchars($search) ?>" placeholder="Keresés rendelés ID, termék, vevő vagy eladó alapján...">
+                    <button type="submit" class="search-btn">KERESÉS</button>
+                    <?php if ($search): ?>
+                        <a href="admin.php?view=orders" class="search-clear">✕ TÖRLÉS</a>
+                    <?php endif; ?>
+                </form>
                 <?php if (empty($orders)): ?>
                     <div class="empty-state">NINCS ADAT</div>
                 <?php else: ?>
@@ -3246,13 +3440,13 @@ function pgLink($v, $p)
             <?php if ($totalPages > 1 && !in_array($view, ['main', 'conversations', 'vizsgalock']) && !$editId): ?>
                 <div class="pagination">
                     <?php if ($page > 1): ?>
-                        <a href="<?= pgLink($view, $page - 1) ?>" class="pg-btn">◄ ELŐZŐ</a>
+                        <a href="<?= pgLink($view, $page - 1, $search) ?>" class="pg-btn">◄ ELŐZŐ</a>
                     <?php else: ?>
                         <span class="pg-btn disabled">◄ ELŐZŐ</span>
                     <?php endif; ?>
                     <span class="pg-info"><?= $page ?> / <?= $totalPages ?></span>
                     <?php if ($page < $totalPages): ?>
-                        <a href="<?= pgLink($view, $page + 1) ?>" class="pg-btn">KÖVETKEZŐ ►</a>
+                        <a href="<?= pgLink($view, $page + 1, $search) ?>" class="pg-btn">KÖVETKEZŐ ►</a>
                     <?php else: ?>
                         <span class="pg-btn disabled">KÖVETKEZŐ ►</span>
                     <?php endif; ?>
@@ -3344,6 +3538,12 @@ function pgLink($v, $p)
                     <div class="edit-form-group">
                         <label class="edit-form-label">Ár (Ft)</label>
                         <input type="number" name="item_price" id="edit_product_price" class="edit-form-input" min="0" step="1" required>
+                    </div>
+                    <div class="edit-form-group">
+                        <div class="field-checkbox">
+                            <input type="checkbox" name="item_sold" id="edit_product_sold" value="1">
+                            <label for="edit_product_sold">🔴 TERMÉK ELKELT (NEM VÁSÁROLHATÓ MEG)</label>
+                        </div>
                     </div>
                     <div class="edit-actions">
                         <button type="button" class="btn-edit-cancel" onclick="cancelProductEdit()">[ MÉGSE ]</button>
@@ -3444,7 +3644,7 @@ function pgLink($v, $p)
                 'delete_user': 'Biztosan törlöd ezt a felhasználót? Minden adata elvész!',
                 'delete_item': 'Biztosan törlöd ezt a terméket?',
                 'delete_report': 'Biztosan törlöd ezt a reportot?',
-                'delete_order': 'Biztosan törlöd ezt a rendelést?'
+                'delete_order': 'Biztosan törlöd ezt a rendelést? A termék ismét elérhető lesz.'
             };
             openConfirmModal(messages[type] || 'Biztosan törlöd?', () => {
                 let body = '';
@@ -3639,7 +3839,8 @@ function pgLink($v, $p)
         let imgs = [],
             imgIdx = 0,
             prodId = null,
-            prodUid = null;
+            prodUid = null,
+            prodSold = false;
 
         function setImg(i) {
             if (i >= 0 && i < imgs.length) {
@@ -3690,6 +3891,7 @@ function pgLink($v, $p)
             document.getElementById('edit_product_title').value = pm.title.textContent;
             document.getElementById('edit_product_description').value = pm.desc.textContent;
             document.getElementById('edit_product_price').value = pm.price.textContent.replace(/[^0-9]/g, '');
+            document.getElementById('edit_product_sold').checked = prodSold;
         }
 
         function cancelProductEdit() {
@@ -3710,6 +3912,16 @@ function pgLink($v, $p)
                     pm.title.textContent = result.title;
                     pm.desc.textContent = result.description;
                     pm.price.textContent = result.price;
+                    prodSold = result.sold;
+                    if (result.sold) {
+                        pm.buyBtn.textContent = '[ ELKELT ]';
+                        pm.buyBtn.classList.add('sold');
+                        pm.buyBtn.disabled = true;
+                    } else {
+                        pm.buyBtn.textContent = '[ VÁSÁRLÁS ]';
+                        pm.buyBtn.classList.remove('sold');
+                        pm.buyBtn.disabled = false;
+                    }
                     cancelProductEdit();
                 } else {
                     alert('Hiba a mentés során!');
@@ -3729,6 +3941,7 @@ function pgLink($v, $p)
                     }
                     prodId = d.id;
                     prodUid = d.user_id;
+                    prodSold = d.sold;
                     imgs = d.images;
                     imgIdx = 0;
                     pm.title.textContent = d.title;
