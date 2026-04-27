@@ -20,13 +20,11 @@ if (isset($_POST['logout'])) {
 // 2. BEJELENTKEZÉS ELLENŐRZÉS
 // =============================================
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-    // Ha AJAX kérés (JSON választ vár), akkor ne redirecteljünk, hanem küldjünk JSON hibát
     if (isset($_GET['search_query']) || isset($_GET['get_item']) || isset($_GET['get_seller']) || isset($_GET['get_unread_count'])) {
         header('Content-Type: application/json');
         echo json_encode(['error' => 'Nincs bejelentkezve']);
         exit();
     }
-    // Normál oldalbetöltés esetén átirányítás
     header("Location: index.php");
     exit();
 }
@@ -34,20 +32,9 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
 // Database connection
 require_once 'config.php';
 
-// === ÚJ: KÉP ÁTMÉRETEZŐ FÜGGVÉNY ===
-/**
- * Átméretezi a képet, ha bármelyik oldala nagyobb a megadott maximumnál.
- * A nagyobbik oldal a maxDim lesz, a másik arányosan változik.
- * Ha a kép már kisebb vagy egyenlő, akkor csak másolja.
- *
- * @param string $source Forrásfájl elérési útja
- * @param string $destination Célfájl elérési útja
- * @param int $maxDim Maximális szélesség/magasság (alapértelmezett 1024)
- * @return bool Sikeres volt-e a művelet
- */
+// === KÉP ÁTMÉRETEZŐ FÜGGVÉNY ===
 function resizeImage($source, $destination, $maxDim = 1024)
 {
-    // Kép adatainak lekérése
     $info = getimagesize($source);
     if (!$info) return false;
 
@@ -55,12 +42,10 @@ function resizeImage($source, $destination, $maxDim = 1024)
     $srcWidth = $info[0];
     $srcHeight = $info[1];
 
-    // Ha a kép egyik oldala sem nagyobb a maximumnál, csak másoljuk
     if ($srcWidth <= $maxDim && $srcHeight <= $maxDim) {
         return copy($source, $destination);
     }
 
-    // Új méretek számítása arányosan
     $ratio = $srcWidth / $srcHeight;
     if ($srcWidth > $srcHeight) {
         $newWidth = $maxDim;
@@ -70,7 +55,6 @@ function resizeImage($source, $destination, $maxDim = 1024)
         $newWidth = (int) round($maxDim * $ratio);
     }
 
-    // Kép betöltése a megfelelő GD függvénnyel
     switch ($mime) {
         case 'image/jpeg':
             $srcImg = imagecreatefromjpeg($source);
@@ -82,30 +66,21 @@ function resizeImage($source, $destination, $maxDim = 1024)
             $srcImg = imagecreatefromgif($source);
             break;
         case 'image/webp':
-            if (function_exists('imagecreatefromwebp')) {
-                $srcImg = imagecreatefromwebp($source);
-            } else {
-                // Ha nincs WebP támogatás, akkor marad az eredeti másolása
-                return copy($source, $destination);
-            }
+            if (function_exists('imagecreatefromwebp')) $srcImg = imagecreatefromwebp($source);
+            else return copy($source, $destination);
             break;
         default:
             return false;
     }
-
     if (!$srcImg) return false;
 
-    // Új, truecolor kép létrehozása
     $dstImg = imagecreatetruecolor($newWidth, $newHeight);
-
-    // Átlátszóság megőrzése PNG és WebP esetén
     if ($mime == 'image/png' || $mime == 'image/webp') {
         imagealphablending($dstImg, false);
         imagesavealpha($dstImg, true);
         $transparent = imagecolorallocatealpha($dstImg, 0, 0, 0, 127);
         imagefilledrectangle($dstImg, 0, 0, $newWidth, $newHeight, $transparent);
     } elseif ($mime == 'image/gif') {
-        // GIF esetén az átlátszó szín kezelése
         $transparentIndex = imagecolortransparent($srcImg);
         if ($transparentIndex >= 0) {
             $transparentColor = imagecolorsforindex($srcImg, $transparentIndex);
@@ -114,11 +89,8 @@ function resizeImage($source, $destination, $maxDim = 1024)
             imagecolortransparent($dstImg, $transparentIndex);
         }
     }
-
-    // Átméretezés és másolás
     imagecopyresampled($dstImg, $srcImg, 0, 0, 0, 0, $newWidth, $newHeight, $srcWidth, $srcHeight);
 
-    // Kép mentése a megfelelő formátumban
     $success = false;
     switch ($mime) {
         case 'image/jpeg':
@@ -131,22 +103,14 @@ function resizeImage($source, $destination, $maxDim = 1024)
             $success = imagegif($dstImg, $destination);
             break;
         case 'image/webp':
-            if (function_exists('imagewebp')) {
-                $success = imagewebp($dstImg, $destination, 85);
-            } else {
-                $success = false;
-            }
+            if (function_exists('imagewebp')) $success = imagewebp($dstImg, $destination, 85);
             break;
     }
-
-    // Takarítás
     imagedestroy($srcImg);
     imagedestroy($dstImg);
-
     return $success;
 }
 
-// Hibaüzenetek és űrlapadatok kiolvasása a session-ből
 $uploadError = $_SESSION['upload_error'] ?? '';
 $formData = $_SESSION['form_data'] ?? [];
 unset($_SESSION['upload_error'], $_SESSION['form_data']);
@@ -155,7 +119,6 @@ try {
     $conn = new PDO("mysql:host=" . DB_HOST . ";dbname=" . DB_NAME, DB_USER, DB_PASS);
     $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-    // Check if current user is admin
     $isAdmin = false;
     if (isset($_SESSION['user_id'])) {
         $adminCheck = $conn->prepare("SELECT COUNT(*) FROM admins WHERE user_id = ?");
@@ -163,23 +126,14 @@ try {
         $isAdmin = $adminCheck->fetchColumn() > 0;
     }
 
-    // =============================================
-    // GET UNREAD MESSAGES COUNT (JSON output) - REALTIME BADGE FRISSÍTÉSHEZ
-    // =============================================
+    // GET UNREAD MESSAGES COUNT (JSON)
     if (isset($_GET['get_unread_count'])) {
         header('Content-Type: application/json');
         try {
-            if (!isset($_SESSION['user_id'])) {
-                echo json_encode(['error' => 'Nincs bejelentkezve']);
-                exit;
-            }
-
-            // Olvasatlan üzenetek száma
             $unreadStmt = $conn->prepare("SELECT COUNT(*) FROM uzenetek WHERE receiver_id = ? AND is_read = 0");
             $unreadStmt->execute([$_SESSION['user_id']]);
             $unreadCount = (int)$unreadStmt->fetchColumn();
 
-            // Legutolsó üzenet adatai (opcionális, toast értesítéshez)
             $lastMsgStmt = $conn->prepare("
                 SELECT u.username AS sender_name, m.message, m.sent_at
                 FROM uzenetek m
@@ -205,9 +159,7 @@ try {
         exit;
     }
 
-    // =============================================
-    // SEARCH HANDLER (JSON output)
-    // =============================================
+    // SEARCH HANDLER (JSON)
     if (isset($_GET['search_query']) && strlen($_GET['search_query']) >= 2) {
         header('Content-Type: application/json');
         try {
@@ -231,15 +183,11 @@ try {
         exit;
     }
 
-    // =============================================
-    // GET ITEM DETAILS (JSON output)
-    // =============================================
+    // GET ITEM DETAILS (JSON)
     if (isset($_GET['get_item']) && !empty($_GET['get_item'])) {
         header('Content-Type: application/json');
         try {
             $itemId = $_GET['get_item'];
-
-            // Fetch item details
             $stmt = $conn->prepare("
                 SELECT i.id, i.title, i.description, i.price, i.created_at, u.username as seller_name, i.user_id
                 FROM items i
@@ -248,17 +196,14 @@ try {
             ");
             $stmt->execute([$itemId]);
             $item = $stmt->fetch(PDO::FETCH_ASSOC);
-
             if (!$item) {
                 echo json_encode(['error' => 'Termék nem található']);
                 exit;
             }
 
-            // Fetch all images for the item
             $imgStmt = $conn->prepare("SELECT image_path FROM item_images WHERE item_id = ? ORDER BY sort_order");
             $imgStmt->execute([$itemId]);
-            $images = $imgStmt->fetchAll(PDO::FETCH_COLUMN);
-            $item['images'] = $images;
+            $item['images'] = $imgStmt->fetchAll(PDO::FETCH_COLUMN);
 
             echo json_encode($item);
         } catch (PDOException $e) {
@@ -267,15 +212,12 @@ try {
         exit;
     }
 
-    // =============================================
-    // GET SELLER PROFILE (JSON output)
-    // =============================================
+    // GET SELLER PROFILE (JSON) – most már minden termékkel
     if (isset($_GET['get_seller']) && !empty($_GET['get_seller'])) {
         header('Content-Type: application/json');
         try {
             $sellerId = (int)$_GET['get_seller'];
 
-            // --- MÓDOSÍTÁS: profile_picture lekérése ---
             $sellerStmt = $conn->prepare("
                 SELECT u.id, u.username, u.created_at, u.profile_picture,
                        COUNT(DISTINCT i.id) AS item_count,
@@ -287,20 +229,18 @@ try {
             ");
             $sellerStmt->execute([$sellerId]);
             $seller = $sellerStmt->fetch(PDO::FETCH_ASSOC);
-
             if (!$seller) {
                 echo json_encode(['error' => 'Felhasználó nem található']);
                 exit;
             }
 
-            // Latest items
+            // MINDEN termék lekérése (LIMIT eltávolítva)
             $latestStmt = $conn->prepare("
                 SELECT i.id, i.title, i.price,
                        (SELECT image_path FROM item_images WHERE item_id = i.id AND is_primary = 1 LIMIT 1) as thumb
                 FROM items i
                 WHERE i.user_id = ?
                 ORDER BY i.created_at DESC
-                LIMIT 4
             ");
             $latestStmt->execute([$sellerId]);
             $seller['latest_items'] = $latestStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -312,15 +252,12 @@ try {
         exit;
     }
 
-    // =============================================
-    // TERMÉK FELTÖLTÉS KEZELÉSE
-    // =============================================
+    // TERMÉK FELTÖLTÉS
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_item'])) {
         $title       = trim($_POST['item_title'] ?? '');
         $description = trim($_POST['item_description'] ?? '');
         $price       = trim($_POST['item_price'] ?? '');
 
-        // Check for uploaded files
         if (!isset($_FILES['item_images']) || empty($_FILES['item_images']['name'][0]) || $_FILES['item_images']['error'][0] === UPLOAD_ERR_NO_FILE) {
             $_SESSION['upload_error'] = 'Legalább egy képet fel kell tölteni!';
             $_SESSION['form_data'] = compact('title', 'description', 'price');
@@ -337,24 +274,20 @@ try {
             header("Location: main.php");
             exit();
         } else {
-            // Validate images
             $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-            $maxFileSize = 5 * 1024 * 1024; // 5MB
+            $maxFileSize = 5 * 1024 * 1024;
             $files = $_FILES['item_images'];
-
-            // Részletes hibaüzenetek a fájlfeltöltési hibakódokhoz
             $phpFileErrors = [
-                UPLOAD_ERR_OK         => 'Sikeres feltöltés.',
-                UPLOAD_ERR_INI_SIZE   => 'A fájl mérete meghaladja a szerver által engedélyezett maximumot.',
-                UPLOAD_ERR_FORM_SIZE  => 'A fájl mérete meghaladja az űrlap által engedélyezett maximumot.',
-                UPLOAD_ERR_PARTIAL    => 'A fájl csak részben lett feltöltve.',
-                UPLOAD_ERR_NO_FILE    => 'Nem lett fájl feltöltve.',
+                UPLOAD_ERR_OK => 'Sikeres feltöltés.',
+                UPLOAD_ERR_INI_SIZE => 'A fájl mérete meghaladja a szerver által engedélyezett maximumot.',
+                UPLOAD_ERR_FORM_SIZE => 'A fájl mérete meghaladja az űrlap által engedélyezett maximumot.',
+                UPLOAD_ERR_PARTIAL => 'A fájl csak részben lett feltöltve.',
+                UPLOAD_ERR_NO_FILE => 'Nem lett fájl feltöltve.',
                 UPLOAD_ERR_NO_TMP_DIR => 'Hiányzik az ideiglenes könyvtár.',
                 UPLOAD_ERR_CANT_WRITE => 'A fájl írása sikertelen.',
-                UPLOAD_ERR_EXTENSION  => 'Egy PHP kiterjesztés leállította a feltöltést.',
+                UPLOAD_ERR_EXTENSION => 'Egy PHP kiterjesztés leállította a feltöltést.',
             ];
 
-            // Check each file
             for ($i = 0; $i < count($files['name']); $i++) {
                 if ($files['error'][$i] !== UPLOAD_ERR_OK) {
                     $errCode = $files['error'][$i];
@@ -378,30 +311,26 @@ try {
                 }
             }
 
-            // Generate unique 12-char ID for the item
             do {
                 $newId = substr(str_shuffle('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'), 0, 12);
                 $check = $conn->prepare("SELECT COUNT(*) FROM items WHERE id = ?");
                 $check->execute([$newId]);
             } while ($check->fetchColumn() > 0);
 
-            // Start transaction
             $conn->beginTransaction();
             try {
-                // Insert item
                 $insert = $conn->prepare("
                     INSERT INTO items (id, user_id, title, description, price)
                     VALUES (:id, :user_id, :title, :description, :price)
                 ");
                 $insert->execute([
-                    ':id'          => $newId,
-                    ':user_id'     => $_SESSION['user_id'],
-                    ':title'       => $title,
+                    ':id' => $newId,
+                    ':user_id' => $_SESSION['user_id'],
+                    ':title' => $title,
                     ':description' => $description,
-                    ':price'       => floatval($price),
+                    ':price' => floatval($price),
                 ]);
 
-                // Create directory for images if it doesn't exist
                 $uploadDir = 'uploads/' . $newId . '/';
                 if (!file_exists($uploadDir)) {
                     if (!mkdir($uploadDir, 0777, true) && !is_dir($uploadDir)) {
@@ -409,15 +338,12 @@ try {
                     }
                 }
 
-                // Upload each image
                 $sortOrder = 0;
                 for ($i = 0; $i < count($files['name']); $i++) {
-                    // Generate unique filename to avoid conflicts
                     $extension = pathinfo($files['name'][$i], PATHINFO_EXTENSION);
                     $filename = uniqid() . '_' . $i . '.' . $extension;
                     $filepath = $uploadDir . $filename;
 
-                    // === MÓDOSÍTÁS: Átméretezés a feltöltött képen ===
                     if (!resizeImage($files['tmp_name'][$i], $filepath, 1024)) {
                         $lastError = error_get_last();
                         throw new Exception(
@@ -427,24 +353,21 @@ try {
                         );
                     }
 
-                    // Save to database
                     $imageInsert = $conn->prepare("
                         INSERT INTO item_images (item_id, image_path, image_filename, is_primary, sort_order)
                         VALUES (:item_id, :image_path, :image_filename, :is_primary, :sort_order)
                     ");
                     $imageInsert->execute([
-                        ':item_id'       => $newId,
-                        ':image_path'    => $filepath,
+                        ':item_id' => $newId,
+                        ':image_path' => $filepath,
                         ':image_filename' => $filename,
-                        ':is_primary'    => ($i === 0) ? 1 : 0,
-                        ':sort_order'    => $sortOrder
+                        ':is_primary' => ($i === 0) ? 1 : 0,
+                        ':sort_order' => $sortOrder
                     ]);
                     $sortOrder++;
                 }
 
                 $conn->commit();
-
-                // SIKERES FELTÖLTÉS
                 header("Location: main.php?upload=success");
                 exit();
             } catch (Exception $e) {
@@ -464,7 +387,6 @@ try {
         $desc    = trim($_POST['edit_description'] ?? '');
         $price   = trim($_POST['edit_price'] ?? '');
 
-        // Verify ownership or admin
         $ownerCheck = $conn->prepare("SELECT user_id FROM items WHERE id = ?");
         $ownerCheck->execute([$itemId]);
         $ownerRow = $ownerCheck->fetch(PDO::FETCH_ASSOC);
@@ -488,8 +410,6 @@ try {
     // Handle item deletion
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_item'])) {
         $itemId = $_POST['item_id'] ?? '';
-
-        // Check ownership
         $ownerCheck2 = $conn->prepare("SELECT user_id FROM items WHERE id = ?");
         $ownerCheck2->execute([$itemId]);
         $ownerRow2 = $ownerCheck2->fetch(PDO::FETCH_ASSOC);
@@ -497,34 +417,20 @@ try {
 
         if ($canDelete) {
             try {
-                // Get all images for this item to delete files
                 $imageStmt = $conn->prepare("SELECT image_path FROM item_images WHERE item_id = ?");
                 $imageStmt->execute([$itemId]);
                 $images = $imageStmt->fetchAll(PDO::FETCH_ASSOC);
-
-                // Delete image files
                 foreach ($images as $image) {
-                    if (file_exists($image['image_path'])) {
-                        unlink($image['image_path']);
-                    }
+                    if (file_exists($image['image_path'])) unlink($image['image_path']);
                 }
-
-                // Delete the item's directory
                 $itemDir = 'uploads/' . $itemId . '/';
-                if (is_dir($itemDir)) {
-                    rmdir($itemDir);
-                }
+                if (is_dir($itemDir)) rmdir($itemDir);
 
-                // Delete from database
                 $deleteStmt = $conn->prepare("DELETE FROM items WHERE id = ?");
                 $deleteStmt->execute([$itemId]);
 
-                // Redirect to refresh the page
-                if ($isAdmin) {
-                    header("Location: main.php");
-                } else {
-                    header("Location: main.php?deleted=1");
-                }
+                if ($isAdmin) header("Location: main.php");
+                else header("Location: main.php?deleted=1");
                 exit();
             } catch (Exception $e) {
                 $uploadError = 'Hiba történt a törlés során: ' . $e->getMessage();
@@ -555,15 +461,10 @@ try {
     $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
     $offset = ($page - 1) * $itemsPerPage;
 
-    // Get total items count
     $totalStmt = $conn->query("SELECT COUNT(*) FROM items");
     $totalItems = $totalStmt->fetchColumn();
     $totalPages = ceil($totalItems / $itemsPerPage);
 
-    // Új seed generálása ha:
-    // 1. Még nincs seed (első látogatás)
-    // 2. Oldalfrissítés történt (nincs ?page= a GET-ben, és a referer nem main.php lapozás)
-    // 3. Másik oldalról jött vissza (referer nem main.php)
     $referer = $_SERVER['HTTP_REFERER'] ?? '';
     $comingFromPagination = strpos($referer, 'main.php') !== false;
     if (!isset($_SESSION['items_seed']) || !$comingFromPagination) {
@@ -571,7 +472,6 @@ try {
     }
     $seed = $_SESSION['items_seed'];
 
-    // Fetch items for current page with session-based RAND seed
     $stmt = $conn->prepare("
         SELECT i.*, u.username as seller_name
         FROM items i
@@ -591,7 +491,6 @@ try {
     $page = 1;
 }
 
-// Függvény a readmore-hoz
 function formatMessage($msg)
 {
     $msg = htmlspecialchars($msg);
@@ -600,7 +499,6 @@ function formatMessage($msg)
     return $msg;
 }
 
-// Unread messages count
 $unreadMsgCount = 0;
 try {
     $unreadStmt = $conn->prepare("SELECT COUNT(*) FROM uzenetek WHERE receiver_id = ? AND is_read = 0");
@@ -621,9 +519,6 @@ try {
     <link rel="stylesheet" id="themeStylesheet" href="theme-dark.css?v=2">
     <link rel="icon" type="image/png" href="logo.png">
     <style>
-        /* ═══════════════════════════════════════════════════════════════════
-        MAIN STYLES (dark mode default)
-        ═══════════════════════════════════════════════════════════════════ */
         * {
             box-sizing: border-box;
             margin: 0;
@@ -674,43 +569,43 @@ try {
 
             0%,
             100% {
-                transform: translate(0, 0);
+                transform: translate(0, 0)
             }
 
             10% {
-                transform: translate(-5%, -5%);
+                transform: translate(-5%, -5%)
             }
 
             20% {
-                transform: translate(-10%, 5%);
+                transform: translate(-10%, 5%)
             }
 
             30% {
-                transform: translate(5%, -10%);
+                transform: translate(5%, -10%)
             }
 
             40% {
-                transform: translate(-5%, 15%);
+                transform: translate(-5%, 15%)
             }
 
             50% {
-                transform: translate(-10%, 5%);
+                transform: translate(-10%, 5%)
             }
 
             60% {
-                transform: translate(15%, 0);
+                transform: translate(15%, 0)
             }
 
             70% {
-                transform: translate(0, 10%);
+                transform: translate(0, 10%)
             }
 
             80% {
-                transform: translate(-15%, 0);
+                transform: translate(-15%, 0)
             }
 
             90% {
-                transform: translate(10%, 5%);
+                transform: translate(10%, 5%)
             }
         }
 
@@ -744,15 +639,15 @@ try {
 
             0%,
             100% {
-                transform: translate(0, 0) scale(1);
+                transform: translate(0, 0) scale(1)
             }
 
             33% {
-                transform: translate(10vw, 10vh) scale(1.1);
+                transform: translate(10vw, 10vh) scale(1.1)
             }
 
             66% {
-                transform: translate(-5vw, 15vh) scale(0.9);
+                transform: translate(-5vw, 15vh) scale(0.9)
             }
         }
 
@@ -760,19 +655,18 @@ try {
 
             0%,
             100% {
-                transform: translate(0, 0) scale(1);
+                transform: translate(0, 0) scale(1)
             }
 
             33% {
-                transform: translate(-10vw, -10vh) scale(1.2);
+                transform: translate(-10vw, -10vh) scale(1.2)
             }
 
             66% {
-                transform: translate(5vw, -15vh) scale(0.8);
+                transform: translate(5vw, -15vh) scale(0.8)
             }
         }
 
-        /* Top bar - KÖZÉPRE IGAZÍTOTT VERZIÓ */
         .top-bar {
             position: fixed;
             top: 0;
@@ -813,7 +707,7 @@ try {
             color: #ffd700;
             font-size: 0.9rem;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.3s;
             display: flex;
             align-items: center;
             gap: 0.4rem;
@@ -828,12 +722,6 @@ try {
             border-color: #ffd700;
             box-shadow: var(--shadow-deep), 0 0 16px rgba(255, 215, 0, 0.35);
             transform: translateY(-1px);
-            color: #ffd700;
-        }
-
-        .admin-btn .shield-icon {
-            font-size: 1.1rem;
-            line-height: 1;
         }
 
         .upload-btn {
@@ -846,13 +734,12 @@ try {
             color: var(--orange-bright);
             font-size: 0.9rem;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.3s;
             display: flex;
             align-items: center;
             gap: 0.4rem;
             user-select: none;
             box-shadow: var(--shadow-deep);
-            white-space: nowrap;
         }
 
         .upload-btn:hover {
@@ -860,12 +747,6 @@ try {
             border-color: var(--orange-bright);
             box-shadow: var(--shadow-deep), 0 0 16px rgba(255, 140, 0, 0.35);
             transform: translateY(-1px);
-        }
-
-        .upload-btn .plus-icon {
-            font-size: 1.1rem;
-            font-weight: 700;
-            line-height: 1;
         }
 
         .search-container {
@@ -885,7 +766,7 @@ try {
             border-radius: 50px;
             color: var(--text-primary);
             font-size: 0.9rem;
-            transition: all 0.3s ease;
+            transition: all 0.3s;
             box-shadow: var(--shadow-deep);
         }
 
@@ -898,7 +779,7 @@ try {
 
         .search-dropdown {
             position: absolute;
-            top: calc(100% + 8px);
+            top: calc(100%+8px);
             left: 0;
             right: 0;
             background: rgba(0, 0, 0, 0.9);
@@ -922,7 +803,7 @@ try {
             gap: 1rem;
             padding: 0.75rem 1rem;
             cursor: pointer;
-            transition: background 0.2s ease;
+            transition: background 0.2s;
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
             user-select: none;
         }
@@ -970,7 +851,6 @@ try {
             opacity: 0.6;
         }
 
-        /* LIGHT MODE OVERRIDES FOR SEARCH */
         body[data-theme="light"] .search-input {
             background: rgba(245, 252, 215, 0.9);
             border-color: rgba(140, 170, 10, 0.4);
@@ -979,7 +859,7 @@ try {
         }
 
         body[data-theme="light"] .search-input:focus {
-            background: #ffffff;
+            background: #fff;
             border-color: #B0CB1F;
             box-shadow: 0 0 0 3px rgba(176, 203, 31, 0.3);
         }
@@ -1013,14 +893,12 @@ try {
             border-color: rgba(140, 170, 10, 0.3);
         }
 
-        /* Account menu */
         .account-menu {
             position: relative;
             display: inline-block;
             pointer-events: auto;
         }
 
-        /* A gomb (kattintásra nyíló) */
         .account-menu-btn {
             display: flex;
             align-items: center;
@@ -1045,17 +923,16 @@ try {
             border-color: var(--orange-bright);
         }
 
-        /* A legördülő panel – alapból rejtve, .show osztállyal jelenik meg */
         .account-dropdown {
             position: absolute;
             right: 0;
-            top: calc(100% + 0.5rem);
+            top: calc(100%+0.5rem);
             width: 250px;
             z-index: 1001;
             opacity: 0;
             pointer-events: none;
             transform: translateY(-4px);
-            transition: opacity 0.18s ease, transform 0.18s ease;
+            transition: opacity 0.18s, transform 0.18s;
         }
 
         .account-dropdown.show {
@@ -1105,7 +982,7 @@ try {
             font-size: 0.9rem;
             padding: 0.75rem 1rem;
             border-radius: 8px;
-            transition: all 0.2s ease;
+            transition: all 0.2s;
             user-select: none;
         }
 
@@ -1130,7 +1007,7 @@ try {
             font-size: 0.9rem;
             padding: 0.75rem 1rem;
             border-radius: 8px;
-            transition: all 0.2s ease;
+            transition: all 0.2s;
             user-select: none;
         }
 
@@ -1141,14 +1018,6 @@ try {
             padding: 0.6rem 1rem;
             font-size: 0.85rem;
             color: var(--text-primary);
-            user-select: none;
-        }
-
-        .theme-toggle-label {
-            display: flex;
-            align-items: center;
-            gap: 0.45rem;
-            opacity: 0.8;
         }
 
         .theme-switch {
@@ -1197,14 +1066,11 @@ try {
             background: #B0CB1F;
         }
 
-        /* =====================
-        MAIN CONTENT & GRID
-        ===================== */
         .main-content {
             width: 100%;
             max-width: 100%;
             margin: 0;
-            padding: 3rem 0 4rem 0;
+            padding: 3rem 0 4rem;
             position: relative;
             z-index: 1;
         }
@@ -1216,54 +1082,52 @@ try {
             padding: 1rem;
         }
 
-        @media (orientation: landscape) {
+        @media (orientation:landscape) {
             .items-grid {
-                grid-template-columns: repeat(6, 1fr);
-                grid-auto-rows: auto;
+                grid-template-columns: repeat(6, 1fr)
             }
         }
 
-        @media (orientation: portrait) {
+        @media (orientation:portrait) {
             .items-grid {
-                grid-template-columns: repeat(3, 1fr);
-                grid-auto-rows: auto;
+                grid-template-columns: repeat(3, 1fr)
             }
         }
 
-        @media (min-width: 1600px) and (orientation: landscape) {
+        @media (min-width:1600px) and (orientation:landscape) {
             .items-grid {
                 grid-template-columns: repeat(8, 1fr);
-                gap: 1.3rem;
+                gap: 1.3rem
             }
         }
 
-        @media (max-width: 480px) and (orientation: portrait) {
+        @media (max-width:480px) and (orientation:portrait) {
             .items-grid {
                 grid-template-columns: repeat(2, 1fr);
                 gap: 0.8rem;
-                padding: 0.8rem;
+                padding: 0.8rem
             }
         }
 
-        @media (max-width: 360px) and (orientation: portrait) {
+        @media (max-width:360px) and (orientation:portrait) {
             .items-grid {
                 grid-template-columns: repeat(2, 1fr);
                 gap: 0.7rem;
-                padding: 0.7rem;
+                padding: 0.7rem
             }
         }
 
-        @media (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) {
+        @media (min-width:768px) and (max-width:1024px) and (orientation:portrait) {
             .items-grid {
                 grid-template-columns: repeat(3, 1fr);
-                gap: 1rem;
+                gap: 1rem
             }
         }
 
-        @media (min-width: 768px) and (max-width: 1280px) and (orientation: landscape) {
+        @media (min-width:768px) and (max-width:1280px) and (orientation:landscape) {
             .items-grid {
                 grid-template-columns: repeat(5, 1fr);
-                gap: 1rem;
+                gap: 1rem
             }
         }
 
@@ -1292,19 +1156,15 @@ try {
             background: rgba(0, 0, 0, 0.75);
         }
 
-        .item-card * {
-            user-select: none;
-        }
-
         .item-image {
             width: 100%;
-            aspect-ratio: 1 / 1;
+            aspect-ratio: 1/1;
             object-fit: cover;
             border-radius: 12px;
             margin-bottom: 0.8rem;
             border: 1px solid var(--glass-border);
             flex-shrink: 0;
-            transition: transform 0.3s ease;
+            transition: transform 0.3s;
         }
 
         .item-card:hover .item-image {
@@ -1313,7 +1173,7 @@ try {
 
         .item-image-placeholder {
             width: 100%;
-            aspect-ratio: 1 / 1;
+            aspect-ratio: 1/1;
             border-radius: 12px;
             margin-bottom: 0.8rem;
             border: 1px solid var(--glass-border);
@@ -1324,7 +1184,7 @@ try {
             flex-shrink: 0;
         }
 
-        .item-image-placeholder .placeholder-text {
+        .placeholder-text {
             color: var(--placeholder-text);
             font-size: clamp(0.8rem, 1.5vw, 1.2rem);
         }
@@ -1387,7 +1247,6 @@ try {
             opacity: 0.5;
         }
 
-        /* Card Menu Styles */
         .card-menu {
             position: absolute;
             top: 10px;
@@ -1402,13 +1261,9 @@ try {
             justify-content: center;
             cursor: pointer;
             font-size: 1.5rem;
-            transition: all 0.3s ease;
-            user-select: none;
-            width: auto;
-            height: auto;
+            transition: all 0.3s;
             background: transparent;
             border: none;
-            backdrop-filter: none;
             padding: 0;
             line-height: 1;
         }
@@ -1447,7 +1302,7 @@ try {
             font-size: 0.9rem;
             cursor: pointer;
             border-radius: 4px;
-            transition: all 0.2s ease;
+            transition: all 0.2s;
         }
 
         .card-menu-item:hover {
@@ -1464,13 +1319,9 @@ try {
             color: #ff0000;
         }
 
-        /* ===================== EDIT MODAL (REDESIGNED) ===================== */
         .edit-modal {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
+            inset: 0;
             background: rgba(0, 0, 0, 0.75);
             backdrop-filter: blur(8px);
             display: none;
@@ -1478,7 +1329,7 @@ try {
             justify-content: center;
             z-index: 5500;
             opacity: 0;
-            transition: opacity 0.3s ease;
+            transition: opacity 0.3s;
         }
 
         .edit-modal.show {
@@ -1493,10 +1344,10 @@ try {
             backdrop-filter: blur(20px);
             border: 1px solid var(--glass-border);
             border-radius: 24px;
-            padding: 2rem 1.8rem 1.8rem;
+            padding: 2rem 1.8rem;
             box-shadow: var(--shadow-deep), var(--shadow-orange);
             transform: translateY(20px) scale(0.98);
-            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s;
             opacity: 0;
         }
 
@@ -1516,9 +1367,6 @@ try {
             font-size: 1.4rem;
             font-weight: 700;
             color: var(--orange-bright);
-            letter-spacing: -0.02em;
-            margin: 0;
-            text-shadow: 0 0 8px var(--orange-glow);
         }
 
         .edit-modal-close {
@@ -1528,9 +1376,6 @@ try {
             color: var(--orange-bright);
             font-size: 1.3rem;
             cursor: pointer;
-            transition: all 0.2s;
-            line-height: 1;
-            padding: 0;
             width: 36px;
             height: 36px;
             display: flex;
@@ -1541,7 +1386,6 @@ try {
         .edit-modal-close:hover {
             background: rgba(255, 140, 0, 0.2);
             border-color: var(--orange-bright);
-            transform: scale(1.05);
         }
 
         .edit-form-group {
@@ -1553,7 +1397,6 @@ try {
             font-size: 0.75rem;
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 0.08em;
             color: var(--orange-bright);
             margin-bottom: 0.4rem;
         }
@@ -1568,11 +1411,10 @@ try {
             color: var(--text-primary);
             font-family: inherit;
             font-size: 0.9rem;
-            transition: all 0.25s ease;
+            transition: all 0.25s;
             outline: none;
         }
 
-        /* Fix textarea: no resize, fixed height, scrollable */
         .edit-form-textarea {
             resize: none;
             height: 120px;
@@ -1583,7 +1425,6 @@ try {
         .edit-form-textarea:focus {
             border-color: var(--orange-bright);
             box-shadow: 0 0 0 3px rgba(255, 140, 0, 0.15);
-            background: var(--input-focus-bg);
         }
 
         .edit-price-wrapper {
@@ -1606,17 +1447,9 @@ try {
             user-select: none;
         }
 
-        .edit-modal .submit-btn {
-            margin-top: 0.5rem;
-        }
-
-        /* Report Modal Styles */
         .report-modal {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
+            inset: 0;
             background: rgba(0, 0, 0, 0.8);
             backdrop-filter: blur(8px);
             display: none;
@@ -1664,17 +1497,6 @@ try {
             color: var(--orange-bright);
         }
 
-        .report-form-group {
-            margin-bottom: 1.5rem;
-        }
-
-        .report-form-label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: var(--text-primary);
-            font-size: 0.9rem;
-        }
-
         .report-submit-btn {
             width: 100%;
             padding: 0.75rem;
@@ -1685,7 +1507,6 @@ try {
             font-size: 1rem;
             font-weight: 800;
             cursor: pointer;
-            transition: all 0.3s ease;
             box-shadow: 0 4px 22px rgba(57, 255, 110, 0.35) !important;
         }
 
@@ -1695,7 +1516,6 @@ try {
             transform: translateY(-2px);
         }
 
-        /* Floating Pagination */
         .floating-pagination {
             position: fixed;
             bottom: 20px;
@@ -1727,7 +1547,7 @@ try {
             color: var(--text-primary);
             text-decoration: none;
             font-size: 1rem;
-            transition: all 0.3s ease;
+            transition: all 0.3s;
             cursor: pointer;
         }
 
@@ -1750,15 +1570,6 @@ try {
             -webkit-user-select: none;
         }
 
-        input,
-        textarea {
-            user-select: text;
-            -webkit-user-select: text;
-        }
-
-        /* =====================
-        UPLOAD MODAL
-        ===================== */
         .modal-overlay {
             position: fixed;
             inset: 0;
@@ -1771,7 +1582,7 @@ try {
             padding: 1rem;
             opacity: 0;
             pointer-events: none;
-            transition: opacity 0.3s ease;
+            transition: opacity 0.3s;
         }
 
         .modal-overlay.active {
@@ -1787,11 +1598,11 @@ try {
             background: rgba(10, 10, 10, 0.92);
             border: 1px solid rgba(255, 140, 0, 0.35);
             border-radius: 24px;
-            padding: 2.5rem 2rem 2rem 2rem;
+            padding: 2.5rem 2rem;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7), 0 0 40px rgba(255, 140, 0, 0.15);
             position: relative;
             transform: translateY(30px) scale(0.97);
-            transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+            transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s;
             opacity: 0;
         }
 
@@ -1809,11 +1620,6 @@ try {
             color: rgba(255, 255, 255, 0.4);
             font-size: 1.4rem;
             cursor: pointer;
-            line-height: 1;
-            transition: color 0.2s;
-            user-select: none;
-            padding: 0.2rem 0.4rem;
-            border-radius: 6px;
         }
 
         .modal-close:hover {
@@ -1825,7 +1631,6 @@ try {
             font-weight: 700;
             color: var(--orange-bright);
             margin-bottom: 0.3rem;
-            letter-spacing: -0.02em;
         }
 
         .modal-subtitle {
@@ -1850,7 +1655,6 @@ try {
 
         .form-label .required-star {
             color: var(--orange-bright);
-            margin-left: 0.2rem;
         }
 
         .form-input,
@@ -1863,9 +1667,8 @@ try {
             color: var(--text-primary);
             font-size: 0.95rem;
             font-family: inherit;
-            transition: border-color 0.25s, box-shadow 0.25s, background 0.25s;
+            transition: border-color 0.25s, box-shadow 0.25s;
             outline: none;
-            -webkit-appearance: none;
         }
 
         .form-input:focus,
@@ -1880,18 +1683,13 @@ try {
             color: rgba(255, 255, 255, 0.2);
         }
 
-        .form-textarea {
-            resize: vertical;
-            min-height: 110px;
-        }
-
         .image-upload-container {
             background: rgba(0, 0, 0, 0.3);
             border: 2px dashed rgba(255, 140, 0, 0.3);
             border-radius: 16px;
             padding: 1.5rem;
             margin-bottom: 1.5rem;
-            transition: all 0.3s ease;
+            transition: all 0.3s;
         }
 
         .image-upload-container:hover {
@@ -1911,17 +1709,6 @@ try {
         .image-upload-icon {
             font-size: 2rem;
             color: var(--orange-bright);
-        }
-
-        .image-upload-hint {
-            font-size: 0.8rem;
-            text-align: center;
-        }
-
-        .image-upload-hint small {
-            display: block;
-            margin-top: 0.3rem;
-            opacity: 0.5;
         }
 
         #item_images {
@@ -1958,13 +1745,12 @@ try {
             background: rgba(0, 0, 0, 0.7);
             border: 1px solid var(--orange-bright);
             border-radius: 50%;
-            color: white;
+            color: #fff;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
             font-size: 16px;
-            transition: all 0.2s ease;
         }
 
         .image-preview-remove:hover {
@@ -1977,7 +1763,7 @@ try {
             bottom: 5px;
             left: 5px;
             background: var(--orange-bright);
-            color: black;
+            color: #000;
             padding: 0.2rem 0.4rem;
             border-radius: 4px;
             font-size: 0.6rem;
@@ -2001,7 +1787,6 @@ try {
             font-weight: 600;
             font-size: 0.95rem;
             pointer-events: none;
-            user-select: none;
         }
 
         .field-error {
@@ -2009,7 +1794,6 @@ try {
             font-size: 0.76rem;
             color: #ff4d4d;
             margin-top: 0.35rem;
-            padding-left: 0.2rem;
         }
 
         .form-input.invalid,
@@ -2052,7 +1836,7 @@ try {
             font-weight: 700;
             cursor: pointer;
             letter-spacing: 0.03em;
-            transition: all 0.25s ease;
+            transition: all 0.25s;
             margin-top: 0.5rem;
             box-shadow: 0 4px 20px rgba(255, 140, 0, 0.3);
         }
@@ -2063,19 +1847,10 @@ try {
             transform: translateY(-2px);
         }
 
-        .submit-btn:active {
-            transform: translateY(0);
-        }
-
-        /* =====================
-        DELETE CONFIRM MODAL
-        ===================== */
+        /* DELETE CONFIRM MODAL */
         .delete-confirm-modal {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
+            inset: 0;
             background: rgba(0, 0, 0, 0.8);
             backdrop-filter: blur(8px);
             display: none;
@@ -2096,7 +1871,6 @@ try {
             max-width: 450px;
             width: 90%;
             box-shadow: 0 20px 60px rgba(255, 0, 0, 0.3);
-            position: relative;
         }
 
         .delete-confirm-modal-header {
@@ -2113,7 +1887,6 @@ try {
         .delete-confirm-modal-title {
             font-size: 1.3rem;
             color: #ff4444;
-            margin: 0;
             flex: 1;
         }
 
@@ -2123,7 +1896,6 @@ try {
             color: rgba(255, 255, 255, 0.5);
             font-size: 1.5rem;
             cursor: pointer;
-            padding: 0.2rem;
         }
 
         .delete-confirm-modal-close:hover {
@@ -2136,7 +1908,7 @@ try {
 
         .delete-confirm-modal-text {
             font-size: 1rem;
-            color: #ffffff;
+            color: #fff;
             margin-bottom: 0.5rem;
         }
 
@@ -2156,15 +1928,13 @@ try {
             border-radius: 12px;
             border: 1px solid rgba(255, 255, 255, 0.3);
             background: transparent;
-            color: #ffffff;
+            color: #fff;
             font-size: 0.9rem;
             cursor: pointer;
-            transition: all 0.2s ease;
         }
 
         .delete-confirm-cancel-btn:hover {
             background: rgba(255, 255, 255, 0.1);
-            border-color: #ffffff;
         }
 
         .delete-confirm-delete-btn {
@@ -2172,11 +1942,10 @@ try {
             border-radius: 12px;
             border: none;
             background: #ff4444;
-            color: #ffffff;
+            color: #fff;
             font-size: 0.9rem;
             font-weight: bold;
             cursor: pointer;
-            transition: all 0.2s ease;
         }
 
         .delete-confirm-delete-btn:hover {
@@ -2184,14 +1953,13 @@ try {
             box-shadow: 0 4px 15px rgba(255, 0, 0, 0.4);
         }
 
-        /* Light mode overrides for delete confirm modal */
         body[data-theme="light"] .delete-confirm-modal {
             background: rgba(220, 230, 180, 0.85) !important;
         }
 
         body[data-theme="light"] .delete-confirm-modal-content {
             background: rgba(255, 245, 240, 0.98) !important;
-            border: 2px solid #d32f2f !important;
+            border-color: #d32f2f !important;
             box-shadow: 0 20px 60px rgba(200, 0, 0, 0.2) !important;
         }
 
@@ -2233,9 +2001,6 @@ try {
             box-shadow: 0 4px 15px rgba(200, 0, 0, 0.3) !important;
         }
 
-        /* =====================
-        PRODUCT MODAL
-        ===================== */
         .product-modal-overlay {
             position: fixed;
             inset: 0;
@@ -2246,8 +2011,7 @@ try {
             align-items: center;
             justify-content: center;
             opacity: 0;
-            transition: opacity 0.3s ease;
-            padding: 0;
+            transition: opacity 0.3s;
         }
 
         .product-modal-overlay.active {
@@ -2259,14 +2023,12 @@ try {
             width: 100vw;
             height: 100vh;
             background: rgba(5, 5, 5, 0.99);
-            position: relative;
             display: grid;
             grid-template-columns: 1.5fr 1fr;
             gap: 2rem;
             padding: 2rem;
             transform: scale(0.98);
-            transition: transform 0.3s ease;
-            box-shadow: none;
+            transition: transform 0.3s;
             overflow: hidden;
         }
 
@@ -2284,24 +2046,23 @@ try {
         }
 
         .product-modal-close {
+            width: 48px;
+            height: 48px;
             background: rgba(20, 20, 20, 0.8);
             border: 1px solid var(--orange-bright);
             color: var(--orange-bright);
             font-size: 1.8rem;
             cursor: pointer;
-            width: 48px;
-            height: 48px;
             display: flex;
             align-items: center;
             justify-content: center;
             border-radius: 50%;
-            transition: all 0.2s ease;
-            backdrop-filter: blur(5px);
+            transition: all 0.2s;
         }
 
         .product-modal-close:hover {
             background: var(--orange-bright);
-            color: black;
+            color: #000;
             transform: scale(1.1);
         }
 
@@ -2317,18 +2078,16 @@ try {
             border-radius: 50%;
             color: var(--orange-bright);
             font-size: 2rem;
-            line-height: 1;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.2s ease;
-            backdrop-filter: blur(5px);
+            transition: all 0.2s;
         }
 
         .product-menu-button:hover {
             background: var(--orange-bright);
-            color: black;
+            color: #000;
             transform: scale(1.1);
         }
 
@@ -2356,12 +2115,12 @@ try {
             padding: 0.75rem 1rem;
             background: transparent;
             border: none;
-            color: white;
+            color: #fff;
             text-align: left;
             font-size: 1rem;
             cursor: pointer;
             border-radius: 6px;
-            transition: all 0.2s ease;
+            transition: all 0.2s;
         }
 
         .product-menu-item:hover {
@@ -2382,7 +2141,6 @@ try {
             background: rgba(0, 0, 0, 0.3);
             border-radius: 24px;
             padding: 1rem;
-            min-height: 0;
         }
 
         .product-main-image-container {
@@ -2402,23 +2160,12 @@ try {
         .product-main-image {
             max-width: 100%;
             max-height: 100%;
-            width: auto;
-            height: auto;
             object-fit: contain;
             cursor: pointer;
-            transition: opacity 0.2s ease;
         }
 
         .product-main-image:hover {
             opacity: 0.9;
-        }
-
-        .product-no-image-placeholder {
-            text-align: center;
-            font-size: 1.2rem;
-            padding: 2rem;
-            user-select: none;
-            -webkit-user-select: none;
         }
 
         .gallery-nav {
@@ -2426,7 +2173,7 @@ try {
             top: 50%;
             transform: translateY(-50%);
             background: rgba(0, 0, 0, 0.7);
-            color: white;
+            color: #fff;
             border: 2px solid var(--orange-bright);
             width: 50px;
             height: 50px;
@@ -2436,14 +2183,13 @@ try {
             align-items: center;
             justify-content: center;
             font-size: 1.5rem;
-            transition: all 0.2s ease;
+            transition: all 0.2s;
             z-index: 10;
-            backdrop-filter: blur(5px);
         }
 
         .gallery-nav:hover {
             background: var(--orange-bright);
-            color: black;
+            color: #000;
             transform: translateY(-50%) scale(1.1);
         }
 
@@ -2474,7 +2220,7 @@ try {
             overflow: hidden;
             cursor: pointer;
             border: 3px solid transparent;
-            transition: all 0.2s ease;
+            transition: all 0.2s;
             flex-shrink: 0;
         }
 
@@ -2504,20 +2250,11 @@ try {
             border: 1px solid var(--glass-border);
             height: 100%;
             overflow-y: auto;
-            user-select: none;
-        }
-
-        .product-details-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 1rem;
         }
 
         .product-title {
             font-size: 2.5rem;
             color: var(--orange-bright);
-            margin: 0;
             word-break: break-word;
             line-height: 1.2;
             font-weight: bold;
@@ -2557,7 +2294,6 @@ try {
             max-height: 400px;
             overflow-y: auto;
             white-space: pre-wrap;
-            user-select: none;
         }
 
         .product-buy-btn {
@@ -2565,17 +2301,15 @@ try {
             border: none;
             border-radius: 16px;
             padding: 1.5rem 2rem;
-            color: white;
+            color: #fff;
             font-size: 1.5rem;
             font-weight: bold;
             cursor: pointer;
-            transition: all 0.3s ease;
             margin-top: auto;
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 1rem;
-            user-select: none;
         }
 
         .product-buy-btn:hover {
@@ -2583,9 +2317,6 @@ try {
             box-shadow: 0 10px 30px rgba(0, 200, 0, 0.4);
         }
 
-        /* =====================
-        LIGHTBOX
-        ===================== */
         .lightbox-overlay {
             position: fixed;
             inset: 0;
@@ -2596,7 +2327,7 @@ try {
             align-items: center;
             justify-content: center;
             opacity: 0;
-            transition: opacity 0.3s ease;
+            transition: opacity 0.3s;
         }
 
         .lightbox-overlay.active {
@@ -2613,145 +2344,34 @@ try {
         }
 
         .lightbox-image {
-            max-width: calc(95vw - 70px);
+            max-width: calc(95vw-70px);
             max-height: 95vh;
-            width: auto;
-            height: auto;
             object-fit: contain;
             border: 2px solid var(--orange-bright);
             border-radius: 8px;
         }
 
         .lightbox-close {
+            width: 48px;
+            height: 48px;
             background: rgba(20, 20, 20, 0.9);
             border: 1px solid var(--orange-bright);
             color: var(--orange-bright);
             font-size: 2rem;
             cursor: pointer;
-            width: 48px;
-            height: 48px;
             display: flex;
             align-items: center;
             justify-content: center;
             border-radius: 50%;
-            transition: all 0.2s ease;
             flex-shrink: 0;
         }
 
         .lightbox-close:hover {
             background: var(--orange-bright);
-            color: black;
+            color: #000;
             transform: scale(1.1);
         }
 
-        /* =====================
-        RESPONSIVE
-        ===================== */
-        @media (max-width: 1200px) {
-            .product-modal-card {
-                grid-template-columns: 1fr;
-                gap: 1rem;
-                padding: 1rem;
-                overflow-y: auto;
-            }
-
-            .product-gallery {
-                height: 50vh;
-            }
-
-            .product-title {
-                font-size: 2rem;
-            }
-
-            .product-price {
-                font-size: 2.5rem;
-            }
-
-            .product-description {
-                max-height: 300px;
-            }
-        }
-
-        @media (max-width: 600px) {
-            .pagination-container {
-                padding: 0.5rem 1rem;
-            }
-
-            .pagination-btn {
-                padding: 0.4rem 1rem;
-                font-size: 0.9rem;
-            }
-
-            .modal-card {
-                padding: 2rem 1.2rem 1.5rem;
-            }
-
-            .product-modal-card {
-                padding: 0.5rem;
-            }
-
-            .product-gallery {
-                height: 40vh;
-            }
-
-            .product-details {
-                padding: 1rem;
-            }
-
-            .product-title {
-                font-size: 1.5rem;
-            }
-
-            .product-price {
-                font-size: 2rem;
-            }
-
-            .product-description {
-                padding: 1rem;
-                font-size: 1rem;
-            }
-
-            .upload-btn .button-text,
-            .admin-btn .button-text {
-                display: none;
-            }
-
-            .product-modal-header {
-                top: 0.5rem;
-                right: 0.5rem;
-            }
-
-            .lightbox-content {
-                flex-direction: column;
-                align-items: center;
-            }
-
-            .lightbox-image {
-                max-width: 95vw;
-                max-height: calc(95vh - 70px);
-            }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-
-            .noise,
-            .orb-1,
-            .orb-2,
-            .item-card,
-            .account-dropdown,
-            .pagination-btn,
-            .modal-card,
-            .modal-overlay,
-            .product-modal-card,
-            .product-modal-overlay {
-                animation: none;
-                transition: none;
-            }
-        }
-
-        /* =====================
-        FLOATING MESSAGES BTN - VÉGLEGES KÉK VERZIÓ
-        ===================== */
         .floating-messages-btn {
             position: fixed;
             bottom: 2rem;
@@ -2769,7 +2389,7 @@ try {
             align-items: center;
             justify-content: center;
             box-shadow: 0 6px 24px rgba(0, 123, 255, 0.5) !important;
-            transition: all 0.25s ease;
+            transition: all 0.25s;
             text-decoration: none;
         }
 
@@ -2796,9 +2416,7 @@ try {
             border: 2px solid #0a0a0a;
         }
 
-        /* =====================
-        SELLER PROFILE POPUP — FULLSCREEN
-        ===================== */
+        /* SELLER POPUP – javított light mode + görgethető összes hirdetés */
         .seller-popup-overlay {
             position: fixed;
             inset: 0;
@@ -2809,7 +2427,7 @@ try {
             align-items: center;
             justify-content: center;
             opacity: 0;
-            transition: opacity 0.3s ease;
+            transition: opacity 0.3s;
         }
 
         .seller-popup-overlay.active {
@@ -2821,13 +2439,10 @@ try {
             width: 100vw;
             height: 100vh;
             background: rgba(5, 5, 5, 0.99);
-            border: none;
-            border-radius: 0;
-            padding: 0;
             overflow-y: auto;
             position: relative;
             transform: scale(0.98);
-            transition: transform 0.3s ease;
+            transition: transform 0.3s;
             display: flex;
             flex-direction: column;
         }
@@ -2836,7 +2451,6 @@ try {
             transform: scale(1);
         }
 
-        /* Fullscreen header bar */
         .seller-popup-topbar {
             position: sticky;
             top: 0;
@@ -2862,7 +2476,6 @@ try {
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.2s;
             flex-shrink: 0;
         }
 
@@ -2878,7 +2491,6 @@ try {
             flex: 1;
         }
 
-        /* Inner content area */
         .seller-popup-body {
             flex: 1;
             max-width: 560px;
@@ -2887,7 +2499,6 @@ try {
             padding: 2.5rem 1.5rem 3rem;
             display: flex;
             flex-direction: column;
-            gap: 0;
         }
 
         .seller-popup-avatar {
@@ -2967,6 +2578,9 @@ try {
             grid-template-columns: repeat(2, 1fr);
             gap: 0.8rem;
             margin-bottom: 2rem;
+            max-height: 60vh;
+            overflow-y: auto;
+            padding-right: 4px;
         }
 
         .seller-item-thumb {
@@ -3031,7 +2645,6 @@ try {
             font-size: 1.05rem;
             font-weight: 700;
             cursor: pointer;
-            transition: all 0.2s;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -3045,65 +2658,28 @@ try {
             box-shadow: 0 10px 30px rgba(255, 140, 0, 0.4);
         }
 
-        .seller-popup-loading {
-            text-align: center;
-            padding: 4rem 2rem;
-            color: rgba(255, 255, 255, 0.3);
-            font-size: 1rem;
+        /* LIGHT MODE SELLER POPUP FIXES */
+        body[data-theme="light"] .seller-popup-avatar {
+            box-shadow: 0 0 40px rgba(176, 203, 31, 0.3) !important;
+            background: linear-gradient(135deg, #B0CB1F, #8aA000) !important;
         }
 
-        /* =====================
-        MOBIL TOP BAR RENDEZÉS
-        ===================== */
-        @media (max-width: 600px) {
-            .top-bar {
-                flex-wrap: wrap;
-                justify-content: space-between;
-                padding: 0.5rem;
-                gap: 0.5rem;
-                position: relative;
-            }
-
-            /* Bal és jobb oldali elemek egymás mellett, statikus pozícióban */
-            .top-bar-left,
-            .top-bar-right {
-                position: static;
-                width: auto;
-            }
-
-            /* Keresőmező az egész sor alatt */
-            .search-container {
-                order: 3;
-                width: 100%;
-                max-width: none;
-                margin: 0.5rem 0 0;
-                flex: none;
-            }
-
-            /* Csak az ikonok maradnak a gombokon */
-            .upload-btn .button-text,
-            .admin-btn .button-text,
-            .account-summary .button-text {
-                display: none;
-            }
-
-            /* Gombok méretének csökkentése, hogy jobban elférjenek */
-            .upload-btn,
-            .admin-btn,
-            .account-summary {
-                padding: 0.4rem 0.8rem;
-                font-size: 0.8rem;
-            }
-
-            /* A fiók legördülő menüje ne lógjon ki a képernyőn */
-            .account-dropdown {
-                right: 0;
-                left: auto;
-                width: 240px;
-            }
+        body[data-theme="light"] .seller-stat-label {
+            color: rgba(26, 31, 0, 0.6) !important;
         }
 
-        /* Admin badge sötétebb light módban – a theme-light.css-ben is felülírjuk */
+        body[data-theme="light"] .seller-popup-meta {
+            color: rgba(26, 31, 0, 0.5) !important;
+        }
+
+        body[data-theme="light"] .seller-item-title {
+            color: rgba(26, 31, 0, 0.85) !important;
+        }
+
+        body[data-theme="light"] .seller-popup-items-title {
+            color: rgba(26, 31, 0, 0.5) !important;
+        }
+
         .admin-badge {
             font-size: 0.7rem;
             background: rgba(255, 215, 0, 0.2);
@@ -3111,7 +2687,34 @@ try {
             border: 1px solid rgba(255, 215, 0, 0.4);
             border-radius: 50px;
             padding: 1px 8px;
-            vertical-align: middle;
+        }
+
+        @media (max-width:600px) {
+            .top-bar {
+                flex-wrap: wrap;
+                justify-content: space-between;
+                padding: 0.5rem;
+            }
+
+            .top-bar-left,
+            .top-bar-right {
+                position: static;
+            }
+
+            .search-container {
+                order: 3;
+                width: 100%;
+                max-width: none;
+            }
+
+            .upload-btn .button-text,
+            .admin-btn .button-text {
+                display: none;
+            }
+
+            .account-dropdown {
+                width: 240px;
+            }
         }
     </style>
 </head>
@@ -3121,53 +2724,33 @@ try {
     <div class="orb-1"></div>
     <div class="orb-2"></div>
 
-    <!-- Top bar -->
     <div class="top-bar">
         <div class="top-bar-left">
             <?php if ($isAdmin): ?>
-                <a href="admin.php" class="admin-btn unselectable" id="adminBtn">
-                    <span class="shield-icon">🛡️</span>
-                    <span class="button-text">Admin</span>
-                </a>
+                <a href="admin.php" class="admin-btn unselectable"><span class="shield-icon">🛡️</span><span class="button-text">Admin</span></a>
             <?php endif; ?>
         </div>
-
         <div class="search-container">
             <input type="text" id="searchInput" class="search-input" placeholder="Keresés termékek között..." autocomplete="off">
             <div id="searchResults" class="search-dropdown"></div>
         </div>
-
         <div class="top-bar-right">
-            <button class="upload-btn unselectable" id="openModalBtn" type="button">
-                <span class="plus-icon">＋</span>
-                <span class="button-text">Hirdetés feladása</span>
-            </button>
+            <button class="upload-btn unselectable" id="openModalBtn" type="button"><span class="plus-icon">＋</span><span class="button-text">Hirdetés feladása</span></button>
             <div class="account-menu">
-                <button type="button" class="account-menu-btn unselectable" id="accountMenuBtn">
-                    <span>⚙️</span>
-                    <span class="button-text">FIÓK</span>
-                </button>
+                <button type="button" class="account-menu-btn unselectable" id="accountMenuBtn"><span>⚙️</span><span class="button-text">FIÓK</span></button>
                 <div class="account-dropdown" id="accountDropdown">
                     <div class="account-dropdown-panel">
-                        <div class="user-info unselectable">
-                            <strong><?php echo htmlspecialchars($_SESSION['username']); ?></strong>
-                        </div>
+                        <div class="user-info"><strong><?php echo htmlspecialchars($_SESSION['username']); ?></strong></div>
                         <div class="dropdown-divider"></div>
                         <a href="account.php" class="account-link"><span>👤 Fiókom</span></a>
                         <div class="dropdown-divider"></div>
                         <div class="theme-toggle-row">
                             <span class="theme-toggle-label">☀️ Világos mód</span>
-                            <label class="theme-switch">
-                                <input type="checkbox" id="themeSwitchMain">
-                                <span class="theme-switch-track"></span>
-                                <span class="theme-switch-thumb"></span>
-                            </label>
+                            <label class="theme-switch"><input type="checkbox" id="themeSwitchMain"><span class="theme-switch-track"></span><span class="theme-switch-thumb"></span></label>
                         </div>
                         <div class="dropdown-divider"></div>
-                        <form method="post" style="width:100%;margin:0;padding:0;">
-                            <button type="submit" name="logout" class="logout-button">
-                                <span class="unselectable">Kijelentkezés</span>
-                            </button>
+                        <form method="post" style="width:100%;margin:0">
+                            <button type="submit" name="logout" class="logout-button"><span>Kijelentkezés</span></button>
                         </form>
                     </div>
                 </div>
@@ -3176,103 +2759,60 @@ try {
     </div>
 
     <!-- Upload Modal -->
-    <div class="modal-overlay" id="uploadModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-overlay" id="uploadModal">
         <div class="modal-card">
-            <button class="modal-close unselectable" id="closeModalBtn" type="button" aria-label="Bezárás">✕</button>
-            <div class="modal-title unselectable" id="modalTitle">Új hirdetés</div>
-            <div class="modal-subtitle unselectable">Tölts fel legalább 1 képet a termékről</div>
-
-            <?php if (isset($_GET['upload']) && $_GET['upload'] === 'success'): ?>
-                <div class="success-banner unselectable">
-                    <span>✓</span> A hirdetés sikeresen fel lett adva!
-                </div>
-            <?php endif; ?>
-
-            <?php if ($uploadError): ?>
-                <div class="error-banner unselectable"><?php echo htmlspecialchars($uploadError); ?></div>
-            <?php endif; ?>
-
-            <form method="post" id="uploadForm" enctype="multipart/form-data" novalidate>
+            <button class="modal-close" id="closeModalBtn">✕</button>
+            <div class="modal-title">Új hirdetés</div>
+            <div class="modal-subtitle">Tölts fel legalább 1 képet</div>
+            <?php if (isset($_GET['upload']) && $_GET['upload'] === 'success'): ?><div class="success-banner">✓ Sikeresen feladva!</div><?php endif; ?>
+            <?php if ($uploadError): ?><div class="error-banner"><?= htmlspecialchars($uploadError) ?></div><?php endif; ?>
+            <form method="post" id="uploadForm" enctype="multipart/form-data">
                 <div class="image-upload-container">
-                    <label for="item_images" class="image-upload-label unselectable">
-                        <span class="image-upload-icon unselectable">📸</span>
-                        <span class="image-upload-hint unselectable">
-                            Kattints ide a képek kiválasztásához<br>
-                            <small>Támogatott formátumok: JPEG, PNG, GIF, WebP (max. 5MB/kép)</small>
-                        </span>
-                    </label>
+                    <label for="item_images" class="image-upload-label"><span class="image-upload-icon">📸</span><span>Kattints a képek kiválasztásához</span></label>
                     <input type="file" id="item_images" name="item_images[]" accept="image/jpeg,image/png,image/gif,image/webp" multiple>
                     <div class="image-preview-container" id="imagePreview"></div>
-                    <div class="field-error unselectable" id="images-error" style="margin-top: 0.5rem;">Legalább egy képet fel kell tölteni!</div>
+                    <div class="field-error" id="images-error">Legalább egy kép kell!</div>
                 </div>
-
                 <div class="form-group">
-                    <label class="form-label unselectable" for="item_title">
-                        Cím <span class="required-star unselectable">*</span>
-                    </label>
-                    <input class="form-input" type="text" id="item_title" name="item_title" placeholder="pl. iPhone 14 Pro 256GB" maxlength="255"
-                        value="<?php echo htmlspecialchars($formData['item_title'] ?? ''); ?>" autocomplete="off">
-                    <div class="field-error unselectable" id="title-error">Kérjük, add meg a hirdetés címét!</div>
+                    <label class="form-label">Cím <span class="required-star">*</span></label>
+                    <input class="form-input" id="item_title" name="item_title" placeholder="pl. iPhone 14" value="<?= htmlspecialchars($formData['item_title'] ?? '') ?>">
+                    <div class="field-error" id="title-error">Kötelező!</div>
                 </div>
-
                 <div class="form-group">
-                    <label class="form-label unselectable" for="item_description">
-                        Leírás <span class="required-star unselectable">*</span>
-                    </label>
-                    <textarea class="form-textarea" id="item_description" name="item_description" placeholder="Írd le a termék állapotát, jellemzőit..."><?php echo htmlspecialchars($formData['item_description'] ?? ''); ?></textarea>
-                    <div class="field-error unselectable" id="desc-error">Kérjük, adj meg egy leírást!</div>
+                    <label class="form-label">Leírás <span class="required-star">*</span></label>
+                    <textarea class="form-textarea" id="item_description" name="item_description"><?= htmlspecialchars($formData['item_description'] ?? '') ?></textarea>
+                    <div class="field-error" id="desc-error">Kötelező!</div>
                 </div>
-
                 <div class="form-group">
-                    <label class="form-label unselectable" for="item_price">
-                        Ár <span class="required-star unselectable">*</span>
-                    </label>
+                    <label class="form-label">Ár <span class="required-star">*</span></label>
                     <div class="price-wrapper">
-                        <input class="form-input" type="number" id="item_price" name="item_price" placeholder="0" min="0" step="1"
-                            value="<?php echo htmlspecialchars($formData['item_price'] ?? ''); ?>">
-                        <span class="price-suffix unselectable">Ft</span>
+                        <input class="form-input" id="item_price" name="item_price" placeholder="0" value="<?= htmlspecialchars($formData['item_price'] ?? '') ?>">
+                        <span class="price-suffix">Ft</span>
                     </div>
-                    <div class="field-error unselectable" id="price-error">Kérjük, adj meg egy érvényes árat!</div>
+                    <div class="field-error" id="price-error">Érvénytelen!</div>
                 </div>
-
-                <button type="submit" name="upload_item" class="submit-btn unselectable">
-                    Hirdetés feladása
-                </button>
+                <button type="submit" name="upload_item" class="submit-btn">Hirdetés feladása</button>
             </form>
         </div>
     </div>
 
-    <!-- ===================== EDIT MODAL (REDESIGNED) ===================== -->
+    <!-- Edit Modal -->
     <div class="edit-modal" id="editModal">
         <div class="edit-modal-content">
             <div class="edit-modal-header">
-                <h3 class="edit-modal-title unselectable">✏️ Hirdetés módosítása</h3>
-                <button class="edit-modal-close unselectable" onclick="closeEditModal()">✕</button>
+                <h3 class="edit-modal-title">✏️ Hirdetés módosítása</h3>
+                <button class="edit-modal-close" onclick="closeEditModal()">✕</button>
             </div>
-            <?php if (isset($_GET['edit']) && $_GET['edit'] === 'success'): ?>
-                <div class="success-banner unselectable">
-                    <span>✓</span> Módosítás sikeresen mentve!
-                </div>
-            <?php endif; ?>
+            <?php if (isset($_GET['edit']) && $_GET['edit'] === 'success'): ?><div class="success-banner">✓ Mentve!</div><?php endif; ?>
             <form method="post" id="editForm">
                 <input type="hidden" name="item_id" id="editItemId">
                 <input type="hidden" name="edit_item" value="1">
-                <div class="edit-form-group">
-                    <label class="edit-form-label unselectable" for="edit_title">Cím</label>
-                    <input class="edit-form-input" type="text" id="edit_title" name="edit_title" maxlength="255" autocomplete="off" required>
+                <div class="edit-form-group"><label class="edit-form-label">Cím</label><input class="edit-form-input" id="edit_title" name="edit_title"></div>
+                <div class="edit-form-group"><label class="edit-form-label">Leírás</label><textarea class="edit-form-textarea" id="edit_description" name="edit_description"></textarea></div>
+                <div class="edit-form-group"><label class="edit-form-label">Ár</label>
+                    <div class="edit-price-wrapper"><input class="edit-form-input" id="edit_price" name="edit_price"><span class="edit-price-suffix">Ft</span></div>
                 </div>
-                <div class="edit-form-group">
-                    <label class="edit-form-label unselectable" for="edit_description">Leírás</label>
-                    <textarea class="edit-form-textarea" id="edit_description" name="edit_description" rows="5" required></textarea>
-                </div>
-                <div class="edit-form-group">
-                    <label class="edit-form-label unselectable" for="edit_price">Ár</label>
-                    <div class="edit-price-wrapper">
-                        <input class="edit-form-input" type="number" id="edit_price" name="edit_price" min="0" step="1" required>
-                        <span class="edit-price-suffix unselectable">Ft</span>
-                    </div>
-                </div>
-                <button type="submit" class="submit-btn unselectable">💾 Módosítások mentése</button>
+                <button type="submit" class="submit-btn">💾 Mentés</button>
             </form>
         </div>
     </div>
@@ -3281,21 +2821,15 @@ try {
     <div class="report-modal" id="reportModal">
         <div class="report-modal-content">
             <div class="report-modal-header">
-                <div class="report-modal-title-wrapper">
-                    <span class="report-modal-icon">⚠️</span>
-                    <h3 class="report-modal-title unselectable">Hirdetés bejelentése</h3>
-                </div>
-                <button class="report-modal-close unselectable" onclick="closeReportModal()" aria-label="Bezárás">✕</button>
+                <span>⚠️</span>
+                <h3 class="report-modal-title">Hirdetés bejelentése</h3>
+                <button class="report-modal-close" onclick="closeReportModal()">✕</button>
             </div>
             <form method="post" id="reportForm">
                 <input type="hidden" name="item_id" id="reportItemId">
                 <input type="hidden" name="report_item" value="1">
-                <div class="report-form-group">
-                    <textarea name="report_reason" class="form-textarea" required placeholder="Kérjük, részletezd a problémát..."></textarea>
-                </div>
-                <button type="submit" class="report-submit-btn unselectable">
-                    <span class="btn-icon">📢</span> Bejelentés küldése
-                </button>
+                <textarea name="report_reason" class="form-textarea" placeholder="Részletezd a problémát..." required></textarea>
+                <button type="submit" class="report-submit-btn">📢 Bejelentés</button>
             </form>
         </div>
     </div>
@@ -3305,16 +2839,16 @@ try {
         <div class="delete-confirm-modal-content">
             <div class="delete-confirm-modal-header">
                 <span class="delete-confirm-modal-icon">⚠️</span>
-                <h3 class="delete-confirm-modal-title unselectable">Hirdetés törlése</h3>
-                <button class="delete-confirm-modal-close unselectable" onclick="closeDeleteConfirmModal()">✕</button>
+                <h3 class="delete-confirm-modal-title">Hirdetés törlése</h3>
+                <button class="delete-confirm-modal-close" onclick="closeDeleteConfirmModal()">✕</button>
             </div>
             <div class="delete-confirm-modal-body">
-                <p class="delete-confirm-modal-text unselectable">Biztosan törölni szeretnéd ezt a hirdetést?</p>
-                <p class="delete-confirm-modal-warning unselectable">A törlés végleges, nem vonható vissza.</p>
+                <p class="delete-confirm-modal-text">Biztosan törölni szeretnéd ezt a hirdetést?</p>
+                <p class="delete-confirm-modal-warning">A törlés végleges, nem vonható vissza.</p>
             </div>
             <div class="delete-confirm-modal-actions">
-                <button class="delete-confirm-cancel-btn unselectable" onclick="closeDeleteConfirmModal()">Mégse</button>
-                <button class="delete-confirm-delete-btn unselectable" id="confirmDeleteBtn">Törlés</button>
+                <button class="delete-confirm-cancel-btn" onclick="closeDeleteConfirmModal()">Mégse</button>
+                <button class="delete-confirm-delete-btn" id="confirmDeleteBtn">Törlés</button>
             </div>
         </div>
     </div>
@@ -3323,38 +2857,32 @@ try {
     <div class="product-modal-overlay" id="productModal">
         <div class="product-modal-card">
             <div class="product-modal-header">
-                <div class="product-menu" id="productMenuContainer" style="display: none;">
-                    <div class="product-menu-button unselectable" onclick="toggleProductMenu(this)">⋮</div>
+                <div class="product-menu" id="productMenuContainer" style="display:none">
+                    <div class="product-menu-button" onclick="toggleProductMenu(this)">⋮</div>
                     <div class="product-menu-content" id="productMenuContent">
-                        <button class="product-menu-item unselectable" id="productEditBtn" style="display:none;">✏️ Módosítás</button>
-                        <button class="product-menu-item unselectable" id="productReportBtn">⚠️ Bejelentés</button>
-                        <button class="product-menu-item delete unselectable" id="productDeleteBtn" style="display: none;">🗑️ Törlés</button>
+                        <button class="product-menu-item" id="productEditBtn" style="display:none">✏️ Módosítás</button>
+                        <button class="product-menu-item" id="productReportBtn">⚠️ Bejelentés</button>
+                        <button class="product-menu-item delete" id="productDeleteBtn" style="display:none">🗑️ Törlés</button>
                     </div>
                 </div>
-                <button class="product-modal-close unselectable" id="closeProductModalBtn">✕</button>
+                <button class="product-modal-close" id="closeProductModalBtn">✕</button>
             </div>
-
             <div class="product-gallery">
                 <div class="product-main-image-container">
-                    <img src="" alt="Termék képe" class="product-main-image" id="productMainImage" style="display: none;">
-                    <div class="product-no-image-placeholder unselectable" id="productNoImagePlaceholder" style="display: none;">
-                        📷 Nincs kép
-                    </div>
-                    <button class="gallery-nav prev unselectable" id="galleryPrev">❮</button>
-                    <button class="gallery-nav next unselectable" id="galleryNext">❯</button>
+                    <img src="" class="product-main-image" id="productMainImage" style="display:none">
+                    <div id="productNoImagePlaceholder" style="display:none">📷 Nincs kép</div>
+                    <button class="gallery-nav prev" id="galleryPrev">❮</button>
+                    <button class="gallery-nav next" id="galleryNext">❯</button>
                 </div>
                 <div class="product-thumbnails" id="productThumbnails"></div>
             </div>
-
             <div class="product-details">
-                <h2 class="product-title unselectable" id="productTitle"></h2>
-                <div class="product-price unselectable" id="productPrice"></div>
-                <div class="product-seller unselectable" id="productSeller"></div>
-                <div class="product-date unselectable" id="productDate"></div>
-                <div class="product-description unselectable" id="productDescription"></div>
-                <button class="product-buy-btn unselectable" id="productBuyBtn">
-                    🛒 Vásárlás
-                </button>
+                <h2 class="product-title" id="productTitle"></h2>
+                <div class="product-price" id="productPrice"></div>
+                <div class="product-seller" id="productSeller"></div>
+                <div class="product-date" id="productDate"></div>
+                <div class="product-description" id="productDescription"></div>
+                <button class="product-buy-btn" id="productBuyBtn">🛒 Vásárlás</button>
             </div>
         </div>
     </div>
@@ -3362,30 +2890,27 @@ try {
     <!-- Lightbox -->
     <div class="lightbox-overlay" id="lightboxOverlay">
         <div class="lightbox-content">
-            <img src="" alt="Nagyított kép" class="lightbox-image" id="lightboxImage">
-            <button class="lightbox-close unselectable" id="lightboxClose">✕</button>
+            <img src="" class="lightbox-image" id="lightboxImage">
+            <button class="lightbox-close" id="lightboxClose">✕</button>
         </div>
     </div>
 
-    <!-- Floating Messages Button -->
-    <a href="uzenetek.php" class="floating-messages-btn unselectable" title="Üzenetek">
+    <!-- Floating Messages -->
+    <a href="uzenetek.php" class="floating-messages-btn" title="Üzenetek">
         💬
-        <?php if ($unreadMsgCount > 0): ?>
-            <span class="floating-messages-badge" id="floatingMessagesBadge"><?php echo $unreadMsgCount > 9 ? '9+' : $unreadMsgCount; ?></span>
-        <?php else: ?>
-            <span class="floating-messages-badge" id="floatingMessagesBadge" style="display: none;"></span>
-        <?php endif; ?>
+        <?php if ($unreadMsgCount > 0): ?><span class="floating-messages-badge" id="floatingMessagesBadge"><?= $unreadMsgCount > 9 ? '9+' : $unreadMsgCount ?></span>
+        <?php else: ?><span class="floating-messages-badge" id="floatingMessagesBadge" style="display:none"></span><?php endif; ?>
     </a>
 
-    <!-- Seller Profile Popup Overlay -->
+    <!-- Seller Profile Popup -->
     <div class="seller-popup-overlay" id="sellerPopupOverlay">
-        <div class="seller-popup-card" id="sellerPopupCard">
+        <div class="seller-popup-card">
             <div class="seller-popup-topbar">
-                <button class="seller-popup-close unselectable" id="sellerPopupClose">✕</button>
-                <div class="seller-popup-topbar-title unselectable">👤 Eladó profilja</div>
+                <button class="seller-popup-close" id="sellerPopupClose">✕</button>
+                <div class="seller-popup-topbar-title">👤 Eladó profilja</div>
             </div>
             <div class="seller-popup-body" id="sellerPopupContent">
-                <div class="seller-popup-loading unselectable">⏳ Betöltés...</div>
+                <div class="seller-popup-loading">⏳ Betöltés...</div>
             </div>
         </div>
     </div>
@@ -3397,84 +2922,56 @@ try {
                     $imageStmt = $conn->prepare("SELECT image_path FROM item_images WHERE item_id = ? AND is_primary = 1 LIMIT 1");
                     $imageStmt->execute([$item['id']]);
                     $primaryImage = $imageStmt->fetch(PDO::FETCH_ASSOC);
-
                     $countStmt = $conn->prepare("SELECT COUNT(*) as image_count FROM item_images WHERE item_id = ?");
                     $countStmt->execute([$item['id']]);
                     $imageCount = $countStmt->fetch(PDO::FETCH_ASSOC)['image_count'];
-
                     $allImagesStmt = $conn->prepare("SELECT image_path FROM item_images WHERE item_id = ? ORDER BY sort_order");
                     $allImagesStmt->execute([$item['id']]);
                     $allImages = $allImagesStmt->fetchAll(PDO::FETCH_COLUMN);
+                    $isOwnerCard = ($item['user_id'] == $_SESSION['user_id']);
                 ?>
                     <div class="item-card"
-                        data-item-id="<?php echo $item['id']; ?>"
-                        data-item-title="<?php echo htmlspecialchars($item['title']); ?>"
-                        data-item-price="<?php echo number_format($item['price'], 0, ',', ' '); ?> Ft"
-                        data-item-seller="<?php echo htmlspecialchars($item['seller_name']); ?>"
-                        data-item-date="<?php echo date('Y-m-d', strtotime($item['created_at'])); ?>"
-                        data-item-description="<?php echo htmlspecialchars($item['description']); ?>"
-                        data-item-images='<?php echo json_encode($allImages); ?>'
-                        data-item-user-id="<?php echo $item['user_id']; ?>">
+                        data-item-id="<?= $item['id'] ?>"
+                        data-item-title="<?= htmlspecialchars($item['title']) ?>"
+                        data-item-price="<?= number_format($item['price'], 0, ',', ' ') ?> Ft"
+                        data-item-seller="<?= htmlspecialchars($item['seller_name']) ?>"
+                        data-item-date="<?= date('Y-m-d', strtotime($item['created_at'])) ?>"
+                        data-item-description="<?= htmlspecialchars($item['description']) ?>"
+                        data-item-images='<?= json_encode($allImages) ?>'
+                        data-item-user-id="<?= $item['user_id'] ?>">
 
-                        <?php
-                        $isOwnerCard = ($item['user_id'] == $_SESSION['user_id']);
-                        $showCardMenu = true;
-                        ?>
                         <div class="card-menu">
-                            <div class="card-menu-button unselectable" onclick="toggleMenu(this); event.stopPropagation();">⋮</div>
+                            <div class="card-menu-button" onclick="toggleMenu(this);event.stopPropagation()">⋮</div>
                             <div class="card-menu-content">
                                 <?php if (!$isOwnerCard || $isAdmin): ?>
-                                    <button class="card-menu-item unselectable" onclick="openReportModal('<?php echo $item['id']; ?>'); event.stopPropagation();">
-                                        ⚠️ Bejelentés
-                                    </button>
+                                    <button class="card-menu-item" onclick="openReportModal('<?= $item['id'] ?>');event.stopPropagation()">⚠️ Bejelentés</button>
                                 <?php endif; ?>
                                 <?php if ($isOwnerCard || $isAdmin): ?>
-                                    <button class="card-menu-item unselectable"
-                                        onclick="openEditModal('<?php echo $item['id']; ?>', <?php echo htmlspecialchars(json_encode($item['title'])); ?>, <?php echo htmlspecialchars(json_encode($item['description'])); ?>, '<?php echo $item['price']; ?>'); event.stopPropagation();">
-                                        ✏️ Módosítás
-                                    </button>
-                                    <form method="post" style="margin:0; padding:0;" onsubmit="return confirm('Biztosan törölni szeretnéd ezt a hirdetést?');" onclick="event.stopPropagation();">
-                                        <input type="hidden" name="item_id" value="<?php echo $item['id']; ?>">
-                                        <input type="hidden" name="delete_item" value="1">
-                                        <button type="submit" class="card-menu-item delete unselectable">🗑️ Törlés</button>
-                                    </form>
+                                    <button class="card-menu-item" onclick="openEditModal('<?= $item['id'] ?>',<?= htmlspecialchars(json_encode($item['title'])) ?>,<?= htmlspecialchars(json_encode($item['description'])) ?>,'<?= $item['price'] ?>');event.stopPropagation()">✏️ Módosítás</button>
+                                    <button class="card-menu-item delete" onclick="openDeleteConfirmModal('<?= $item['id'] ?>');event.stopPropagation()">🗑️ Törlés</button>
                                 <?php endif; ?>
                             </div>
                         </div>
 
                         <?php if ($primaryImage): ?>
-                            <img src="<?php echo htmlspecialchars($primaryImage['image_path']); ?>" alt="<?php echo htmlspecialchars($item['title']); ?>" class="item-image">
+                            <img src="<?= htmlspecialchars($primaryImage['image_path']) ?>" class="item-image">
                         <?php else: ?>
-                            <div class="item-image-placeholder">
-                                <span class="placeholder-text unselectable">📷 Nincs kép</span>
-                            </div>
+                            <div class="item-image-placeholder"><span class="placeholder-text">📷 Nincs kép</span></div>
                         <?php endif; ?>
 
-                        <?php if ($imageCount > 1): ?>
-                            <div class="image-count-badge unselectable">+<?php echo $imageCount - 1; ?> kép</div>
-                        <?php endif; ?>
-
-                        <div class="item-title unselectable"><?php echo htmlspecialchars($item['title']); ?></div>
-                        <div class="item-price unselectable"><?php echo number_format($item['price'], 0, ',', ' '); ?> Ft</div>
-                        <div class="item-seller unselectable" data-seller-id="<?php echo $item['user_id']; ?>" onclick="openSellerPopup(<?php echo $item['user_id']; ?>); event.stopPropagation();">Eladó: <?php echo htmlspecialchars($item['seller_name']); ?></div>
-                        <div class="item-date unselectable"><?php echo date('Y-m-d', strtotime($item['created_at'])); ?></div>
+                        <?php if ($imageCount > 1): ?><div class="image-count-badge">+<?= $imageCount - 1 ?> kép</div><?php endif; ?>
+                        <div class="item-title"><?= htmlspecialchars($item['title']) ?></div>
+                        <div class="item-price"><?= number_format($item['price'], 0, ',', ' ') ?> Ft</div>
+                        <div class="item-seller" data-seller-id="<?= $item['user_id'] ?>" onclick="openSellerPopup(<?= $item['user_id'] ?>);event.stopPropagation()">Eladó: <?= htmlspecialchars($item['seller_name']) ?></div>
+                        <div class="item-date"><?= date('Y-m-d', strtotime($item['created_at'])) ?></div>
                     </div>
                 <?php endforeach; ?>
             </div>
-
             <?php if ($totalPages > 1): ?>
                 <div class="floating-pagination">
                     <div class="pagination-container">
-                        <?php if ($page > 1): ?>
-                            <a href="?page=<?php echo $page - 1; ?>" class="pagination-btn unselectable">Előző</a>
-                        <?php else: ?>
-                            <span class="pagination-btn disabled unselectable">Előző</span>
-                        <?php endif; ?>
-                        <?php if ($page < $totalPages): ?>
-                            <a href="?page=<?php echo $page + 1; ?>" class="pagination-btn unselectable">Következő</a>
-                        <?php else: ?>
-                            <span class="pagination-btn disabled unselectable">Következő</span>
-                        <?php endif; ?>
+                        <?php if ($page > 1): ?><a href="?page=<?= $page - 1 ?>" class="pagination-btn">Előző</a><?php else: ?><span class="pagination-btn disabled">Előző</span><?php endif; ?>
+                        <?php if ($page < $totalPages): ?><a href="?page=<?= $page + 1 ?>" class="pagination-btn">Következő</a><?php else: ?><span class="pagination-btn disabled">Következő</span><?php endif; ?>
                     </div>
                 </div>
             <?php endif; ?>
@@ -3482,394 +2979,273 @@ try {
     </div>
 
     <script>
-        // Current product data
-        let currentProductImages = [];
-        let currentImageIndex = 0;
-        let currentProductId = null;
-        let currentProductUserId = null;
-
-        // Upload modal functionality
-        const modal = document.getElementById('uploadModal');
-        const openBtn = document.getElementById('openModalBtn');
-        const closeBtn = document.getElementById('closeModalBtn');
+        let currentProductImages = [],
+            currentImageIndex = 0,
+            currentProductId = null,
+            currentProductUserId = null,
+            pendingDeleteItemId = null;
+        const modal = document.getElementById('uploadModal'),
+            openBtn = document.getElementById('openModalBtn'),
+            closeBtn = document.getElementById('closeModalBtn');
+        const imageInput = document.getElementById('item_images'),
+            previewContainer = document.getElementById('imagePreview');
+        let selectedFiles = [];
 
         function openModal() {
             modal.classList.add('active');
-            document.body.style.overflow = 'hidden';
+            document.body.style.overflow = 'hidden'
         }
 
         function closeModal() {
             modal.classList.remove('active');
-            document.body.style.overflow = '';
+            document.body.style.overflow = ''
         }
-
         openBtn.addEventListener('click', openModal);
         closeBtn.addEventListener('click', closeModal);
-
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) closeModal();
+        modal.addEventListener('click', e => {
+            if (e.target === modal) closeModal()
         });
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && modal.classList.contains('active')) closeModal();
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && modal.classList.contains('active')) closeModal()
         });
-
-        // Image preview functionality
-        const imageInput = document.getElementById('item_images');
-        const previewContainer = document.getElementById('imagePreview');
-        const imagesError = document.getElementById('images-error');
-        let selectedFiles = [];
 
         imageInput.addEventListener('change', function(e) {
             const files = Array.from(e.target.files);
-            const validFiles = files.filter(file => {
-                const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-                const maxSize = 5 * 1024 * 1024;
-                if (!validTypes.includes(file.type)) {
-                    alert(`A ${file.name} fájl formátuma nem támogatott!`);
-                    return false;
+            selectedFiles = files.filter(f => {
+                if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(f.type)) {
+                    alert(f.name + ' nem támogatott!');
+                    return false
                 }
-                if (file.size > maxSize) {
-                    alert(`A ${file.name} fájl mérete nagyobb, mint 5MB!`);
-                    return false;
+                if (f.size > 5242880) {
+                    alert(f.name + ' >5MB!');
+                    return false
                 }
                 return true;
             });
-            selectedFiles = validFiles;
             updatePreview();
         });
 
         function updatePreview() {
             previewContainer.innerHTML = '';
-            selectedFiles.forEach((file, index) => {
-                const reader = new FileReader();
-                const previewItem = document.createElement('div');
-                previewItem.className = 'image-preview-item';
-                previewItem.setAttribute('data-index', index);
-                reader.onload = function(e) {
-                    previewItem.innerHTML = `
-                        <img src="${e.target.result}" alt="Preview">
-                        <div class="image-preview-remove" data-index="${index}">×</div>
-                        ${index === 0 ? '<div class="primary-badge unselectable">Főkép</div>' : ''}
-                    `;
-                    const removeBtn = previewItem.querySelector('.image-preview-remove');
-                    if (removeBtn) {
-                        removeBtn.addEventListener('click', function(e) {
-                            e.stopPropagation();
-                            const idx = parseInt(this.dataset.index);
-                            removeImageAtIndex(idx);
-                        });
-                    }
+            selectedFiles.forEach((f, i) => {
+                const r = new FileReader(),
+                    item = document.createElement('div');
+                item.className = 'image-preview-item';
+                r.onload = function(e) {
+                    item.innerHTML = `<img src="${e.target.result}"><div class="image-preview-remove" data-index="${i}">×</div>${i===0?'<div class="primary-badge">Főkép</div>':''}`;
+                    item.querySelector('.image-preview-remove').addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        removeImageAtIndex(parseInt(this.dataset.index))
+                    });
                 };
-                reader.readAsDataURL(file);
-                previewContainer.appendChild(previewItem);
+                r.readAsDataURL(f);
+                previewContainer.appendChild(item);
             });
             validateImages();
         }
 
-        function removeImageAtIndex(indexToRemove) {
-            selectedFiles.splice(indexToRemove, 1);
-            const dt = new DataTransfer();
-            selectedFiles.forEach(file => dt.items.add(file));
-            imageInput.files = dt.files;
-            updatePreview();
+        function removeImageAtIndex(i) {
+            selectedFiles.splice(i, 1);
+            const d = new DataTransfer();
+            selectedFiles.forEach(f => d.items.add(f));
+            imageInput.files = d.files;
+            updatePreview()
         }
 
         function validateImages() {
-            const isValid = selectedFiles.length > 0;
-            const uploadContainer = document.querySelector('.image-upload-container');
-            if (!isValid) {
-                imagesError.style.display = 'block';
-                if (uploadContainer) uploadContainer.style.borderColor = '#ff4d4d';
-            } else {
-                imagesError.style.display = 'none';
-                if (uploadContainer) uploadContainer.style.borderColor = 'rgba(255, 140, 0, 0.3)';
-            }
-            return isValid;
+            const v = selectedFiles.length > 0;
+            document.getElementById('images-error').style.display = v ? 'none' : 'block';
+            document.querySelector('.image-upload-container').style.borderColor = v ? 'rgba(255,140,0,0.3)' : '#ff4d4d';
+            return v;
         }
 
-        const form = document.getElementById('uploadForm');
-        const titleInput = document.getElementById('item_title');
-        const descInput = document.getElementById('item_description');
-        const priceInput = document.getElementById('item_price');
+        const form = document.getElementById('uploadForm'),
+            titleInput = document.getElementById('item_title'),
+            descInput = document.getElementById('item_description'),
+            priceInput = document.getElementById('item_price');
 
-        function validateField(input, errorId, condition) {
-            const errEl = document.getElementById(errorId);
-            if (!condition) {
+        function validateField(input, errId, cond) {
+            const e = document.getElementById(errId);
+            if (!cond) {
                 input.classList.add('invalid');
-                errEl.style.display = 'block';
-                return false;
+                e.style.display = 'block';
+                return false
             }
             input.classList.remove('invalid');
-            errEl.style.display = 'none';
-            return true;
+            e.style.display = 'none';
+            return true
         }
-
-        form.addEventListener('submit', (e) => {
-            const dt = new DataTransfer();
-            selectedFiles.forEach(file => dt.items.add(file));
-            imageInput.files = dt.files;
-
-            let valid = true;
-            valid = validateImages() && valid;
-            valid = validateField(titleInput, 'title-error', titleInput.value.trim() !== '') && valid;
-            valid = validateField(descInput, 'desc-error', descInput.value.trim() !== '') && valid;
-            valid = validateField(priceInput, 'price-error', priceInput.value !== '' && parseFloat(priceInput.value) >= 0) && valid;
-            if (!valid) e.preventDefault();
+        form.addEventListener('submit', e => {
+            const d = new DataTransfer();
+            selectedFiles.forEach(f => d.items.add(f));
+            imageInput.files = d.files;
+            let v = true;
+            v = validateImages() && v;
+            v = validateField(titleInput, 'title-error', titleInput.value.trim() !== '') && v;
+            v = validateField(descInput, 'desc-error', descInput.value.trim() !== '') && v;
+            v = validateField(priceInput, 'price-error', priceInput.value !== '' && parseFloat(priceInput.value) >= 0) && v;
+            if (!v) e.preventDefault();
         });
-
-
-        const dt = new DataTransfer();
-        selectedFiles.forEach(file => dt.items.add(file));
-        imageInput.files = dt.files;
-
-        [titleInput, descInput, priceInput].forEach(el => {
-            el.addEventListener('input', () => el.classList.remove('invalid'));
-        });
-
-        <?php if (isset($_GET['upload']) && $_GET['upload'] === 'success' || $uploadError): ?>
-            openModal();
+        [titleInput, descInput, priceInput].forEach(el => el.addEventListener('input', () => el.classList.remove('invalid')));
+        <?php if (isset($_GET['upload']) && $_GET['upload'] === 'success' || $uploadError): ?>openModal();
         <?php endif; ?>
 
-        // Card menu functionality
-        function toggleMenu(button) {
-            const menu = button.nextElementSibling;
-            menu.classList.toggle('show');
-            document.querySelectorAll('.card-menu-content').forEach(m => {
-                if (m !== menu) m.classList.remove('show');
-            });
+        function toggleMenu(btn) {
+            const m = btn.nextElementSibling;
+            m.classList.toggle('show');
+            document.querySelectorAll('.card-menu-content').forEach(x => {
+                if (x !== m) x.classList.remove('show')
+            })
         }
-
-        document.addEventListener('click', function(e) {
-            if (!e.target.closest('.card-menu')) {
-                document.querySelectorAll('.card-menu-content').forEach(menu => {
-                    menu.classList.remove('show');
-                });
-            }
+        document.addEventListener('click', e => {
+            if (!e.target.closest('.card-menu')) document.querySelectorAll('.card-menu-content').forEach(m => m.classList.remove('show'))
         });
 
-        // Report modal functionality
-        const reportModal = document.getElementById('reportModal');
-        const reportItemId = document.getElementById('reportItemId');
+        const reportModal = document.getElementById('reportModal'),
+            reportItemId = document.getElementById('reportItemId');
 
-        function openReportModal(itemId) {
-            reportItemId.value = itemId;
+        function openReportModal(id) {
+            reportItemId.value = id;
             reportModal.classList.add('show');
-            document.body.style.overflow = 'hidden';
+            document.body.style.overflow = 'hidden'
         }
 
         function closeReportModal() {
             reportModal.classList.remove('show');
-            document.body.style.overflow = '';
+            document.body.style.overflow = ''
         }
-
-        reportModal.addEventListener('click', function(e) {
-            if (e.target === reportModal) closeReportModal();
+        reportModal.addEventListener('click', e => {
+            if (e.target === reportModal) closeReportModal()
+        });
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && reportModal.classList.contains('show')) closeReportModal()
         });
 
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape' && reportModal.classList.contains('show')) closeReportModal();
-        });
-
-        // Delete confirm modal functionality
-        let pendingDeleteItemId = null;
-        const deleteConfirmModal = document.getElementById('deleteConfirmModal');
-        const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+        const deleteConfirmModal = document.getElementById('deleteConfirmModal'),
+            confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
 
         function openDeleteConfirmModal(itemId) {
             pendingDeleteItemId = itemId;
             deleteConfirmModal.classList.add('show');
-            document.body.style.overflow = 'hidden';
+            document.body.style.overflow = 'hidden'
         }
 
         function closeDeleteConfirmModal() {
             deleteConfirmModal.classList.remove('show');
             document.body.style.overflow = '';
-            pendingDeleteItemId = null;
+            pendingDeleteItemId = null
         }
-
-        confirmDeleteBtn.addEventListener('click', function() {
+        confirmDeleteBtn.addEventListener('click', () => {
             if (pendingDeleteItemId) {
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.innerHTML = `
-                    <input type="hidden" name="item_id" value="${pendingDeleteItemId}">
-                    <input type="hidden" name="delete_item" value="1">
-                `;
-                document.body.appendChild(form);
-                form.submit();
+                const f = document.createElement('form');
+                f.method = 'POST';
+                f.innerHTML = `<input type="hidden" name="item_id" value="${pendingDeleteItemId}"><input type="hidden" name="delete_item" value="1">`;
+                document.body.appendChild(f);
+                f.submit()
             }
         });
-
-        deleteConfirmModal.addEventListener('click', function(e) {
-            if (e.target === deleteConfirmModal) {
-                closeDeleteConfirmModal();
-            }
+        deleteConfirmModal.addEventListener('click', e => {
+            if (e.target === deleteConfirmModal) closeDeleteConfirmModal()
+        });
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && deleteConfirmModal.classList.contains('show')) closeDeleteConfirmModal()
         });
 
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape' && deleteConfirmModal.classList.contains('show')) {
-                closeDeleteConfirmModal();
-            }
-        });
+        const productModal = document.getElementById('productModal'),
+            closeProductModalBtn = document.getElementById('closeProductModalBtn');
+        const productMainImage = document.getElementById('productMainImage'),
+            lightboxOverlay = document.getElementById('lightboxOverlay'),
+            lightboxImage = document.getElementById('lightboxImage');
 
-        // Product modal functionality
-        const productModal = document.getElementById('productModal');
-        const closeProductModalBtn = document.getElementById('closeProductModalBtn');
-        const productMainImage = document.getElementById('productMainImage');
-        const productNoImagePlaceholder = document.getElementById('productNoImagePlaceholder');
-        const lightboxOverlay = document.getElementById('lightboxOverlay');
-        const lightboxImage = document.getElementById('lightboxImage');
-        const lightboxClose = document.getElementById('lightboxClose');
-
-        function setMainImage(index) {
-            if (index >= 0 && index < currentProductImages.length && currentProductImages[index]) {
+        function setMainImage(i) {
+            if (i >= 0 && i < currentProductImages.length && currentProductImages[i]) {
                 productMainImage.style.display = 'block';
-                productNoImagePlaceholder.style.display = 'none';
-                productMainImage.src = currentProductImages[index];
-                currentImageIndex = index;
-                productMainImage.onload = function() {
-                    adjustImageContainerHeight();
-                };
-                productMainImage.onerror = function() {
+                document.getElementById('productNoImagePlaceholder').style.display = 'none';
+                productMainImage.src = currentProductImages[i];
+                currentImageIndex = i;
+                productMainImage.onload = adjustImageContainerHeight;
+                productMainImage.onerror = () => {
                     productMainImage.style.display = 'none';
-                    productNoImagePlaceholder.style.display = 'block';
-                    adjustImageContainerHeight();
+                    document.getElementById('productNoImagePlaceholder').style.display = 'block'
                 };
-                document.querySelectorAll('.product-thumbnail').forEach((thumb, i) => {
-                    thumb.classList.toggle('active', i === index);
-                });
+                document.querySelectorAll('.product-thumbnail').forEach((t, idx) => t.classList.toggle('active', idx === i));
             } else {
                 productMainImage.style.display = 'none';
-                productNoImagePlaceholder.style.display = 'block';
-                adjustImageContainerHeight();
+                document.getElementById('productNoImagePlaceholder').style.display = 'block'
             }
         }
 
         function adjustImageContainerHeight() {
-            const imageContainer = document.querySelector('.product-main-image-container');
-            const gallery = document.querySelector('.product-gallery');
-            const thumbnails = document.querySelector('.product-thumbnails');
-            if (imageContainer) {
-                const galleryPadding = 32;
-                const thumbnailsHeight = thumbnails ? thumbnails.offsetHeight : 100;
-                const availableHeight = gallery.clientHeight - galleryPadding - thumbnailsHeight - 20;
-                if (productMainImage.style.display !== 'none' && productMainImage.complete && productMainImage.naturalHeight > 0) {
-                    const imageHeight = Math.min(productMainImage.naturalHeight, availableHeight);
-                    imageContainer.style.height = imageHeight + 'px';
-                } else {
-                    imageContainer.style.height = Math.max(300, availableHeight) + 'px';
-                }
+            const c = document.querySelector('.product-main-image-container'),
+                g = document.querySelector('.product-gallery'),
+                t = document.querySelector('.product-thumbnails');
+            if (c && g) {
+                const avail = g.clientHeight - 32 - (t ? t.offsetHeight : 100) - 20;
+                c.style.height = Math.max(200, avail) + 'px'
             }
         }
 
         document.querySelectorAll('.item-card').forEach(card => {
             card.addEventListener('click', function(e) {
                 if (e.target.closest('.card-menu') || e.target.closest('.report-modal')) return;
-                const productId = this.dataset.itemId;
-                const title = this.dataset.itemTitle;
-                const price = this.dataset.itemPrice;
-                const seller = this.dataset.itemSeller;
-                const date = this.dataset.itemDate;
-                const description = this.dataset.itemDescription;
-                const images = JSON.parse(this.dataset.itemImages || '[]');
-                const userId = this.dataset.itemUserId;
-
-                currentProductId = productId;
-                currentProductUserId = userId;
+                const id = this.dataset.itemId,
+                    title = this.dataset.itemTitle,
+                    price = this.dataset.itemPrice,
+                    seller = this.dataset.itemSeller;
+                const date = this.dataset.itemDate,
+                    desc = this.dataset.itemDescription,
+                    images = JSON.parse(this.dataset.itemImages || '[]'),
+                    uid = this.dataset.itemUserId;
+                currentProductId = id;
+                currentProductUserId = uid;
                 currentProductImages = images;
                 currentImageIndex = 0;
-
                 document.getElementById('productTitle').textContent = title;
                 document.getElementById('productPrice').textContent = price;
                 document.getElementById('productSeller').innerHTML = `Eladó: <strong>${seller}</strong>`;
-                document.getElementById('productSeller').setAttribute('data-seller-id', userId);
+                document.getElementById('productSeller').setAttribute('data-seller-id', uid);
                 document.getElementById('productDate').textContent = date;
-                document.getElementById('productDescription').textContent = description;
-
-                const thumbnailsContainer = document.getElementById('productThumbnails');
-                thumbnailsContainer.innerHTML = '';
-
+                document.getElementById('productDescription').textContent = desc;
+                const tc = document.getElementById('productThumbnails');
+                tc.innerHTML = '';
                 if (images.length > 0) {
-                    images.forEach((img, index) => {
-                        const thumbnail = document.createElement('div');
-                        thumbnail.className = `product-thumbnail ${index === 0 ? 'active' : ''}`;
-                        thumbnail.innerHTML = `<img src="${img}" alt="Thumbnail ${index + 1}">`;
-                        thumbnail.addEventListener('click', (e) => {
+                    images.forEach((img, i) => {
+                        const tn = document.createElement('div');
+                        tn.className = `product-thumbnail ${i===0?'active':''}`;
+                        tn.innerHTML = `<img src="${img}">`;
+                        tn.addEventListener('click', e => {
                             e.stopPropagation();
-                            setMainImage(index);
+                            setMainImage(i)
                         });
-                        thumbnailsContainer.appendChild(thumbnail);
+                        tc.appendChild(tn)
                     });
-                    setMainImage(0);
+                    setMainImage(0)
+                } else setMainImage(-1);
+                document.getElementById('galleryPrev').classList.toggle('hidden', images.length <= 1);
+                document.getElementById('galleryNext').classList.toggle('hidden', images.length <= 1);
+                const menu = document.getElementById('productMenuContainer'),
+                    rb = document.getElementById('productReportBtn'),
+                    db = document.getElementById('productDeleteBtn'),
+                    eb = document.getElementById('productEditBtn');
+                const isOwner = parseInt(uid) === <?= $_SESSION['user_id'] ?>,
+                    isAdmin = <?= $isAdmin ? 'true' : 'false' ?>;
+                menu.style.display = 'block';
+                if (!isOwner || isAdmin) {
+                    rb.style.display = 'block';
+                    rb.onclick = () => openReportModal(id)
+                } else rb.style.display = 'none';
+                if (isOwner || isAdmin) {
+                    eb.style.display = 'block';
+                    eb.onclick = () => openEditModal(id, title, desc, price.replace(/[^0-9]/g, ''));
+                    db.style.display = 'block';
+                    db.onclick = () => openDeleteConfirmModal(id)
                 } else {
-                    setMainImage(-1);
+                    eb.style.display = 'none';
+                    db.style.display = 'none'
                 }
-
-                const prevBtn = document.getElementById('galleryPrev');
-                const nextBtn = document.getElementById('galleryNext');
-                prevBtn.classList.toggle('hidden', images.length <= 1);
-                nextBtn.classList.toggle('hidden', images.length <= 1);
-
-                <?php if (isset($_SESSION['user_id'])): ?>
-                    const isOwner = (parseInt(userId) === <?php echo $_SESSION['user_id']; ?>);
-                    const isAdmin = <?php echo $isAdmin ? 'true' : 'false'; ?>;
-                    const menuContainer = document.getElementById('productMenuContainer');
-                    const reportBtn = document.getElementById('productReportBtn');
-                    const deleteBtn = document.getElementById('productDeleteBtn');
-                    const editBtn = document.getElementById('productEditBtn');
-
-                    // Always show menu
-                    menuContainer.style.display = 'block';
-
-                    // Report: visible for non-owners (or admins can report too)
-                    // IMPORTANT: Do NOT close product modal when opening report modal
-                    if (!isOwner || isAdmin) {
-                        reportBtn.style.display = 'block';
-                        reportBtn.onclick = () => {
-                            openReportModal(productId);
-                        };
-                    } else {
-                        reportBtn.style.display = 'none';
-                    }
-
-                    // Edit: visible for owner or admin
-                    // IMPORTANT: Do NOT close product modal when opening edit modal
-                    if (isOwner || isAdmin) {
-                        editBtn.style.display = 'block';
-                        editBtn.onclick = () => {
-                            openEditModal(
-                                productId,
-                                document.getElementById('productTitle').textContent,
-                                document.getElementById('productDescription').textContent,
-                                document.getElementById('productPrice').textContent.replace(/[^0-9]/g, '')
-                            );
-                        };
-                    } else {
-                        editBtn.style.display = 'none';
-                    }
-
-                    // Delete: visible for owner or admin
-                    // IMPORTANT: Use delete confirm modal instead of confirm()
-                    if (isOwner || isAdmin) {
-                        deleteBtn.style.display = 'block';
-                        deleteBtn.onclick = () => {
-                            openDeleteConfirmModal(productId);
-                        };
-                    } else {
-                        deleteBtn.style.display = 'none';
-                    }
-                <?php endif; ?>
-
-                // --- VÁSÁRLÁS GOMB MŰKÖDÉSE ---
-                document.getElementById('productBuyBtn').onclick = function() {
-                    if (currentProductId) {
-                        window.location.href = 'vasarlas.php?item_id=' + encodeURIComponent(currentProductId);
-                    } else {
-                        alert('Hiba: nincs termék kiválasztva.');
-                    }
+                document.getElementById('productBuyBtn').onclick = () => {
+                    window.location.href = 'vasarlas.php?item_id=' + id
                 };
-
                 openProductModal();
             });
         });
@@ -3877,542 +3253,301 @@ try {
         function openProductModal() {
             productModal.classList.add('active');
             document.body.style.overflow = 'hidden';
-            setTimeout(() => {
-                adjustImageContainerHeight();
-            }, 100);
+            setTimeout(adjustImageContainerHeight, 100)
         }
 
         function closeProductModal() {
-            if (lightboxOverlay.classList.contains('active')) closeLightbox();
+            if (lightboxOverlay.classList.contains('active')) lightboxOverlay.classList.remove('active');
             productModal.classList.remove('active');
-            document.body.style.overflow = '';
+            document.body.style.overflow = ''
         }
-
-        document.getElementById('galleryPrev').addEventListener('click', (e) => {
+        document.getElementById('galleryPrev').addEventListener('click', e => {
             e.stopPropagation();
-            const newIndex = currentImageIndex - 1;
-            setMainImage(newIndex >= 0 ? newIndex : currentProductImages.length - 1);
+            setMainImage((currentImageIndex - 1 + currentProductImages.length) % currentProductImages.length)
         });
-
-        document.getElementById('galleryNext').addEventListener('click', (e) => {
+        document.getElementById('galleryNext').addEventListener('click', e => {
             e.stopPropagation();
-            const newIndex = currentImageIndex + 1;
-            setMainImage(newIndex < currentProductImages.length ? newIndex : 0);
+            setMainImage((currentImageIndex + 1) % currentProductImages.length)
         });
-
         closeProductModalBtn.addEventListener('click', closeProductModal);
-
-        productModal.addEventListener('click', (e) => {
-            if (e.target === productModal) closeProductModal();
+        productModal.addEventListener('click', e => {
+            if (e.target === productModal) closeProductModal()
         });
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && productModal.classList.contains('active')) closeProductModal();
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && productModal.classList.contains('active')) closeProductModal()
         });
-
-        document.getElementById('productBuyBtn').addEventListener('click', function() {
-            if (currentProductId) {
-                window.location.href = 'vasarlas.php?item_id=' + encodeURIComponent(currentProductId);
-            } else {
-                alert('Hiba: nincs termék kiválasztva.');
-            }
-        });
-
-        function toggleProductMenu(button) {
-            const menu = button.nextElementSibling;
-            menu.classList.toggle('show');
-            document.querySelectorAll('.product-menu-content').forEach(m => {
-                if (m !== menu) m.classList.remove('show');
-            });
-        }
-
-        productMainImage.addEventListener('click', (e) => {
+        productMainImage.addEventListener('click', e => {
             e.stopPropagation();
-            if (productMainImage.src && productMainImage.style.display !== 'none' && !productMainImage.src.includes('svg')) {
+            if (productMainImage.src && productMainImage.style.display !== 'none') {
                 lightboxImage.src = productMainImage.src;
-                lightboxOverlay.classList.add('active');
+                lightboxOverlay.classList.add('active')
             }
         });
-
-        function closeLightbox() {
-            lightboxOverlay.classList.remove('active');
-        }
-
-        lightboxClose.addEventListener('click', closeLightbox);
-
-        lightboxOverlay.addEventListener('click', (e) => {
-            if (e.target === lightboxOverlay) closeLightbox();
+        document.getElementById('lightboxClose').addEventListener('click', () => lightboxOverlay.classList.remove('active'));
+        lightboxOverlay.addEventListener('click', e => {
+            if (e.target === lightboxOverlay) lightboxOverlay.classList.remove('active')
         });
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && lightboxOverlay.classList.contains('active')) closeLightbox();
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && lightboxOverlay.classList.contains('active')) lightboxOverlay.classList.remove('active')
         });
-
         window.addEventListener('resize', () => {
-            if (productModal.classList.contains('active')) adjustImageContainerHeight();
+            if (productModal.classList.contains('active')) adjustImageContainerHeight()
         });
 
-        // ── TÉMAVÁLTÓ ──
         (function() {
-            const checkbox = document.getElementById('themeSwitchMain');
-            const themeLink = document.getElementById('themeStylesheet');
+            const cb = document.getElementById('themeSwitchMain'),
+                tl = document.getElementById('themeStylesheet');
 
-            function applyTheme(theme) {
-                themeLink.href = theme === 'light' ? 'theme-light.css?v=2' : 'theme-dark.css?v=2';
-                localStorage.setItem('theme', theme);
-                checkbox.checked = (theme === 'light');
-                document.documentElement.setAttribute('data-theme', theme);
-                document.body.setAttribute('data-theme', theme);
-
-                const placeholder = document.getElementById('productNoImagePlaceholder');
-                if (placeholder) {
-                    placeholder.style.color = theme === 'light' ? '#7a9200' : '#ff8c00';
-                }
-
-                if (productModal && productModal.classList.contains('active') && currentProductImages && currentProductImages.length > 0) {
-                    if (productMainImage && currentProductImages[currentImageIndex]) {
-                        productMainImage.src = currentProductImages[currentImageIndex];
-                    }
-                    const thumbnailsContainer = document.getElementById('productThumbnails');
-                    if (thumbnailsContainer) {
-                        const thumbnails = thumbnailsContainer.querySelectorAll('.product-thumbnail');
-                        currentProductImages.forEach((img, index) => {
-                            if (thumbnails[index]) {
-                                const thumbnailImg = thumbnails[index].querySelector('img');
-                                if (thumbnailImg) thumbnailImg.src = img;
-                            }
-                        });
-                    }
-                }
+            function apply(t) {
+                tl.href = t === 'light' ? 'theme-light.css?v=2' : 'theme-dark.css?v=2';
+                localStorage.setItem('theme', t);
+                cb.checked = t === 'light';
+                document.documentElement.setAttribute('data-theme', t);
+                document.body.setAttribute('data-theme', t)
             }
-
-            const saved = localStorage.getItem('theme') || 'dark';
-            applyTheme(saved);
-
-            checkbox.addEventListener('change', function() {
-                applyTheme(this.checked ? 'light' : 'dark');
-            });
+            apply(localStorage.getItem('theme') || 'dark');
+            cb.addEventListener('change', () => apply(cb.checked ? 'light' : 'dark'));
         })();
 
-        // =====================
-        // KERESÉS FUNKCIÓ (AJAX)
-        // =====================
-        const searchInput = document.getElementById('searchInput');
-        const searchResults = document.getElementById('searchResults');
-        let searchTimeout;
+        const si = document.getElementById('searchInput'),
+            sr = document.getElementById('searchResults');
+        let st;
 
         function performSearch() {
-            const query = searchInput.value.trim();
-            if (query.length < 2) {
-                searchResults.classList.remove('show');
-                return;
+            const q = si.value.trim();
+            if (q.length < 2) {
+                sr.classList.remove('show');
+                return
             }
+            fetch(`?search_query=${encodeURIComponent(q)}`).then(r => r.json()).then(d => {
+                if (d.error) return;
+                if (d.length === 0) {
+                    sr.classList.remove('show');
+                    return
+                }
+                const lm = document.body.getAttribute('data-theme') === 'light',
+                    pc = lm ? '#7a9200' : '#ff8c00';
+                const ps = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='${encodeURIComponent(pc)}'%3E%3Cpath d='M4 4h16v2H4V4zm2 4h12v2H6V8zm14-4v16H4V4h16z'/%3E%3C/svg%3E`;
+                sr.innerHTML = d.map(i => `<div class="search-result-item" data-item-id="${i.id}"><img src="${i.primary_image||''}" class="search-result-image" onerror="this.src='${ps}'"><div class="search-result-info"><div class="search-result-title">${escapeHtml(i.title)}</div><div class="search-result-price">${Number(i.price).toLocaleString('hu-HU')} Ft</div><div class="search-result-seller">${escapeHtml(i.seller_name)}</div></div></div>`).join('');
+                sr.classList.add('show');
+                document.querySelectorAll('.search-result-item').forEach(el => el.addEventListener('click', () => fetchItemDetails(el.dataset.itemId)));
+            });
+        }
+        si.addEventListener('input', () => {
+            clearTimeout(st);
+            st = setTimeout(performSearch, 300)
+        });
+        document.addEventListener('click', e => {
+            if (!si.contains(e.target) && !sr.contains(e.target)) sr.classList.remove('show')
+        });
 
-            fetch(`?search_query=${encodeURIComponent(query)}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        console.error(data.error);
-                        return;
-                    }
-                    if (data.length === 0) {
-                        searchResults.classList.remove('show');
-                        return;
-                    }
-
-                    const isLightMode = document.body.getAttribute('data-theme') === 'light';
-                    const placeholderColor = isLightMode ? '#7a9200' : '#ff8c00';
-                    const placeholderSvg = `data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22${encodeURIComponent(placeholderColor)}%22%3E%3Cpath%20d%3D%22M4%204h16v2H4V4zm2%204h12v2H6V8zm14-4v16H4V4h16z%22%2F%3E%3C%2Fsvg%3E`;
-
-                    searchResults.innerHTML = data.map(item => `
-                        <div class="search-result-item" data-item-id="${item.id}">
-                            <img src="${item.primary_image || ''}" class="search-result-image" onerror="this.src='${placeholderSvg}'">
-                            <div class="search-result-info">
-                                <div class="search-result-title">${escapeHtml(item.title)}</div>
-                                <div class="search-result-price">${Number(item.price).toLocaleString('hu-HU')} Ft</div>
-                                <div class="search-result-seller">${escapeHtml(item.seller_name)}</div>
-                            </div>
-                        </div>
-                    `).join('');
-
-                    searchResults.classList.add('show');
-
-                    document.querySelectorAll('.search-result-item').forEach(el => {
-                        el.addEventListener('click', () => {
-                            const itemId = el.dataset.itemId;
-                            fetchItemDetails(itemId);
+        function fetchItemDetails(id) {
+            fetch(`?get_item=${id}`).then(r => r.json()).then(d => {
+                if (d.error) return;
+                currentProductId = d.id;
+                currentProductUserId = d.user_id;
+                currentProductImages = d.images;
+                currentImageIndex = 0;
+                document.getElementById('productTitle').textContent = d.title;
+                document.getElementById('productPrice').textContent = `${Number(d.price).toLocaleString('hu-HU')} Ft`;
+                document.getElementById('productSeller').innerHTML = `Eladó: <strong>${escapeHtml(d.seller_name)}</strong>`;
+                document.getElementById('productSeller').setAttribute('data-seller-id', d.user_id);
+                document.getElementById('productDate').textContent = d.created_at.substring(0, 10);
+                document.getElementById('productDescription').textContent = d.description;
+                const tc = document.getElementById('productThumbnails');
+                tc.innerHTML = '';
+                if (d.images && d.images.length) {
+                    d.images.forEach((img, i) => {
+                        const tn = document.createElement('div');
+                        tn.className = `product-thumbnail ${i===0?'active':''}`;
+                        tn.innerHTML = `<img src="${img}">`;
+                        tn.addEventListener('click', e => {
+                            e.stopPropagation();
+                            setMainImage(i)
                         });
+                        tc.appendChild(tn)
                     });
-                })
-                .catch(err => console.error('Search error:', err));
+                    setMainImage(0)
+                } else setMainImage(-1);
+                document.getElementById('galleryPrev').classList.toggle('hidden', !d.images || d.images.length <= 1);
+                document.getElementById('galleryNext').classList.toggle('hidden', !d.images || d.images.length <= 1);
+                const menu = document.getElementById('productMenuContainer'),
+                    rb = document.getElementById('productReportBtn'),
+                    db = document.getElementById('productDeleteBtn'),
+                    eb = document.getElementById('productEditBtn');
+                const isOwner = parseInt(d.user_id) === <?= $_SESSION['user_id'] ?>,
+                    isAdmin = <?= $isAdmin ? 'true' : 'false' ?>;
+                menu.style.display = 'block';
+                if (!isOwner || isAdmin) {
+                    rb.style.display = 'block';
+                    rb.onclick = () => openReportModal(d.id)
+                } else rb.style.display = 'none';
+                if (isOwner || isAdmin) {
+                    eb.style.display = 'block';
+                    eb.onclick = () => openEditModal(d.id, d.title, d.description, d.price);
+                    db.style.display = 'block';
+                    db.onclick = () => openDeleteConfirmModal(d.id)
+                } else {
+                    eb.style.display = 'none';
+                    db.style.display = 'none'
+                }
+                document.getElementById('productBuyBtn').onclick = () => {
+                    window.location.href = 'vasarlas.php?item_id=' + d.id
+                };
+                openProductModal();
+            });
         }
 
-        searchInput.addEventListener('input', () => {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(performSearch, 300);
-        });
-
-        document.addEventListener('click', (e) => {
-            if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
-                searchResults.classList.remove('show');
-            }
-        });
-
-        function fetchItemDetails(itemId) {
-            fetch(`?get_item=${itemId}`)
-                .then(response => response.json())
-                .then(item => {
-                    if (item.error) {
-                        console.error(item.error);
-                        return;
-                    }
-
-                    currentProductId = item.id;
-                    currentProductUserId = item.user_id;
-                    currentProductImages = item.images;
-                    currentImageIndex = 0;
-
-                    document.getElementById('productTitle').textContent = item.title;
-                    document.getElementById('productPrice').textContent = `${Number(item.price).toLocaleString('hu-HU')} Ft`;
-                    document.getElementById('productSeller').innerHTML = `Eladó: <strong>${escapeHtml(item.seller_name)}</strong>`;
-                    document.getElementById('productSeller').setAttribute('data-seller-id', item.user_id);
-                    document.getElementById('productDate').textContent = item.created_at.substring(0, 10);
-                    document.getElementById('productDescription').textContent = item.description;
-
-                    const thumbnailsContainer = document.getElementById('productThumbnails');
-                    thumbnailsContainer.innerHTML = '';
-
-                    if (item.images && item.images.length > 0) {
-                        item.images.forEach((img, index) => {
-                            const thumbnail = document.createElement('div');
-                            thumbnail.className = `product-thumbnail ${index === 0 ? 'active' : ''}`;
-                            thumbnail.innerHTML = `<img src="${img}" alt="Thumbnail ${index+1}">`;
-                            thumbnail.addEventListener('click', (e) => {
-                                e.stopPropagation();
-                                setMainImage(index);
-                            });
-                            thumbnailsContainer.appendChild(thumbnail);
-                        });
-                        setMainImage(0);
-                    } else {
-                        setMainImage(-1);
-                    }
-
-                    const prevBtn = document.getElementById('galleryPrev');
-                    const nextBtn = document.getElementById('galleryNext');
-                    prevBtn.classList.toggle('hidden', !item.images || item.images.length <= 1);
-                    nextBtn.classList.toggle('hidden', !item.images || item.images.length <= 1);
-
-                    const menuContainer = document.getElementById('productMenuContainer');
-                    const reportBtn = document.getElementById('productReportBtn');
-                    const deleteBtn = document.getElementById('productDeleteBtn');
-                    const editBtn = document.getElementById('productEditBtn');
-                    const isOwner = (parseInt(item.user_id) === <?php echo $_SESSION['user_id']; ?>);
-                    const isAdmin = <?php echo $isAdmin ? 'true' : 'false'; ?>;
-
-                    menuContainer.style.display = 'block';
-
-                    // Report: Do NOT close product modal
-                    if (!isOwner || isAdmin) {
-                        reportBtn.style.display = 'block';
-                        reportBtn.onclick = () => {
-                            openReportModal(item.id);
-                        };
-                    } else {
-                        reportBtn.style.display = 'none';
-                    }
-
-                    // Edit: Do NOT close product modal
-                    if (isOwner || isAdmin) {
-                        editBtn.style.display = 'block';
-                        editBtn.onclick = () => {
-                            openEditModal(item.id, item.title, item.description, item.price);
-                        };
-                        deleteBtn.style.display = 'block';
-                        // Use delete confirm modal instead of confirm()
-                        deleteBtn.onclick = () => {
-                            openDeleteConfirmModal(item.id);
-                        };
-                    } else {
-                        editBtn.style.display = 'none';
-                        deleteBtn.style.display = 'none';
-                    }
-
-                    // Vásárlás gomb frissítése
-                    document.getElementById('productBuyBtn').onclick = function() {
-                        window.location.href = 'vasarlas.php?item_id=' + encodeURIComponent(item.id);
-                    };
-
-                    openProductModal();
-                })
-                .catch(err => console.error('Error fetching item details:', err));
+        function toggleProductMenu(btn) {
+            const m = btn.nextElementSibling;
+            m.classList.toggle('show');
+            document.querySelectorAll('.product-menu-content').forEach(x => {
+                if (x !== m) x.classList.remove('show')
+            })
         }
 
-        // =====================
-        // EDIT MODAL
-        // =====================
         const editModal = document.getElementById('editModal');
 
-        function openEditModal(itemId, title, description, price) {
-            document.getElementById('editItemId').value = itemId;
+        function openEditModal(id, title, desc, price) {
+            document.getElementById('editItemId').value = id;
             document.getElementById('edit_title').value = title;
-            document.getElementById('edit_description').value = description;
+            document.getElementById('edit_description').value = desc;
             document.getElementById('edit_price').value = parseFloat(price) || price;
             editModal.classList.add('show');
-            document.body.style.overflow = 'hidden';
+            document.body.style.overflow = 'hidden'
         }
 
         function closeEditModal() {
             editModal.classList.remove('show');
-            document.body.style.overflow = '';
+            document.body.style.overflow = ''
         }
-
-        editModal.addEventListener('click', function(e) {
-            if (e.target === editModal) closeEditModal();
+        editModal.addEventListener('click', e => {
+            if (e.target === editModal) closeEditModal()
+        });
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && editModal.classList.contains('show')) closeEditModal()
         });
 
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape' && editModal.classList.contains('show')) closeEditModal();
-        });
-
-        function escapeHtml(str) {
-            if (!str) return '';
-            return str.replace(/[&<>]/g, function(m) {
-                if (m === '&') return '&amp;';
-                if (m === '<') return '&lt;';
-                if (m === '>') return '&gt;';
-                return m;
-            });
+        function escapeHtml(s) {
+            return s ? s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : ''
         }
 
-        // =============================================
-        // SELLER PROFILE POPUP
-        // =============================================
-        const sellerOverlay = document.getElementById('sellerPopupOverlay');
-        const sellerContent = document.getElementById('sellerPopupContent');
-        const sellerCloseBtn = document.getElementById('sellerPopupClose');
+        const sellerOverlay = document.getElementById('sellerPopupOverlay'),
+            sellerContent = document.getElementById('sellerPopupContent');
 
-        function openSellerPopup(sellerId) {
-            sellerContent.innerHTML = '<div class="seller-popup-loading unselectable">⏳ Betöltés...</div>';
+        function openSellerPopup(sid) {
+            sellerContent.innerHTML = '<div class="seller-popup-loading">⏳ Betöltés...</div>';
             sellerOverlay.style.display = 'flex';
             sellerOverlay.offsetHeight;
             sellerOverlay.classList.add('active');
             document.body.style.overflow = 'hidden';
-
-            fetch(`?get_seller=${encodeURIComponent(sellerId)}`)
-                .then(r => r.json())
-                .then(data => {
-                    if (data.error) {
-                        sellerContent.innerHTML = `<p style="color:red;text-align:center;padding:2rem;" class="unselectable">${escapeHtml(data.error)}</p>`;
-                        return;
-                    }
-
-                    const currentUserId = <?php echo (int)$_SESSION['user_id']; ?>;
-                    const memberSince = data.created_at ? data.created_at.substring(0, 10) : '—';
-                    const adminBadge = parseInt(data.is_admin) ? ' <span class="admin-badge unselectable">Admin</span>' : '';
-                    const initial = data.username ? data.username.charAt(0).toUpperCase() : '?';
-
-                    // Update topbar title
-                    document.querySelector('.seller-popup-topbar-title').textContent = '👤 ' + data.username;
-
-                    // Avatar: profilkép vagy kezdőbetű
-                    let avatarHtml;
-                    if (data.profile_picture && data.profile_picture.trim() !== '') {
-                        avatarHtml = `<img src="${escapeHtml(data.profile_picture)}" class="seller-popup-avatar-img" alt="${escapeHtml(data.username)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
-                    } else {
-                        avatarHtml = `<div class="seller-popup-avatar unselectable">${initial}</div>`;
-                    }
-
-                    let itemsHtml = '';
-                    if (data.latest_items && data.latest_items.length > 0) {
-                        itemsHtml = `<div class="seller-popup-items-title unselectable">Legutóbbi hirdetések</div>
-                        <div class="seller-popup-items-grid">`;
-                        data.latest_items.forEach(item => {
-                            const imgHtml = item.thumb ?
-                                `<img src="${escapeHtml(item.thumb)}" alt="${escapeHtml(item.title)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><div class="seller-item-thumb-placeholder unselectable" style="display:none;">📷</div>` :
-                                `<div class="seller-item-thumb-placeholder unselectable">📷</div>`;
-                            itemsHtml += `
-                                <div class="seller-item-thumb" onclick="closeSellerPopup(); fetchItemDetails('${escapeHtml(item.id)}');">
-                                    ${imgHtml}
-                                    <div class="seller-item-info">
-                                        <div class="seller-item-title unselectable">${escapeHtml(item.title)}</div>
-                                        <div class="seller-item-price unselectable">${Number(item.price).toLocaleString('hu-HU')} Ft</div>
-                                    </div>
-                                </div>`;
-                        });
-                        itemsHtml += '</div>';
-                    }
-
-                    const msgBtn = (parseInt(sellerId) !== currentUserId) ?
-                        `<a href="uzenetek.php?with=${encodeURIComponent(sellerId)}" class="seller-popup-msg-btn unselectable">💬 Üzenet küldése</a>` :
-                        `<div style="text-align:center;color:rgba(255,255,255,0.3);font-size:0.85rem;padding:1rem 0;" class="unselectable">Ez a saját profilod</div>`;
-
-                    sellerContent.innerHTML = `
-                        <div class="seller-popup-avatar unselectable" style="display: flex; align-items: center; justify-content: center;">
-                            ${avatarHtml}
-                        </div>
-                        <div class="seller-popup-name unselectable">${escapeHtml(data.username)}${adminBadge}</div>
-                        <div class="seller-popup-meta unselectable">Tag azóta: ${memberSince}</div>
-                        <div class="seller-popup-stats">
-                            <div class="seller-stat unselectable">
-                                <div class="seller-stat-value unselectable">${data.item_count}</div>
-                                <div class="seller-stat-label unselectable">Hirdetés</div>
-                            </div>
-                        </div>
-                        ${itemsHtml}
-                        ${msgBtn}
-                    `;
-                })
-                .catch(() => {
-                    sellerContent.innerHTML = '<p style="color:red;text-align:center;padding:2rem;" class="unselectable">Hálózati hiba történt.</p>';
-                });
+            fetch(`?get_seller=${sid}`).then(r => r.json()).then(d => {
+                if (d.error) {
+                    sellerContent.innerHTML = `<p style="color:red;text-align:center;padding:2rem">${escapeHtml(d.error)}</p>`;
+                    return
+                }
+                const currentUserId = <?= (int)$_SESSION['user_id'] ?>,
+                    memberSince = d.created_at ? d.created_at.substring(0, 10) : '—';
+                const adminBadge = parseInt(d.is_admin) ? ' <span class="admin-badge">Admin</span>' : '',
+                    initial = d.username ? d.username.charAt(0).toUpperCase() : '?';
+                let avatarHtml = d.profile_picture && d.profile_picture.trim() ? `<img src="${escapeHtml(d.profile_picture)}" class="seller-popup-avatar-img">` : initial;
+                let itemsHtml = '';
+                if (d.latest_items && d.latest_items.length) {
+                    itemsHtml = `<div class="seller-popup-items-title">Hirdetések</div><div class="seller-popup-items-grid">`;
+                    d.latest_items.forEach(it => {
+                        const imgHtml = it.thumb ? `<img src="${escapeHtml(it.thumb)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="seller-item-thumb-placeholder" style="display:none">📷</div>` : '<div class="seller-item-thumb-placeholder">📷</div>';
+                        itemsHtml += `<div class="seller-item-thumb" onclick="closeSellerPopup();fetchItemDetails('${escapeHtml(it.id)}')">${imgHtml}<div class="seller-item-info"><div class="seller-item-title">${escapeHtml(it.title)}</div><div class="seller-item-price">${Number(it.price).toLocaleString('hu-HU')} Ft</div></div></div>`;
+                    });
+                    itemsHtml += '</div>';
+                }
+                const msgBtn = parseInt(sid) !== currentUserId ? `<a href="uzenetek.php?with=${sid}" class="seller-popup-msg-btn">💬 Üzenet küldése</a>` : `<div style="text-align:center;color:rgba(255,255,255,0.3);padding:1rem 0">Ez a saját profilod</div>`;
+                sellerContent.innerHTML = `<div class="seller-popup-avatar" style="display:flex;align-items:center;justify-content:center">${avatarHtml}</div><div class="seller-popup-name">${escapeHtml(d.username)}${adminBadge}</div><div class="seller-popup-meta">Tag azóta: ${memberSince}</div><div class="seller-popup-stats"><div class="seller-stat"><div class="seller-stat-value">${d.item_count}</div><div class="seller-stat-label">Hirdetés</div></div></div>${itemsHtml}${msgBtn}`;
+            }).catch(() => {
+                sellerContent.innerHTML = '<p style="color:red;text-align:center;padding:2rem">Hálózati hiba</p>'
+            });
         }
 
         function closeSellerPopup() {
             sellerOverlay.classList.remove('active');
             document.body.style.overflow = '';
             setTimeout(() => {
-                sellerOverlay.style.display = 'none';
-            }, 300);
+                sellerOverlay.style.display = 'none'
+            }, 300)
         }
-
-        sellerCloseBtn.addEventListener('click', closeSellerPopup);
+        document.getElementById('sellerPopupClose').addEventListener('click', closeSellerPopup);
         sellerOverlay.addEventListener('click', e => {
-            if (e.target === sellerOverlay) closeSellerPopup();
+            if (e.target === sellerOverlay) closeSellerPopup()
         });
         document.addEventListener('keydown', e => {
-            if (e.key === 'Escape' && sellerOverlay.classList.contains('active')) closeSellerPopup();
+            if (e.key === 'Escape' && sellerOverlay.classList.contains('active')) closeSellerPopup()
         });
-
-        // Make productSeller in product modal clickable
         document.getElementById('productSeller').addEventListener('click', function() {
-            const sid = this.getAttribute('data-seller-id');
-            if (sid) openSellerPopup(sid);
+            const s = this.getAttribute('data-seller-id');
+            if (s) openSellerPopup(s)
         });
 
-        // =====================
-        // FIÓK DROPDOWN KATTINTÁSRA
-        // =====================
-        const accountMenuBtn = document.getElementById('accountMenuBtn');
-        const accountDropdown = document.getElementById('accountDropdown');
+        const amb = document.getElementById('accountMenuBtn'),
+            ad = document.getElementById('accountDropdown');
 
         function closeDropdown() {
-            accountDropdown.classList.remove('show');
+            ad.classList.remove('show')
         }
-
-        function toggleDropdown(e) {
+        amb.addEventListener('click', e => {
             e.stopPropagation();
-            accountDropdown.classList.toggle('show');
-        }
+            ad.classList.toggle('show')
+        });
+        ad.addEventListener('click', e => e.stopPropagation());
+        document.addEventListener('click', closeDropdown);
 
-        if (accountMenuBtn && accountDropdown) {
-            accountMenuBtn.addEventListener('click', toggleDropdown);
-            accountDropdown.addEventListener('click', (e) => e.stopPropagation());
-            document.addEventListener('click', closeDropdown);
-        }
-
-        // =====================
-        // UNREAD MESSAGES POLLING (realtime badge frissítés)
-        // =====================
-        let lastUnreadCount = <?php echo $unreadMsgCount; ?>;
+        let lastUnreadCount = <?= $unreadMsgCount ?>;
         const msgBadge = document.getElementById('floatingMessagesBadge');
-        const msgButton = document.querySelector('.floating-messages-btn');
-
-        // Toast értesítés (ha még nincs ilyen elem, létrehozzuk)
-        let toastMsgElement = document.getElementById('messageToast');
-        if (!toastMsgElement) {
-            toastMsgElement = document.createElement('div');
-            toastMsgElement.id = 'messageToast';
-            toastMsgElement.style.cssText = `
-                position: fixed;
-                bottom: 100px;
-                right: 30px;
-                z-index: 9999;
-                background: var(--orange-bright);
-                color: #000;
-                padding: 12px 20px;
-                border-radius: 50px;
-                box-shadow: 0 8px 25px rgba(0,0,0,0.5);
-                font-weight: bold;
-                cursor: pointer;
-                transition: all 0.3s ease;
-                opacity: 0;
-                transform: translateY(20px);
-                pointer-events: none;
-            `;
-            document.body.appendChild(toastMsgElement);
-
-            // Kattintásra ugorjon az üzenetek oldalra
-            toastMsgElement.addEventListener('click', () => {
-                window.location.href = 'uzenetek.php';
-            });
+        let toastMsg = document.getElementById('messageToast');
+        if (!toastMsg) {
+            toastMsg = document.createElement('div');
+            toastMsg.id = 'messageToast';
+            toastMsg.style.cssText = 'position:fixed;bottom:100px;right:30px;z-index:9999;background:var(--orange-bright);color:#000;padding:12px 20px;border-radius:50px;box-shadow:0 8px 25px rgba(0,0,0,0.5);font-weight:bold;cursor:pointer;transition:all 0.3s;opacity:0;transform:translateY(20px);pointer-events:none';
+            document.body.appendChild(toastMsg);
+            toastMsg.addEventListener('click', () => {
+                window.location.href = 'uzenetek.php'
+            })
         }
 
-        function showMessageToast(sender, preview) {
-            toastMsgElement.textContent = `💬 Új üzenet: ${sender} - "${preview}"`;
-            toastMsgElement.style.opacity = '1';
-            toastMsgElement.style.transform = 'translateY(0)';
-            toastMsgElement.style.pointerEvents = 'auto';
-
-            // 5 másodperc után eltűnik
+        function showToast(s, p) {
+            toastMsg.textContent = `💬 Új üzenet: ${s} - "${p}"`;
+            toastMsg.style.opacity = '1';
+            toastMsg.style.transform = 'translateY(0)';
+            toastMsg.style.pointerEvents = 'auto';
             setTimeout(() => {
-                toastMsgElement.style.opacity = '0';
-                toastMsgElement.style.transform = 'translateY(20px)';
-                toastMsgElement.style.pointerEvents = 'none';
-            }, 5000);
+                toastMsg.style.opacity = '0';
+                toastMsg.style.transform = 'translateY(20px)';
+                toastMsg.style.pointerEvents = 'none'
+            }, 5000)
         }
-
-        async function checkUnreadMessages() {
+        async function checkUnread() {
             try {
-                const response = await fetch('?get_unread_count=1');
-                const data = await response.json();
-
-                if (data.error) {
-                    console.error('Unread count error:', data.error);
-                    return;
-                }
-
-                const newCount = data.unread_count;
-
-                // Badge frissítése
-                if (msgBadge) {
-                    if (newCount > 0) {
-                        msgBadge.textContent = newCount > 9 ? '9+' : newCount;
-                        msgBadge.style.display = 'flex';
-                    } else {
-                        msgBadge.style.display = 'none';
-                    }
-                }
-
-                // Ha nőtt az olvasatlan szám és van új üzenet adat, toast megjelenítése
-                if (newCount > lastUnreadCount && data.last_message) {
-                    showMessageToast(data.last_message.sender, data.last_message.preview);
-                }
-
-                lastUnreadCount = newCount;
-            } catch (err) {
-                console.error('Polling hiba:', err);
-            }
+                const r = await fetch('?get_unread_count=1'),
+                    d = await r.json();
+                if (d.error) return;
+                if (d.unread_count > 0) {
+                    msgBadge.textContent = d.unread_count > 9 ? '9+' : d.unread_count;
+                    msgBadge.style.display = 'flex'
+                } else msgBadge.style.display = 'none';
+                if (d.unread_count > lastUnreadCount && d.last_message) showToast(d.last_message.sender, d.last_message.preview);
+                lastUnreadCount = d.unread_count
+            } catch (e) {}
         }
-
-        // Polling indítása (15 másodpercenként, hogy ne terhelje túl a szervert)
-        let unreadPollInterval = setInterval(checkUnreadMessages, 15000);
-
-        // Ha az oldal inaktívvá válik, lassíthatjuk a pollingot
+        let upi = setInterval(checkUnread, 15000);
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
-                clearInterval(unreadPollInterval);
-                unreadPollInterval = setInterval(checkUnreadMessages, 60000); // 1 perc
+                clearInterval(upi);
+                upi = setInterval(checkUnread, 60000)
             } else {
-                clearInterval(unreadPollInterval);
-                unreadPollInterval = setInterval(checkUnreadMessages, 15000);
-                // Visszatéréskor azonnal ellenőrizzük
-                checkUnreadMessages();
+                clearInterval(upi);
+                upi = setInterval(checkUnread, 15000);
+                checkUnread()
             }
         });
-
-        // Azonnali első ellenőrzés (ha esetleg közben érkezett üzenet)
-        checkUnreadMessages();
+        checkUnread();
     </script>
 </body>
 

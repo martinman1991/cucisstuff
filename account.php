@@ -332,7 +332,7 @@ try {
     }
 
     // ------------------------------------------------------------
-    // TERMÉK MÓDOSÍTÁS / TÖRLÉS (POST) - a meglévő logika
+    // TERMÉK MÓDOSÍTÁS / TÖRLÉS (POST)
     // ------------------------------------------------------------
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_item'])) {
         $itemId  = $_POST['item_id'] ?? '';
@@ -355,6 +355,47 @@ try {
             }
         } else {
             $error = "Érvénytelen adatok vagy nincs jogosultság!";
+        }
+    }
+
+    // Termék törlése
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_item'])) {
+        $itemId = $_POST['item_id'] ?? '';
+        $ownerCheck = $conn->prepare("SELECT user_id FROM items WHERE id = ?");
+        $ownerCheck->execute([$itemId]);
+        $ownerRow = $ownerCheck->fetch(PDO::FETCH_ASSOC);
+        if ($itemId && $ownerRow && $ownerRow['user_id'] == $userId) {
+            // Töröljük a képeket is
+            $imgStmt = $conn->prepare("SELECT image_path FROM item_images WHERE item_id = ?");
+            $imgStmt->execute([$itemId]);
+            while ($imgPath = $imgStmt->fetchColumn()) {
+                if (file_exists($imgPath)) unlink($imgPath);
+            }
+            $conn->prepare("DELETE FROM item_images WHERE item_id = ?")->execute([$itemId]);
+            $conn->prepare("DELETE FROM items WHERE id = ?")->execute([$itemId]);
+            // Könyvtár törlése
+            $dir = 'uploads/' . $itemId . '/';
+            if (is_dir($dir)) {
+                array_map('unlink', glob($dir . '*'));
+                rmdir($dir);
+            }
+            header("Location: account.php?deleted=1");
+            exit();
+        }
+    }
+
+    // Termék jelentés (report)
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['report_item'])) {
+        $itemId = $_POST['item_id'] ?? '';
+        $reason = trim($_POST['report_reason'] ?? '');
+        if ($itemId && $reason) {
+            try {
+                $ins = $conn->prepare("INSERT INTO reports (item_id, user_id, reason) VALUES (?, ?, ?)");
+                $ins->execute([$itemId, $userId, $reason]);
+                $reportSuccess = true;
+            } catch (Exception $e) {
+                $reportError = 'Hiba a bejelentés során.';
+            }
         }
     }
 
@@ -397,6 +438,9 @@ try {
     }
 
     $editSuccess = isset($_GET['edit']) && $_GET['edit'] === 'success';
+    $deleteSuccess = isset($_GET['deleted']) && $_GET['deleted'] == '1';
+    $reportSuccess = isset($reportSuccess) && $reportSuccess;
+    $reportError = $reportError ?? '';
 } catch (PDOException $e) {
     die("Adatbázis hiba: " . $e->getMessage());
 }
@@ -481,7 +525,13 @@ try {
 
         .back-btn:hover {
             background: var(--orange-bright);
-            color: #FFF3E0;
+            color: #000 !important;
+            box-shadow: 0 0 15px var(--orange-glow);
+        }
+
+        body[data-theme="light"] .back-btn:hover {
+            background: var(--orange-bright);
+            color: #1a1f00 !important;
         }
 
         .admin-btn {
@@ -840,6 +890,7 @@ try {
             border-radius: 14px;
             padding: 1rem;
             transition: 0.3s;
+            overflow: hidden;
         }
 
         .order-card:hover {
@@ -913,6 +964,7 @@ try {
 
         .order-card .order-meta strong:hover {
             text-decoration: underline;
+            color: #fff;
         }
 
         .order-card .order-details {
@@ -946,6 +998,7 @@ try {
             font-weight: 700;
             letter-spacing: 0.5px;
             text-transform: uppercase;
+            white-space: nowrap;
         }
 
         .status-pending {
@@ -1145,7 +1198,7 @@ try {
             display: none;
             align-items: center;
             justify-content: center;
-            z-index: 6000;
+            z-index: 6500;
             opacity: 0;
             transition: opacity 0.25s ease;
         }
@@ -1404,6 +1457,22 @@ try {
         .product-menu-item.delete:hover {
             background: rgba(255, 0, 0, 0.2);
             color: #ff0000;
+        }
+
+        /* Light mode product menu */
+        body[data-theme="light"] .product-menu-content {
+            background: rgba(248, 252, 230, 0.98) !important;
+            border: 1px solid #B0CB1F !important;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1), 0 0 20px rgba(176, 203, 31, 0.3) !important;
+        }
+
+        body[data-theme="light"] .product-menu-item {
+            color: #1a1f00 !important;
+        }
+
+        body[data-theme="light"] .product-menu-item:hover {
+            background: rgba(176, 203, 31, 0.2) !important;
+            color: #7a9200 !important;
         }
 
         .product-gallery {
@@ -1796,8 +1865,8 @@ try {
         .seller-popup-meta {
             text-align: center;
             font-size: 0.88rem;
-            color: rgba(255, 255, 255, 0.4);
             margin-bottom: 2rem;
+            color: rgba(255, 255, 255, 0.4);
         }
 
         .seller-popup-stats {
@@ -1823,8 +1892,8 @@ try {
 
         .seller-stat-label {
             font-size: 0.78rem;
-            color: rgba(255, 255, 255, 0.4);
             margin-top: 3px;
+            color: rgba(255, 255, 255, 0.4);
         }
 
         .seller-popup-items-title {
@@ -1923,6 +1992,47 @@ try {
             padding: 4rem 2rem;
             color: rgba(255, 255, 255, 0.3);
             font-size: 1rem;
+        }
+
+        /* Light mode seller popup */
+        body[data-theme="light"] .seller-popup-avatar {
+            background: linear-gradient(135deg, #B0CB1F, #8aA000) !important;
+            box-shadow: 0 0 40px rgba(176, 203, 31, 0.3) !important;
+        }
+
+        body[data-theme="light"] .seller-popup-name {
+            color: #7a9200 !important;
+        }
+
+        body[data-theme="light"] .seller-popup-meta,
+        body[data-theme="light"] .seller-stat-label,
+        body[data-theme="light"] .seller-popup-items-title,
+        body[data-theme="light"] .seller-item-title {
+            color: #2a3a00 !important;
+            opacity: 1;
+        }
+
+        body[data-theme="light"] .seller-item-price {
+            color: #7a9200 !important;
+        }
+
+        body[data-theme="light"] .seller-stat-value {
+            color: #7a9200 !important;
+        }
+
+        body[data-theme="light"] .seller-popup-topbar-title {
+            color: #7a9200 !important;
+        }
+
+        body[data-theme="light"] .seller-popup-close {
+            background: rgba(176, 203, 31, 0.2);
+            border-color: #B0CB1F;
+            color: #7a9200;
+        }
+
+        body[data-theme="light"] .seller-popup-close:hover {
+            background: #B0CB1F;
+            color: #1a1f00;
         }
 
         .unselectable {
@@ -2328,6 +2438,23 @@ try {
         </div>
     </div>
 
+    <!-- Report Modal (termék bejelentés) -->
+    <div class="modal-overlay" id="reportItemModal">
+        <div class="modal-card" style="max-width: 500px;">
+            <button class="modal-close unselectable" onclick="closeReportModal()">✕</button>
+            <h3 class="modal-title unselectable">⚠️ Termék bejelentése</h3>
+            <form method="post" id="reportForm">
+                <input type="hidden" name="item_id" id="reportItemId">
+                <input type="hidden" name="report_item" value="1">
+                <div class="form-group">
+                    <label>Indoklás</label>
+                    <textarea name="report_reason" rows="4" required placeholder="Kérjük, részletezd a problémát..."></textarea>
+                </div>
+                <button type="submit" class="submit-btn">Bejelentés küldése</button>
+            </form>
+        </div>
+    </div>
+
     <script>
         // Téma kezelés
         const themeLink = document.getElementById('themeStylesheet');
@@ -2462,10 +2589,9 @@ try {
                     m.classList.remove('active');
                     document.body.style.overflow = '';
                 });
-                // Close product modal if open
                 if (productModal.classList.contains('active')) closeProductModal();
-                // Close seller popup if open
                 if (sellerOverlay.classList.contains('active')) closeSellerPopup();
+                if (editItemModal.classList.contains('show')) closeEditItemModal();
             }
         });
 
@@ -2635,6 +2761,8 @@ try {
         const editTitle = document.getElementById('edit_title');
         const editDesc = document.getElementById('edit_description');
         const editPrice = document.getElementById('edit_price');
+        const reportItemModal = document.getElementById('reportItemModal');
+        const reportItemId = document.getElementById('reportItemId');
 
         function setMainImage(index) {
             if (index >= 0 && index < currentProductImages.length && currentProductImages[index]) {
@@ -2670,15 +2798,32 @@ try {
             editDesc.value = description;
             editPrice.value = parseFloat(price) || price;
             editItemModal.classList.add('show');
+            // Ne zárjuk be a termékmodált, csak tegyük az edit modal-t fölé
             document.body.style.overflow = 'hidden';
         }
 
         function closeEditItemModal() {
             editItemModal.classList.remove('show');
-            document.body.style.overflow = '';
+            document.body.style.overflow = productModal.classList.contains('active') ? 'hidden' : '';
         }
+
+        function openReportModal(itemId) {
+            reportItemId.value = itemId;
+            reportItemModal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeReportModal() {
+            reportItemModal.classList.remove('active');
+            document.body.style.overflow = productModal.classList.contains('active') ? 'hidden' : '';
+        }
+
         editItemModal.addEventListener('click', function(e) {
             if (e.target === editItemModal) closeEditItemModal();
+        });
+
+        reportItemModal.addEventListener('click', function(e) {
+            if (e.target === reportItemModal) closeReportModal();
         });
 
         function fetchItemDetails(itemId) {
@@ -2722,7 +2867,7 @@ try {
                 const buyBtn = document.getElementById('productBuyBtn');
                 const isOwner = (parseInt(item.user_id) === <?php echo (int)$_SESSION['user_id']; ?>);
 
-                // Minden gombot alapból elrejtünk
+                // Alapértelmezetten mindent elrejtünk
                 reportBtn.style.display = 'none';
                 editBtn.style.display = 'none';
                 deleteBtn.style.display = 'none';
@@ -2734,7 +2879,6 @@ try {
                     editBtn.style.display = 'block';
                     deleteBtn.style.display = 'block';
                     hasVisibleMenu = true;
-                    // Saját termék – nincs vásárlás gomb
                     buyBtn.style.display = 'none';
                 } else {
                     reportBtn.style.display = 'block';
@@ -2742,13 +2886,12 @@ try {
                     buyBtn.style.display = 'flex';
                 }
 
-                // Csak akkor mutatjuk a menü konténert, ha van benne gomb
                 menuContainer.style.display = hasVisibleMenu ? 'block' : 'none';
 
-                // Események beállítása
+                // Események
                 editBtn.onclick = () => {
-                    closeProductModal();
                     openEditItemModal(item.id, item.title, item.description, item.price);
+                    // A termékmodál marad nyitva a háttérben
                 };
                 deleteBtn.onclick = () => {
                     if (confirm('Biztosan törlöd ezt a terméket?')) {
@@ -2760,11 +2903,9 @@ try {
                     }
                 };
                 reportBtn.onclick = () => {
-                    // Ide jöhet a jelentés logikája, ha szükséges
-                    alert('Jelentés funkció itt nem implementált.');
+                    openReportModal(item.id);
                 };
 
-                // Vásárlás gomb: csak akkor működik, ha nem saját
                 if (!isOwner) {
                     buyBtn.onclick = () => {
                         window.location.href = 'vasarlas.php?item_id=' + encodeURIComponent(item.id);
@@ -2805,10 +2946,8 @@ try {
                     const adminBadge = parseInt(data.is_admin) ? ' <span class="admin-badge unselectable">Admin</span>' : '';
                     const initial = data.username ? data.username.charAt(0).toUpperCase() : '?';
 
-                    // Update topbar title
                     document.querySelector('.seller-popup-topbar-title').textContent = '👤 ' + data.username;
 
-                    // Avatar: profilkép vagy kezdőbetű
                     let avatarHtml;
                     if (data.profile_picture && data.profile_picture.trim() !== '') {
                         avatarHtml = `<img src="${escapeHtml(data.profile_picture)}" class="seller-popup-avatar-img" alt="${escapeHtml(data.username)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
@@ -2874,7 +3013,7 @@ try {
             if (e.target === sellerOverlay) closeSellerPopup();
         });
 
-        // Product seller kattintás kezelője
+        // Product seller kattintás
         document.getElementById('productSeller').addEventListener('click', function() {
             const sellerId = this.getAttribute('data-seller-id');
             if (sellerId) openSellerPopup(sellerId);
@@ -2923,7 +3062,6 @@ try {
             });
         });
 
-        // Rendelési tételek nevére kattintva termék modal megnyitása
         document.querySelectorAll('.order-title').forEach(el => {
             el.addEventListener('click', function(e) {
                 e.stopPropagation();
