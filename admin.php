@@ -906,7 +906,7 @@ function pgLink($v, $p)
         /* ═══════════ VIZSGALOCK PANEL (MINDIG PIROS) ═══════════ */
         .vizsgalock-panel {
             border: 1px solid #ff3333 !important;
-            background: var(--c-panel) !important;
+            background: #2a0000 !important;
             overflow-x: auto;
             margin-bottom: 16px;
             position: relative;
