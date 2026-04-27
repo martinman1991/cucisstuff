@@ -167,19 +167,45 @@ try {
             $d = trim($_POST['item_description'] ?? '');
             $p = trim($_POST['item_price'] ?? '');
             $sold = isset($_POST['item_sold']) ? 1 : 0;
+
             if (!$t || !$d || !$p) {
                 $error = 'Minden mező kötelező!';
             } elseif (!is_numeric($p) || $p < 0) {
                 $error = 'Az ár csak pozitív szám lehet!';
             } else {
-                $conn->prepare("UPDATE items SET title=?,description=?,price=?,sold=? WHERE id=?")->execute([$t, $d, (float)$p, $sold, $_POST['item_id']]);
+                // Lekérjük a régi sold értéket az adatbázisból
+                $oldSoldStmt = $conn->prepare("SELECT sold FROM items WHERE id = ?");
+                $oldSoldStmt->execute([$_POST['item_id']]);
+                $oldSold = (int)$oldSoldStmt->fetchColumn();
+
+                // Frissítjük a termék adatait
+                $conn->prepare("UPDATE items SET title=?, description=?, price=?, sold=? WHERE id=?")
+                     ->execute([$t, $d, (float)$p, $sold, $_POST['item_id']]);
+
+                // Ha a státusz „elkelt”-ről „nem elkelt”-re változott, töröljük a kapcsolódó rendeléseket
+                if ($oldSold === 1 && $sold === 0) {
+                    $conn->prepare("DELETE FROM orders WHERE item_id = ?")
+                         ->execute([$_POST['item_id']]);
+                }
+
                 $message = "Termék módosítva.";
+
+                // AJAX válasz (a modális szerkesztőhöz)
                 if (isset($_POST['ajax'])) {
                     header('Content-Type: application/json');
-                    echo json_encode(['success' => true, 'title' => $t, 'description' => $d, 'price' => number_format((float)$p, 0, ',', ' ') . ' Ft', 'sold' => (bool)$sold]);
+                    echo json_encode([
+                        'success'     => true,
+                        'title'       => $t,
+                        'description' => $d,
+                        'price'       => number_format((float)$p, 0, ',', ' ') . ' Ft',
+                        'sold'        => (bool)$sold
+                    ]);
                     exit();
                 }
-                header("Location: admin.php?view=items&page=$page" . ($search ? '&search=' . urlencode($search) : ''));
+
+                // Normál űrlapos módosítás után átirányítás
+                header("Location: admin.php?view=items&page=$page"
+                      . ($search ? '&search=' . urlencode($search) : ''));
                 exit();
             }
         }
