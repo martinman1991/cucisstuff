@@ -691,7 +691,7 @@ function pgLink($v, $p)
             color: #ff4444 !important;
         }
 
-        /* ═══════════ VIZSGALOCK - FENYEGETŐ STÍLUS ═══════════ */
+        /* ═══════════ VIZSGALOCK GOMB - FENYEGETŐ STÍLUS ═══════════ */
         .nav-btn.vizsgalock-btn {
             color: #ff3333 !important;
             border-color: #ff3333 !important;
@@ -701,34 +701,42 @@ function pgLink($v, $p)
         }
 
         .nav-btn.vizsgalock-btn:hover {
-            background: rgba(255, 0, 0, 0.2) !important;
+            background: rgba(255, 0, 0, 0.25) !important;
             color: #ff5555 !important;
             border-color: #ff4444 !important;
-            box-shadow: 0 0 20px rgba(255, 0, 0, 0.6), inset 0 0 20px rgba(255, 0, 0, 0.1) !important;
-            text-shadow: 0 0 15px rgba(255, 0, 0, 0.8) !important;
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.7), inset 0 0 20px rgba(255, 0, 0, 0.1) !important;
+            text-shadow: 0 0 15px rgba(255, 50, 50, 0.9) !important;
+            transform: translateY(-1px);
+        }
+
+        .nav-btn.vizsgalock-btn.active {
+            color: #ff0000 !important;
+            background: rgba(255, 0, 0, 0.15) !important;
+            box-shadow: inset 0 -2px 0 #ff0000, 0 0 15px rgba(255, 0, 0, 0.6) !important;
+            text-shadow: 0 0 15px rgba(255, 0, 0, 0.9) !important;
         }
 
         #vizsgalockNavBtn.locked {
             color: #ff0000 !important;
             border-color: #ff0000 !important;
-            background: rgba(255, 0, 0, 0.15) !important;
-            box-shadow: 0 0 15px rgba(255, 0, 0, 0.6), 0 0 30px rgba(255, 0, 0, 0.3) !important;
+            background: rgba(255, 0, 0, 0.2) !important;
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.8), 0 0 40px rgba(255, 0, 0, 0.4), inset 0 0 20px rgba(255, 0, 0, 0.15) !important;
             animation: vlPulseDanger 1.2s infinite;
             text-shadow: 0 0 15px rgba(255, 0, 0, 0.9) !important;
         }
 
         @keyframes vlPulseDanger {
             0%, 100% {
-                box-shadow: 0 0 15px rgba(255, 0, 0, 0.6), 0 0 30px rgba(255, 0, 0, 0.3);
+                box-shadow: 0 0 20px rgba(255, 0, 0, 0.8), 0 0 40px rgba(255, 0, 0, 0.4);
                 text-shadow: 0 0 15px rgba(255, 0, 0, 0.9);
             }
             50% {
-                box-shadow: 0 0 30px rgba(255, 0, 0, 0.9), 0 0 60px rgba(255, 0, 0, 0.5), 0 0 90px rgba(255, 0, 0, 0.3);
+                box-shadow: 0 0 35px rgba(255, 0, 0, 1), 0 0 70px rgba(255, 0, 0, 0.6), 0 0 100px rgba(255, 0, 0, 0.4);
                 text-shadow: 0 0 25px rgba(255, 0, 0, 1), 0 0 50px rgba(255, 0, 0, 0.8);
             }
         }
 
-        /* Light mode - VIZSGALOCK piros marad, mert ez veszélyjelzés */
+        /* Light mode - VIZSGALOCK piros marad */
         html.light-mode .nav-btn.vizsgalock-btn {
             color: #dd0000 !important;
             border-color: #dd0000 !important;
@@ -737,17 +745,23 @@ function pgLink($v, $p)
         }
 
         html.light-mode .nav-btn.vizsgalock-btn:hover {
-            background: rgba(220, 0, 0, 0.15) !important;
+            background: rgba(220, 0, 0, 0.2) !important;
             color: #ff2222 !important;
             border-color: #ee1111 !important;
-            box-shadow: 0 0 18px rgba(220, 0, 0, 0.5), inset 0 0 15px rgba(220, 0, 0, 0.08) !important;
+            box-shadow: 0 0 18px rgba(220, 0, 0, 0.6), inset 0 0 15px rgba(220, 0, 0, 0.08) !important;
+        }
+
+        html.light-mode .nav-btn.vizsgalock-btn.active {
+            color: #cc0000 !important;
+            background: rgba(200, 0, 0, 0.12) !important;
+            box-shadow: inset 0 -2px 0 #cc0000, 0 0 12px rgba(200, 0, 0, 0.5) !important;
         }
 
         html.light-mode #vizsgalockNavBtn.locked {
             color: #cc0000 !important;
             border-color: #cc0000 !important;
-            background: rgba(200, 0, 0, 0.12) !important;
-            box-shadow: 0 0 12px rgba(200, 0, 0, 0.5), 0 0 25px rgba(200, 0, 0, 0.25) !important;
+            background: rgba(200, 0, 0, 0.15) !important;
+            box-shadow: 0 0 15px rgba(200, 0, 0, 0.6), 0 0 30px rgba(200, 0, 0, 0.3) !important;
             text-shadow: 0 0 12px rgba(200, 0, 0, 0.8) !important;
         }
 
@@ -2380,46 +2394,28 @@ function pgLink($v, $p)
             background: rgba(255, 140, 0, 0.1) !important;
             color: rgba(255, 140, 0, 0.4) !important;
         }
-        
-        /* ═══════════ VIZSGALOCK PANEL ═══════════ */
+
+        /* ═══════════ VIZSGALOCK PANEL (INLINE A TERMINAL-BODY-BAN) ═══════════ */
         .vizsgalock-panel {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 8000;
-            background: #0a0800;
-            border: 2px solid #ffaa00;
+            max-width: 600px;
+            margin: 0 auto;
+            background: var(--c-panel);
+            border: 2px solid #ff3333;
             border-radius: 12px;
             padding: 2rem;
-            min-width: 420px;
-            max-width: 560px;
-            width: 90vw;
-            box-shadow: 0 0 40px rgba(255, 170, 0, 0.35), 0 10px 30px rgba(0,0,0,0.8);
-            display: none;
+            box-shadow: 0 0 30px rgba(255, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.6);
         }
-        .vizsgalock-panel.active {
-            display: block;
-        }
-        .vizsgalock-panel-backdrop {
-            position: fixed;
-            inset: 0;
-            z-index: 7999;
-            background: rgba(0,0,0,0.7);
-            display: none;
-        }
-        .vizsgalock-panel-backdrop.active {
-            display: block;
-        }
+
         .vizsgalock-header {
             font-family: var(--font-vt);
             font-size: 1.6rem;
-            color: #ffaa00;
-            text-shadow: 0 0 12px #ff8800;
+            color: #ff3333;
+            text-shadow: 0 0 12px #ff0000;
             letter-spacing: 4px;
             text-align: center;
             margin-bottom: 1.5rem;
         }
+
         .vizsgalock-toggle-btn {
             display: block;
             width: 100%;
@@ -2435,44 +2431,53 @@ function pgLink($v, $p)
             transition: all 0.2s;
             margin-bottom: 1.5rem;
         }
+
         .vizsgalock-toggle-btn.off {
             color: #888;
             border-color: #444;
         }
+
         .vizsgalock-toggle-btn.off:hover {
-            color: #ffaa00;
-            border-color: #ffaa00;
-            background: rgba(255,170,0,0.07);
-            box-shadow: 0 0 12px rgba(255,170,0,0.3);
+            color: #ff3333;
+            border-color: #ff3333;
+            background: rgba(255, 0, 0, 0.07);
+            box-shadow: 0 0 12px rgba(255, 0, 0, 0.3);
         }
+
         .vizsgalock-toggle-btn.on {
-            color: #ffaa00;
-            border-color: #ffaa00;
-            background: rgba(255,170,0,0.08);
-            box-shadow: 0 0 16px rgba(255,170,0,0.4);
+            color: #ff3333;
+            border-color: #ff3333;
+            background: rgba(255, 0, 0, 0.1);
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
         }
+
         .vizsgalock-toggle-btn.on:hover {
-            color: #ffcc44;
-            border-color: #ffcc44;
-            background: rgba(255,204,68,0.12);
+            color: #ff5555;
+            border-color: #ff5555;
+            background: rgba(255, 0, 0, 0.15);
+            box-shadow: 0 0 30px rgba(255, 0, 0, 0.7);
         }
+
         .vizsgalock-exceptions-section {
             display: none;
             margin-top: 0.5rem;
         }
+
         .vizsgalock-exceptions-section.visible {
             display: block;
         }
+
         .vizsgalock-exceptions-title {
             font-family: var(--font-mono);
             font-size: 0.75rem;
             letter-spacing: 2px;
-            color: #ffaa00;
+            color: #ff6666;
             text-transform: uppercase;
             margin-bottom: 0.7rem;
-            border-bottom: 1px solid rgba(255,170,0,0.25);
+            border-bottom: 1px solid rgba(255, 0, 0, 0.25);
             padding-bottom: 0.4rem;
         }
+
         .vizsgalock-exceptions-table {
             width: 100%;
             border-collapse: collapse;
@@ -2480,22 +2485,26 @@ function pgLink($v, $p)
             font-family: var(--font-mono);
             font-size: 0.8rem;
         }
+
         .vizsgalock-exceptions-table th {
-            color: #ffaa00;
+            color: #ff6666;
             text-align: left;
             padding: 5px 8px;
-            border-bottom: 1px solid rgba(255,170,0,0.2);
+            border-bottom: 1px solid rgba(255, 0, 0, 0.2);
             font-size: 0.72rem;
             letter-spacing: 1px;
         }
+
         .vizsgalock-exceptions-table td {
             padding: 5px 8px;
-            border-bottom: 1px solid rgba(255,170,0,0.1);
-            color: #d0a060;
+            border-bottom: 1px solid rgba(255, 0, 0, 0.1);
+            color: #d0a0a0;
         }
+
         .vizsgalock-exceptions-table tr:last-child td {
             border-bottom: none;
         }
+
         .vizsgalock-exceptions-table .vl-remove-btn {
             background: transparent;
             border: 1px solid #ff4400;
@@ -2507,31 +2516,36 @@ function pgLink($v, $p)
             letter-spacing: 1px;
             transition: all 0.15s;
         }
+
         .vizsgalock-exceptions-table .vl-remove-btn:hover {
-            background: rgba(255,68,0,0.1);
+            background: rgba(255, 68, 0, 0.1);
         }
+
         .vizsgalock-add-row {
             display: flex;
             gap: 0.5rem;
             align-items: center;
         }
+
         .vizsgalock-add-select {
             flex: 1;
-            background: rgba(255,170,0,0.07);
-            border: 1px solid rgba(255,170,0,0.35);
-            color: #d0a060;
+            background: rgba(255, 0, 0, 0.07);
+            border: 1px solid rgba(255, 0, 0, 0.35);
+            color: #d0a0a0;
             font-family: var(--font-mono);
             font-size: 0.8rem;
             padding: 5px 8px;
         }
+
         .vizsgalock-add-select option {
             background: #1a1000;
-            color: #d0a060;
+            color: #d0a0a0;
         }
+
         .vizsgalock-add-btn {
-            background: rgba(255,170,0,0.1);
-            border: 1px solid #ffaa00;
-            color: #ffaa00;
+            background: rgba(255, 0, 0, 0.1);
+            border: 1px solid #ff3333;
+            color: #ff3333;
             font-family: var(--font-mono);
             font-size: 0.8rem;
             padding: 5px 14px;
@@ -2539,36 +2553,39 @@ function pgLink($v, $p)
             letter-spacing: 1px;
             transition: all 0.15s;
         }
+
         .vizsgalock-add-btn:hover {
-            background: rgba(255,170,0,0.2);
+            background: rgba(255, 0, 0, 0.2);
         }
-        .vizsgalock-close-btn {
-            display: block;
-            width: 100%;
-            margin-top: 1.2rem;
-            background: transparent;
-            border: 1px solid rgba(255,170,0,0.35);
-            color: rgba(255,170,0,0.6);
-            font-family: var(--font-mono);
-            font-size: 0.75rem;
-            letter-spacing: 2px;
-            padding: 6px;
-            cursor: pointer;
-            transition: all 0.15s;
-        }
-        .vizsgalock-close-btn:hover {
-            border-color: #ffaa00;
-            color: #ffaa00;
-        }
+
         .vizsgalock-empty {
-            color: rgba(255,170,0,0.4);
+            color: rgba(255, 0, 0, 0.4);
             font-size: 0.8rem;
             font-family: var(--font-mono);
             text-align: center;
             padding: 10px 0;
             letter-spacing: 1px;
         }
+
+        /* Light mode VIZSGALOCK panel */
+        html.light-mode .vizsgalock-panel {
+            background: #3a1a1a;
+            border-color: #cc0000;
+        }
+
+        html.light-mode .vizsgalock-header,
+        html.light-mode .vizsgalock-toggle-btn.on,
+        html.light-mode .vizsgalock-add-btn,
+        html.light-mode .vizsgalock-exceptions-table th {
+            color: #ff4444 !important;
+        }
+
+        html.light-mode .vizsgalock-exceptions-table td,
+        html.light-mode .vizsgalock-add-select {
+            color: #e0b0b0;
+        }
     </style>
+</head>
 
 <body>
     <div class="crt-wrap">
@@ -2605,7 +2622,7 @@ function pgLink($v, $p)
                     <span class="nav-label">RENDELÉSEK</span>
                 </a>
                 <button class="nav-btn purge-btn" id="purgeBtn">⚠ VIZSGAPURGE</button>
-                <button class="nav-btn vizsgalock-btn" id="vizsgalockNavBtn" onclick="toggleVizsgalockPanel()">⚠️ VIZSGALOCK</button>
+                <a href="admin.php?view=vizsgalock" class="nav-btn vizsgalock-btn <?= $view === 'vizsgalock' ? 'active' : '' ?>" id="vizsgalockNavBtn">⚠️ VIZSGALOCK</a>
                 <a href="main.php" class="nav-btn nav-back">← KILÉPÉS</a>
             </nav>
         </div>
@@ -2617,6 +2634,34 @@ function pgLink($v, $p)
             <?php if ($error): ?>
                 <div class="banner banner-err"><?= htmlspecialchars($error) ?></div>
             <?php endif; ?>
+
+            <!-- ════════════ VIZSGALOCK ════════════ -->
+            <?php if ($view === 'vizsgalock'): ?>
+                <div class="vizsgalock-panel" id="vizsgalockPanelInline">
+                    <div class="vizsgalock-header">⚠️ VIZSGALOCK</div>
+                    <button class="vizsgalock-toggle-btn off" id="vizsgalockToggleBtn" onclick="doVizsgalockToggle()">
+                        VIZSGALOCK: OFF
+                    </button>
+                    <div class="vizsgalock-exceptions-section" id="vizsgalockExceptionsSection">
+                        <div class="vizsgalock-exceptions-title">Kivételek</div>
+                        <table class="vizsgalock-exceptions-table">
+                            <thead>
+                                <tr><th>FELHASZNÁLÓ</th><th>HOZZÁADVA</th><th></th></tr>
+                            </thead>
+                            <tbody id="vizsgalockExceptionsBody">
+                                <tr><td colspan="3" class="vizsgalock-empty">[ NINCS KIVÉTEL ]</td></tr>
+                            </tbody>
+                        </table>
+                        <div class="vizsgalock-add-row">
+                            <select class="vizsgalock-add-select" id="vizsgalockUserSelect">
+                                <option value="">-- Felhasználó kiválasztása --</option>
+                            </select>
+                            <button class="vizsgalock-add-btn" onclick="doVizsgalockAddException()">+ HOZZÁAD</button>
+                        </div>
+                    </div>
+                </div>
+            <?php endif; ?>
+
             <!-- ════════════ EDIT ITEM ════════════ -->
             <?php if ($editItem && $view === 'items'): ?>
                 <div class="edit-terminal">
@@ -2973,7 +3018,7 @@ function pgLink($v, $p)
                 <?php endif; ?>
             <?php endif; ?>
             <!-- LAPOZÁS -->
-            <?php if ($totalPages > 1 && !in_array($view, ['main', 'conversations']) && !$editId): ?>
+            <?php if ($totalPages > 1 && !in_array($view, ['main', 'conversations', 'vizsgalock']) && !$editId): ?>
                 <div class="pagination">
                     <?php if ($page > 1): ?>
                         <a href="<?= pgLink($view, $page - 1) ?>" class="pg-btn">◄ ELŐZŐ</a>
@@ -3024,35 +3069,6 @@ function pgLink($v, $p)
                 </form>
             </div>
         </div>
-    </div>
-
-    </div>
-
-    <!-- VIZSGALOCK PANEL -->
-    <div class="vizsgalock-panel-backdrop" id="vizsgalockBackdrop" onclick="closeVizsgalockPanel()"></div>
-    <div class="vizsgalock-panel" id="vizsgalockPanel">
-        <div class="vizsgalock-header">🔒 VIZSGALOCK</div>
-        <button class="vizsgalock-toggle-btn off" id="vizsgalockToggleBtn" onclick="doVizsgalockToggle()">
-            VIZSGALOCK: OFF
-        </button>
-        <div class="vizsgalock-exceptions-section" id="vizsgalockExceptionsSection">
-            <div class="vizsgalock-exceptions-title">Kivételek</div>
-            <table class="vizsgalock-exceptions-table">
-                <thead>
-                    <tr><th>FELHASZNÁLÓ</th><th>HOZZÁADVA</th><th></th></tr>
-                </thead>
-                <tbody id="vizsgalockExceptionsBody">
-                    <tr><td colspan="3" class="vizsgalock-empty">Nincs kivétel</td></tr>
-                </tbody>
-            </table>
-            <div class="vizsgalock-add-row">
-                <select class="vizsgalock-add-select" id="vizsgalockUserSelect">
-                    <option value="">-- Felhasználó kiválasztása --</option>
-                </select>
-                <button class="vizsgalock-add-btn" onclick="doVizsgalockAddException()">+ HOZZÁAD</button>
-            </div>
-        </div>
-        <button class="vizsgalock-close-btn" onclick="closeVizsgalockPanel()">[ BEZÁRÁS ]</button>
     </div>
 
     <!-- TERMÉKMODÁL -->
@@ -3519,8 +3535,6 @@ function pgLink($v, $p)
 
         // ========== VIZSGALOCK ==========
         (function() {
-            const panel = document.getElementById('vizsgalockPanel');
-            const backdrop = document.getElementById('vizsgalockBackdrop');
             const toggleBtn = document.getElementById('vizsgalockToggleBtn');
             const exceptionsSection = document.getElementById('vizsgalockExceptionsSection');
             const exceptionsBody = document.getElementById('vizsgalockExceptionsBody');
@@ -3537,39 +3551,45 @@ function pgLink($v, $p)
             function renderState(locked, exceptions, availableUsers) {
                 vlLocked = locked;
                 if (locked) {
-                    toggleBtn.textContent = 'VIZSGALOCK: ON';
-                    toggleBtn.className = 'vizsgalock-toggle-btn on';
-                    exceptionsSection.classList.add('visible');
-                    navBtn.classList.add('locked');
+                    if (toggleBtn) {
+                        toggleBtn.textContent = '⚠️ VIZSGALOCK: ON ⚠️';
+                        toggleBtn.className = 'vizsgalock-toggle-btn on';
+                    }
+                    if (exceptionsSection) exceptionsSection.classList.add('visible');
+                    if (navBtn) navBtn.classList.add('locked');
                 } else {
-                    toggleBtn.textContent = 'VIZSGALOCK: OFF';
-                    toggleBtn.className = 'vizsgalock-toggle-btn off';
-                    exceptionsSection.classList.remove('visible');
-                    navBtn.classList.remove('locked');
+                    if (toggleBtn) {
+                        toggleBtn.textContent = 'VIZSGALOCK: OFF';
+                        toggleBtn.className = 'vizsgalock-toggle-btn off';
+                    }
+                    if (exceptionsSection) exceptionsSection.classList.remove('visible');
+                    if (navBtn) navBtn.classList.remove('locked');
                 }
 
-                // Exceptions table
-                if (exceptions && exceptions.length > 0) {
-                    exceptionsBody.innerHTML = exceptions.map(u =>
-                        `<tr>
-                            <td>${escHtml(u.username)}</td>
-                            <td style="color:rgba(255,170,0,0.5);font-size:0.72rem;">${u.added_at ? u.added_at.slice(0,10) : '-'}</td>
-                            <td><button class="vl-remove-btn" onclick="window._vlRemove(${u.id})">TÖRÖL</button></td>
-                        </tr>`
-                    ).join('');
-                } else {
-                    exceptionsBody.innerHTML = '<tr><td colspan="3" class="vizsgalock-empty">[ NINCS KIVÉTEL ]</td></tr>';
+                if (exceptionsBody) {
+                    if (exceptions && exceptions.length > 0) {
+                        exceptionsBody.innerHTML = exceptions.map(u =>
+                            `<tr>
+                                <td>${escHtml(u.username)}</td>
+                                <td style="color:rgba(255,170,0,0.5);font-size:0.72rem;">${u.added_at ? u.added_at.slice(0,10) : '-'}</td>
+                                <td><button class="vl-remove-btn" onclick="window._vlRemove(${u.id})">TÖRÖL</button></td>
+                            </tr>`
+                        ).join('');
+                    } else {
+                        exceptionsBody.innerHTML = '<tr><td colspan="3" class="vizsgalock-empty">[ NINCS KIVÉTEL ]</td></tr>';
+                    }
                 }
 
-                // Available users dropdown
-                userSelect.innerHTML = '<option value="">-- Felhasználó kiválasztása --</option>';
-                if (availableUsers && availableUsers.length > 0) {
-                    availableUsers.forEach(u => {
-                        const opt = document.createElement('option');
-                        opt.value = u.id;
-                        opt.textContent = u.username;
-                        userSelect.appendChild(opt);
-                    });
+                if (userSelect) {
+                    userSelect.innerHTML = '<option value="">-- Felhasználó kiválasztása --</option>';
+                    if (availableUsers && availableUsers.length > 0) {
+                        availableUsers.forEach(u => {
+                            const opt = document.createElement('option');
+                            opt.value = u.id;
+                            opt.textContent = u.username;
+                            userSelect.appendChild(opt);
+                        });
+                    }
                 }
             }
 
@@ -3582,17 +3602,6 @@ function pgLink($v, $p)
                     .catch(() => {});
             }
 
-            window.toggleVizsgalockPanel = function() {
-                panel.classList.toggle('active');
-                backdrop.classList.toggle('active');
-                if (panel.classList.contains('active')) loadStatus();
-            };
-
-            window.closeVizsgalockPanel = function() {
-                panel.classList.remove('active');
-                backdrop.classList.remove('active');
-            };
-
             window.doVizsgalockToggle = function() {
                 fetch('admin.php', {
                     method: 'POST',
@@ -3604,7 +3613,7 @@ function pgLink($v, $p)
             };
 
             window.doVizsgalockAddException = function() {
-                const uid = userSelect.value;
+                const uid = userSelect ? userSelect.value : '';
                 if (!uid) return;
                 fetch('admin.php', {
                     method: 'POST',
