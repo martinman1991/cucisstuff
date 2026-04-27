@@ -73,6 +73,21 @@ try {
         $receiverId = (int)($_POST['receiver_id'] ?? 0);
         $message    = trim($_POST['message'] ?? '');
 
+        // VIZSGALOCK ellenőrzés
+        try {
+            $vlCheck = $conn->query("SELECT is_locked FROM vizsgalock_settings WHERE id=1");
+            if ($vlCheck && ($vlRow = $vlCheck->fetch(PDO::FETCH_ASSOC)) && $vlRow['is_locked']) {
+                $isAdminChk = $conn->prepare("SELECT COUNT(*) FROM admins WHERE user_id=?");
+                $isAdminChk->execute([$currentUserId]);
+                $isExcChk = $conn->prepare("SELECT COUNT(*) FROM vizsgalock_exceptions WHERE user_id=?");
+                $isExcChk->execute([$currentUserId]);
+                if (!$isAdminChk->fetchColumn() && !$isExcChk->fetchColumn()) {
+                    echo json_encode(['success' => false, 'error' => 'A VIZSGALOCK aktiválva van. Üzenet küldése jelenleg nem lehetséges.']);
+                    exit;
+                }
+            }
+        } catch (Exception $e) {}
+
         $success = false;
         $error   = '';
         $newMsgId = null;

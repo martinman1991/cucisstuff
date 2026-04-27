@@ -92,7 +92,25 @@ try {
     // =============================================
     // VÁSÁRLÁS FELDOLGOZÁSA (POST)
     // =============================================
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_order']) && $item && !$item['sold']) {
+    // =============================================
+    // VÁSÁRLÁS FELDOLGOZÁSA (POST)
+    // =============================================
+    // VIZSGALOCK ellenőrzés
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_order'])) {
+        try {
+            $vlCheck = $conn->query("SELECT is_locked FROM vizsgalock_settings WHERE id=1");
+            if ($vlCheck && ($vlRow = $vlCheck->fetch(PDO::FETCH_ASSOC)) && $vlRow['is_locked']) {
+                $isAdminCheck = $conn->prepare("SELECT COUNT(*) FROM admins WHERE user_id=?");
+                $isAdminCheck->execute([$userId]);
+                $isExceptionCheck = $conn->prepare("SELECT COUNT(*) FROM vizsgalock_exceptions WHERE user_id=?");
+                $isExceptionCheck->execute([$userId]);
+                if (!$isAdminCheck->fetchColumn() && !$isExceptionCheck->fetchColumn()) {
+                    $form_error = 'A VIZSGALOCK aktiválva van. Vásárlás jelenleg nem lehetséges.';
+                }
+            }
+        } catch (Exception $e) {}
+    }
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_order']) && $item && !$item['sold'] && empty($form_error)) {
         $shippingName    = trim($_POST['shipping_name'] ?? '');
         $shippingEmail   = trim($_POST['shipping_email'] ?? '');
         $shippingPhone   = trim($_POST['shipping_phone'] ?? '');

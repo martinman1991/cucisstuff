@@ -41,6 +41,72 @@ try {
         exit;
     }
 
+    // AJAX: VIZSGALOCK állapot lekérése
+    if (isset($_GET['vizsgalock_status'])) {
+        header('Content-Type: application/json');
+        try {
+            $conn->exec("CREATE TABLE IF NOT EXISTS vizsgalock_settings (id INT PRIMARY KEY DEFAULT 1, is_locked BOOLEAN DEFAULT FALSE, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB");
+            $conn->exec("INSERT IGNORE INTO vizsgalock_settings (id, is_locked) VALUES (1, FALSE)");
+            $conn->exec("CREATE TABLE IF NOT EXISTS vizsgalock_exceptions (user_id INT PRIMARY KEY, added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, CONSTRAINT fk_vle_users FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB");
+            $ls = $conn->query("SELECT is_locked FROM vizsgalock_settings WHERE id=1")->fetch(PDO::FETCH_ASSOC);
+            $exStmt = $conn->query("SELECT u.id, u.username FROM vizsgalock_exceptions ve JOIN users u ON ve.user_id = u.id ORDER BY u.username");
+            $exceptions = $exStmt->fetchAll(PDO::FETCH_ASSOC);
+            $allUsersStmt = $conn->query("SELECT u.id, u.username FROM users u WHERE u.id NOT IN (SELECT user_id FROM admins) AND u.id NOT IN (SELECT user_id FROM vizsgalock_exceptions) ORDER BY u.username");
+            $availableUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
+            echo json_encode(['locked' => (bool)$ls['is_locked'], 'exceptions' => $exceptions, 'available_users' => $availableUsers]);
+        } catch (Exception $e) {
+            echo json_encode(['error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    // AJAX: VIZSGALOCK toggle
+    if (isset($_POST['vizsgalock_toggle'])) {
+        header('Content-Type: application/json');
+        try {
+            $conn->exec("CREATE TABLE IF NOT EXISTS vizsgalock_settings (id INT PRIMARY KEY DEFAULT 1, is_locked BOOLEAN DEFAULT FALSE, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB");
+            $conn->exec("INSERT IGNORE INTO vizsgalock_settings (id, is_locked) VALUES (1, FALSE)");
+            $cur = $conn->query("SELECT is_locked FROM vizsgalock_settings WHERE id=1")->fetch(PDO::FETCH_ASSOC);
+            $newVal = $cur['is_locked'] ? 0 : 1;
+            $conn->exec("UPDATE vizsgalock_settings SET is_locked=$newVal WHERE id=1");
+            echo json_encode(['locked' => (bool)$newVal]);
+        } catch (Exception $e) {
+            echo json_encode(['error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    // AJAX: VIZSGALOCK kivétel hozzáadása
+    if (isset($_POST['vizsgalock_add_exception'])) {
+        header('Content-Type: application/json');
+        $uid = (int)($_POST['user_id'] ?? 0);
+        try {
+            $conn->exec("CREATE TABLE IF NOT EXISTS vizsgalock_exceptions (user_id INT PRIMARY KEY, added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, CONSTRAINT fk_vle_users2 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB");
+            if ($uid > 0) {
+                $conn->prepare("INSERT IGNORE INTO vizsgalock_exceptions (user_id) VALUES (?)")->execute([$uid]);
+            }
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            echo json_encode(['error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    // AJAX: VIZSGALOCK kivétel eltávolítása
+    if (isset($_POST['vizsgalock_remove_exception'])) {
+        header('Content-Type: application/json');
+        $uid = (int)($_POST['user_id'] ?? 0);
+        try {
+            if ($uid > 0) {
+                $conn->prepare("DELETE FROM vizsgalock_exceptions WHERE user_id=?")->execute([$uid]);
+            }
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            echo json_encode(['error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     // AJAX: felhasználói profil adatok
     if (isset($_GET['get_user_profile']) && !empty($_GET['get_user_profile'])) {
         header('Content-Type: application/json');
@@ -2254,8 +2320,205 @@ function pgLink($v, $p)
             background: rgba(255, 140, 0, 0.1) !important;
             color: rgba(255, 140, 0, 0.4) !important;
         }
+        /* ═══════════ VIZSGALOCK ═══════════ */
+        .vizsgalock-panel {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 8000;
+            background: #0a0800;
+            border: 2px solid #ffaa00;
+            border-radius: 12px;
+            padding: 2rem;
+            min-width: 420px;
+            max-width: 560px;
+            width: 90vw;
+            box-shadow: 0 0 40px rgba(255, 170, 0, 0.35), 0 10px 30px rgba(0,0,0,0.8);
+            display: none;
+        }
+        .vizsgalock-panel.active {
+            display: block;
+        }
+        .vizsgalock-panel-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 7999;
+            background: rgba(0,0,0,0.7);
+            display: none;
+        }
+        .vizsgalock-panel-backdrop.active {
+            display: block;
+        }
+        .vizsgalock-header {
+            font-family: var(--font-vt);
+            font-size: 1.6rem;
+            color: #ffaa00;
+            text-shadow: 0 0 12px #ff8800;
+            letter-spacing: 4px;
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+        .vizsgalock-toggle-btn {
+            display: block;
+            width: 100%;
+            padding: 0.8rem 1.5rem;
+            font-family: var(--font-vt);
+            font-size: 1.4rem;
+            letter-spacing: 3px;
+            text-align: center;
+            cursor: pointer;
+            border: 2px solid;
+            border-radius: 8px;
+            background: transparent;
+            transition: all 0.2s;
+            margin-bottom: 1.5rem;
+        }
+        .vizsgalock-toggle-btn.off {
+            color: #888;
+            border-color: #444;
+        }
+        .vizsgalock-toggle-btn.off:hover {
+            color: #ffaa00;
+            border-color: #ffaa00;
+            background: rgba(255,170,0,0.07);
+            box-shadow: 0 0 12px rgba(255,170,0,0.3);
+        }
+        .vizsgalock-toggle-btn.on {
+            color: #ffaa00;
+            border-color: #ffaa00;
+            background: rgba(255,170,0,0.08);
+            box-shadow: 0 0 16px rgba(255,170,0,0.4);
+        }
+        .vizsgalock-toggle-btn.on:hover {
+            color: #ffcc44;
+            border-color: #ffcc44;
+            background: rgba(255,204,68,0.12);
+        }
+        .vizsgalock-exceptions-section {
+            display: none;
+            margin-top: 0.5rem;
+        }
+        .vizsgalock-exceptions-section.visible {
+            display: block;
+        }
+        .vizsgalock-exceptions-title {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            letter-spacing: 2px;
+            color: #ffaa00;
+            text-transform: uppercase;
+            margin-bottom: 0.7rem;
+            border-bottom: 1px solid rgba(255,170,0,0.25);
+            padding-bottom: 0.4rem;
+        }
+        .vizsgalock-exceptions-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 0.8rem;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+        }
+        .vizsgalock-exceptions-table th {
+            color: #ffaa00;
+            text-align: left;
+            padding: 5px 8px;
+            border-bottom: 1px solid rgba(255,170,0,0.2);
+            font-size: 0.72rem;
+            letter-spacing: 1px;
+        }
+        .vizsgalock-exceptions-table td {
+            padding: 5px 8px;
+            border-bottom: 1px solid rgba(255,170,0,0.1);
+            color: #d0a060;
+        }
+        .vizsgalock-exceptions-table tr:last-child td {
+            border-bottom: none;
+        }
+        .vizsgalock-exceptions-table .vl-remove-btn {
+            background: transparent;
+            border: 1px solid #ff4400;
+            color: #ff4400;
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            cursor: pointer;
+            font-family: var(--font-mono);
+            letter-spacing: 1px;
+            transition: all 0.15s;
+        }
+        .vizsgalock-exceptions-table .vl-remove-btn:hover {
+            background: rgba(255,68,0,0.1);
+        }
+        .vizsgalock-add-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        .vizsgalock-add-select {
+            flex: 1;
+            background: rgba(255,170,0,0.07);
+            border: 1px solid rgba(255,170,0,0.35);
+            color: #d0a060;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            padding: 5px 8px;
+        }
+        .vizsgalock-add-select option {
+            background: #1a1000;
+            color: #d0a060;
+        }
+        .vizsgalock-add-btn {
+            background: rgba(255,170,0,0.1);
+            border: 1px solid #ffaa00;
+            color: #ffaa00;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            padding: 5px 14px;
+            cursor: pointer;
+            letter-spacing: 1px;
+            transition: all 0.15s;
+        }
+        .vizsgalock-add-btn:hover {
+            background: rgba(255,170,0,0.2);
+        }
+        .vizsgalock-close-btn {
+            display: block;
+            width: 100%;
+            margin-top: 1.2rem;
+            background: transparent;
+            border: 1px solid rgba(255,170,0,0.35);
+            color: rgba(255,170,0,0.6);
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            letter-spacing: 2px;
+            padding: 6px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .vizsgalock-close-btn:hover {
+            border-color: #ffaa00;
+            color: #ffaa00;
+        }
+        .vizsgalock-empty {
+            color: rgba(255,170,0,0.4);
+            font-size: 0.8rem;
+            font-family: var(--font-mono);
+            text-align: center;
+            padding: 10px 0;
+            letter-spacing: 1px;
+        }
+        #vizsgalockNavBtn.locked {
+            color: #ffcc00 !important;
+            border-color: #ffcc00 !important;
+            background: rgba(255,204,0,0.08) !important;
+            box-shadow: 0 0 8px rgba(255,204,0,0.3) !important;
+            animation: vlPulse 1.5s infinite;
+        }
+        @keyframes vlPulse {
+            0%, 100% { box-shadow: 0 0 8px rgba(255,204,0,0.3); }
+            50% { box-shadow: 0 0 18px rgba(255,204,0,0.7); }
+        }
     </style>
-</head>
 
 <body>
     <div class="crt-wrap">
@@ -2292,6 +2555,7 @@ function pgLink($v, $p)
                     <span class="nav-label">RENDELÉSEK</span>
                 </a>
                 <button class="nav-btn purge-btn" id="purgeBtn">⚠ VIZSGAPURGE</button>
+                <button class="nav-btn" id="vizsgalockNavBtn" style="border-color:#ffaa00;color:#ffaa00;" onclick="toggleVizsgalockPanel()">🔒 VIZSGALOCK</button>
                 <a href="main.php" class="nav-btn nav-back">← KILÉPÉS</a>
             </nav>
         </div>
@@ -2710,6 +2974,35 @@ function pgLink($v, $p)
                 </form>
             </div>
         </div>
+    </div>
+
+    </div>
+
+    <!-- VIZSGALOCK PANEL -->
+    <div class="vizsgalock-panel-backdrop" id="vizsgalockBackdrop" onclick="closeVizsgalockPanel()"></div>
+    <div class="vizsgalock-panel" id="vizsgalockPanel">
+        <div class="vizsgalock-header">🔒 VIZSGALOCK</div>
+        <button class="vizsgalock-toggle-btn off" id="vizsgalockToggleBtn" onclick="doVizsgalockToggle()">
+            VIZSGALOCK: OFF
+        </button>
+        <div class="vizsgalock-exceptions-section" id="vizsgalockExceptionsSection">
+            <div class="vizsgalock-exceptions-title">Kivételek</div>
+            <table class="vizsgalock-exceptions-table">
+                <thead>
+                    <tr><th>FELHASZNÁLÓ</th><th>HOZZÁADVA</th><th></th></tr>
+                </thead>
+                <tbody id="vizsgalockExceptionsBody">
+                    <tr><td colspan="3" class="vizsgalock-empty">Nincs kivétel</td></tr>
+                </tbody>
+            </table>
+            <div class="vizsgalock-add-row">
+                <select class="vizsgalock-add-select" id="vizsgalockUserSelect">
+                    <option value="">-- Felhasználó kiválasztása --</option>
+                </select>
+                <button class="vizsgalock-add-btn" onclick="doVizsgalockAddException()">+ HOZZÁAD</button>
+            </div>
+        </div>
+        <button class="vizsgalock-close-btn" onclick="closeVizsgalockPanel()">[ BEZÁRÁS ]</button>
     </div>
 
     <!-- TERMÉKMODÁL -->
@@ -3173,6 +3466,118 @@ function pgLink($v, $p)
                 alert('Vásárlás funkció admin felületről nem elérhető.');
             }
         });
+
+        // ========== VIZSGALOCK ==========
+        (function() {
+            const panel = document.getElementById('vizsgalockPanel');
+            const backdrop = document.getElementById('vizsgalockBackdrop');
+            const toggleBtn = document.getElementById('vizsgalockToggleBtn');
+            const exceptionsSection = document.getElementById('vizsgalockExceptionsSection');
+            const exceptionsBody = document.getElementById('vizsgalockExceptionsBody');
+            const userSelect = document.getElementById('vizsgalockUserSelect');
+            const navBtn = document.getElementById('vizsgalockNavBtn');
+
+            let vlLocked = false;
+
+            function escHtml(s) {
+                if (!s) return '';
+                return String(s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+            }
+
+            function renderState(locked, exceptions, availableUsers) {
+                vlLocked = locked;
+                if (locked) {
+                    toggleBtn.textContent = 'VIZSGALOCK: ON';
+                    toggleBtn.className = 'vizsgalock-toggle-btn on';
+                    exceptionsSection.classList.add('visible');
+                    navBtn.classList.add('locked');
+                } else {
+                    toggleBtn.textContent = 'VIZSGALOCK: OFF';
+                    toggleBtn.className = 'vizsgalock-toggle-btn off';
+                    exceptionsSection.classList.remove('visible');
+                    navBtn.classList.remove('locked');
+                }
+
+                // Exceptions table
+                if (exceptions && exceptions.length > 0) {
+                    exceptionsBody.innerHTML = exceptions.map(u =>
+                        `<tr>
+                            <td>${escHtml(u.username)}</td>
+                            <td style="color:rgba(255,170,0,0.5);font-size:0.72rem;">${u.added_at ? u.added_at.slice(0,10) : '-'}</td>
+                            <td><button class="vl-remove-btn" onclick="window._vlRemove(${u.id})">TÖRÖL</button></td>
+                        </tr>`
+                    ).join('');
+                } else {
+                    exceptionsBody.innerHTML = '<tr><td colspan="3" class="vizsgalock-empty">[ NINCS KIVÉTEL ]</td></tr>';
+                }
+
+                // Available users dropdown
+                userSelect.innerHTML = '<option value="">-- Felhasználó kiválasztása --</option>';
+                if (availableUsers && availableUsers.length > 0) {
+                    availableUsers.forEach(u => {
+                        const opt = document.createElement('option');
+                        opt.value = u.id;
+                        opt.textContent = u.username;
+                        userSelect.appendChild(opt);
+                    });
+                }
+            }
+
+            function loadStatus() {
+                fetch('admin.php?vizsgalock_status=1')
+                    .then(r => r.json())
+                    .then(d => {
+                        if (!d.error) renderState(d.locked, d.exceptions, d.available_users);
+                    })
+                    .catch(() => {});
+            }
+
+            window.toggleVizsgalockPanel = function() {
+                panel.classList.toggle('active');
+                backdrop.classList.toggle('active');
+                if (panel.classList.contains('active')) loadStatus();
+            };
+
+            window.closeVizsgalockPanel = function() {
+                panel.classList.remove('active');
+                backdrop.classList.remove('active');
+            };
+
+            window.doVizsgalockToggle = function() {
+                fetch('admin.php', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: 'vizsgalock_toggle=1'
+                }).then(r => r.json()).then(d => {
+                    if (!d.error) loadStatus();
+                });
+            };
+
+            window.doVizsgalockAddException = function() {
+                const uid = userSelect.value;
+                if (!uid) return;
+                fetch('admin.php', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: 'vizsgalock_add_exception=1&user_id=' + encodeURIComponent(uid)
+                }).then(r => r.json()).then(d => {
+                    if (!d.error) loadStatus();
+                });
+            };
+
+            window._vlRemove = function(uid) {
+                fetch('admin.php', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: 'vizsgalock_remove_exception=1&user_id=' + encodeURIComponent(uid)
+                }).then(r => r.json()).then(d => {
+                    if (!d.error) loadStatus();
+                });
+            };
+
+            // Oldalbetöltéskor frissítjük a nav gomb állapotát
+            loadStatus();
+        })();
 
         // ========== SCROLL MEGŐRZÉSE A SIDEBARBAN ==========
         (function() {
