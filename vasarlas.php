@@ -77,10 +77,9 @@ try {
         $stmt->execute([$itemId]);
         $item = $stmt->fetch();
 
-        // --- JAVÍTÁS: SIKERES VÁSÁRLÁS UTÁN NE MUTASSA A "MÁR ELADVA" HIBÁT ---
         if (!$item) {
             $error = 'A termék nem található.';
-        } elseif ($item['sold'] && !isset($_GET['success'])) {   // ← itt a lényegi változás
+        } elseif ($item['sold'] && !isset($_GET['success'])) {
             $error = 'Ezt a terméket már megvásárolták.';
         } elseif ($item['user_id'] == $userId) {
             $error = 'A saját termékedet nem vásárolhatod meg.';
@@ -92,11 +91,8 @@ try {
     // =============================================
     // VÁSÁRLÁS FELDOLGOZÁSA (POST)
     // =============================================
-    // =============================================
-    // VÁSÁRLÁS FELDOLGOZÁSA (POST)
-    // =============================================
-    // VIZSGALOCK ellenőrzés
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_order'])) {
+        // VIZSGALOCK ellenőrzés
         try {
             $vlCheck = $conn->query("SELECT is_locked FROM vizsgalock_settings WHERE id=1");
             if ($vlCheck && ($vlRow = $vlCheck->fetch(PDO::FETCH_ASSOC)) && $vlRow['is_locked']) {
@@ -138,17 +134,6 @@ try {
                 $checkId->execute([$orderId]);
             } while ($checkId->fetchColumn() > 0);
 
-            // Üzenet ID generálása az értesítéshez
-            do {
-                $msgId = '';
-                $chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-                for ($i = 0; $i < 25; $i++) {
-                    $msgId .= $chars[random_int(0, strlen($chars) - 1)];
-                }
-                $msgCheck = $conn->prepare("SELECT COUNT(*) FROM uzenetek WHERE id = ?");
-                $msgCheck->execute([$msgId]);
-            } while ($msgCheck->fetchColumn() > 0);
-
             try {
                 $conn->beginTransaction();
 
@@ -177,29 +162,6 @@ try {
 
                 // Termék eladottnak jelölése
                 $conn->prepare("UPDATE items SET sold = TRUE WHERE id = ?")->execute([$itemId]);
-
-                // Értesítő üzenet küldése az eladónak
-                $paymentLabels = [
-                    'cod'      => 'Utánvétel',
-                    'transfer' => 'Banki átutalás',
-                    'pickup'   => 'Személyes átvétel'
-                ];
-                $messageText = "📦 Új rendelés érkezett!\n\n"
-                    . "Termék: " . $item['title'] . "\n"
-                    . "Ár: " . number_format($item['price'], 0, ',', ' ') . " Ft\n"
-                    . "Vevő: " . $shippingName . "\n"
-                    . "Email: " . $shippingEmail . "\n"
-                    . "Telefon: " . $shippingPhone . "\n"
-                    . "Cím: " . $shippingZip . " " . $shippingCity . ", " . $shippingAddress . "\n"
-                    . "Fizetési mód: " . ($paymentLabels[$paymentMethod] ?? $paymentMethod) . "\n"
-                    . "Megjegyzés: " . ($notes ?: '-') . "\n\n"
-                    . "Rendelés azonosító: " . $orderId;
-
-                $insertMsg = $conn->prepare("
-                    INSERT INTO uzenetek (id, sender_id, receiver_id, message)
-                    VALUES (?, ?, ?, ?)
-                ");
-                $insertMsg->execute([$msgId, $userId, $item['user_id'], $messageText]);
 
                 $conn->commit();
 
@@ -705,16 +667,13 @@ try {
         ::-webkit-scrollbar {
             width: 6px;
         }
-
         ::-webkit-scrollbar-track {
             background: #0a0a0a;
         }
-
         ::-webkit-scrollbar-thumb {
             background: rgba(255, 140, 0, 0.3);
             border-radius: 3px;
         }
-
         ::-webkit-scrollbar-thumb:hover {
             background: rgba(255, 140, 0, 0.5);
         }
@@ -748,8 +707,8 @@ try {
                     <div class="success-icon">✅</div>
                     <h2 class="success-title unselectable">Sikeres rendelés!</h2>
                     <p class="success-text unselectable">
-                        A rendelésedet rögzítettük. Az eladót értesítettük a vásárlásról.<br>
-                        Hamarosan felveszi veled a kapcsolatot a megadott e-mail címen vagy telefonszámon.
+                        A rendelésedet rögzítettük.<br>
+                        Az eladó hamarosan felveszi veled a kapcsolatot.
                     </p>
                     <a href="main.php" class="success-btn unselectable">Vissza a főoldalra</a>
                 </div>
