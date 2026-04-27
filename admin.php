@@ -726,17 +726,19 @@ function pgLink($v, $p)
         }
 
         @keyframes vlPulseDanger {
-            0%, 100% {
+
+            0%,
+            100% {
                 box-shadow: 0 0 20px rgba(255, 0, 0, 0.8), 0 0 40px rgba(255, 0, 0, 0.4);
                 text-shadow: 0 0 15px rgba(255, 0, 0, 0.9);
             }
+
             50% {
                 box-shadow: 0 0 35px rgba(255, 0, 0, 1), 0 0 70px rgba(255, 0, 0, 0.6), 0 0 100px rgba(255, 0, 0, 0.4);
                 text-shadow: 0 0 25px rgba(255, 0, 0, 1), 0 0 50px rgba(255, 0, 0, 0.8);
             }
         }
 
-        /* Light mode - VIZSGALOCK piros marad */
         html.light-mode .nav-btn.vizsgalock-btn {
             color: #dd0000 !important;
             border-color: #dd0000 !important;
@@ -889,6 +891,208 @@ function pgLink($v, $p)
             right: 0;
             height: 1px;
             background: linear-gradient(90deg, transparent, var(--c-green-dim), transparent);
+        }
+
+        /* ═══════════ VIZSGALOCK PANEL (data-panel inspirálta) ═══════════ */
+        .vizsgalock-panel {
+            border: 1px solid #ff3333;
+            background: var(--c-panel);
+            overflow-x: auto;
+            margin-bottom: 16px;
+            position: relative;
+            padding: 2rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            box-shadow: 0 0 30px rgba(255, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.6);
+        }
+
+        .vizsgalock-panel::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #ff3333, transparent);
+        }
+
+        .vizsgalock-header {
+            font-family: var(--font-vt);
+            font-size: 1.6rem;
+            color: #ff3333;
+            text-shadow: 0 0 12px #ff0000;
+            letter-spacing: 4px;
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .vizsgalock-toggle-btn {
+            display: block;
+            width: 100%;
+            padding: 0.8rem 1.5rem;
+            font-family: var(--font-vt);
+            font-size: 1.4rem;
+            letter-spacing: 3px;
+            text-align: center;
+            cursor: pointer;
+            border: 2px solid;
+            border-radius: 0;
+            background: transparent;
+            transition: all 0.2s;
+            margin-bottom: 1.5rem;
+        }
+
+        .vizsgalock-toggle-btn.off {
+            color: #888;
+            border-color: #444;
+        }
+
+        .vizsgalock-toggle-btn.off:hover {
+            color: #ff3333;
+            border-color: #ff3333;
+            background: rgba(255, 0, 0, 0.07);
+            box-shadow: 0 0 12px rgba(255, 0, 0, 0.3);
+        }
+
+        .vizsgalock-toggle-btn.on {
+            color: #ff3333;
+            border-color: #ff3333;
+            background: rgba(255, 0, 0, 0.1);
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+        }
+
+        .vizsgalock-toggle-btn.on:hover {
+            color: #ff5555;
+            border-color: #ff5555;
+            background: rgba(255, 0, 0, 0.15);
+            box-shadow: 0 0 30px rgba(255, 0, 0, 0.7);
+        }
+
+        .vizsgalock-exceptions-section {
+            display: none;
+            margin-top: 0.5rem;
+        }
+
+        .vizsgalock-exceptions-section.visible {
+            display: block;
+        }
+
+        .vizsgalock-exceptions-title {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            letter-spacing: 2px;
+            color: #ff6666;
+            text-transform: uppercase;
+            margin-bottom: 0.7rem;
+            border-bottom: 1px solid rgba(255, 0, 0, 0.25);
+            padding-bottom: 0.4rem;
+        }
+
+        .vizsgalock-exceptions-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 0.8rem;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+        }
+
+        .vizsgalock-exceptions-table th {
+            color: #ff6666;
+            text-align: left;
+            padding: 5px 8px;
+            border-bottom: 1px solid rgba(255, 0, 0, 0.2);
+            font-size: 0.72rem;
+            letter-spacing: 1px;
+        }
+
+        .vizsgalock-exceptions-table td {
+            padding: 5px 8px;
+            border-bottom: 1px solid rgba(255, 0, 0, 0.1);
+            color: #d0a0a0;
+        }
+
+        .vizsgalock-exceptions-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .vizsgalock-exceptions-table .vl-remove-btn {
+            background: transparent;
+            border: 1px solid #ff4400;
+            color: #ff4400;
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            cursor: pointer;
+            font-family: var(--font-mono);
+            letter-spacing: 1px;
+            transition: all 0.15s;
+        }
+
+        .vizsgalock-exceptions-table .vl-remove-btn:hover {
+            background: rgba(255, 68, 0, 0.1);
+        }
+
+        .vizsgalock-add-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .vizsgalock-add-select {
+            flex: 1;
+            background: rgba(255, 0, 0, 0.07);
+            border: 1px solid rgba(255, 0, 0, 0.35);
+            color: #d0a0a0;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            padding: 5px 8px;
+        }
+
+        .vizsgalock-add-select option {
+            background: #1a1000;
+            color: #d0a0a0;
+        }
+
+        .vizsgalock-add-btn {
+            background: rgba(255, 0, 0, 0.1);
+            border: 1px solid #ff3333;
+            color: #ff3333;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            padding: 5px 14px;
+            cursor: pointer;
+            letter-spacing: 1px;
+            transition: all 0.15s;
+        }
+
+        .vizsgalock-add-btn:hover {
+            background: rgba(255, 0, 0, 0.2);
+        }
+
+        .vizsgalock-empty {
+            color: rgba(255, 0, 0, 0.4);
+            font-size: 0.8rem;
+            font-family: var(--font-mono);
+            text-align: center;
+            padding: 10px 0;
+            letter-spacing: 1px;
+        }
+
+        /* Light mode VIZSGALOCK panel */
+        html.light-mode .vizsgalock-panel {
+            border-color: #cc0000;
+        }
+
+        html.light-mode .vizsgalock-header,
+        html.light-mode .vizsgalock-toggle-btn.on,
+        html.light-mode .vizsgalock-add-btn,
+        html.light-mode .vizsgalock-exceptions-table th {
+            color: #ff4444 !important;
+        }
+
+        html.light-mode .vizsgalock-exceptions-table td,
+        html.light-mode .vizsgalock-add-select {
+            color: #e0b0b0;
         }
 
         .data-table {
@@ -1288,7 +1492,7 @@ function pgLink($v, $p)
             max-width: 450px;
             background: var(--c-panel);
             border: 2px solid var(--c-red);
-            border-radius: 24px;
+            border-radius: 0;
             padding: 2rem;
             box-shadow: 0 0 40px rgba(255, 0, 0, 0.4), 0 10px 30px rgba(0, 0, 0, 0.7);
             transform: scale(0.9) translateY(20px);
@@ -1337,7 +1541,7 @@ function pgLink($v, $p)
             padding: 0.65rem 2rem;
             background: var(--c-red);
             border: none;
-            border-radius: 40px;
+            border-radius: 0;
             color: #000;
             font-family: var(--font-mono);
             font-weight: bold;
@@ -1359,7 +1563,7 @@ function pgLink($v, $p)
             padding: 0.65rem 2rem;
             background: var(--c-green-dim);
             border: none;
-            border-radius: 40px;
+            border-radius: 0;
             color: #000;
             font-family: var(--font-mono);
             font-weight: bold;
@@ -1400,7 +1604,7 @@ function pgLink($v, $p)
             max-width: 500px;
             background: #1a0505;
             border: 2px solid #ff3333;
-            border-radius: 24px;
+            border-radius: 0;
             padding: 2rem;
             box-shadow: 0 0 40px rgba(255, 0, 0, 0.4), 0 10px 30px rgba(0, 0, 0, 0.7);
             transform: scale(0.9) translateY(20px);
@@ -1449,7 +1653,7 @@ function pgLink($v, $p)
             padding: 0.75rem 2rem;
             background: #ff3333;
             border: none;
-            border-radius: 40px;
+            border-radius: 0;
             color: #000;
             font-family: var(--font-mono);
             font-weight: bold;
@@ -1471,7 +1675,7 @@ function pgLink($v, $p)
             padding: 0.75rem 2rem;
             background: #00aa3a;
             border: none;
-            border-radius: 40px;
+            border-radius: 0;
             color: #000;
             font-family: var(--font-mono);
             font-weight: bold;
@@ -1489,6 +1693,7 @@ function pgLink($v, $p)
             transform: scale(1.02);
         }
 
+        /* ═══════════ KATONAI TERMÉKMODÁL ═══════════ */
         .product-modal-overlay {
             position: fixed;
             inset: 0;
@@ -1507,20 +1712,32 @@ function pgLink($v, $p)
         }
 
         .product-modal-card {
-            width: 100vw;
-            height: 100vh;
+            width: 96vw;
+            height: 94vh;
             display: grid;
             grid-template-columns: 1.5fr 1fr;
             gap: 0;
-            background: #030a02;
-            border: 1px solid var(--c-border2);
+            background: var(--c-panel);
+            border: 2px solid var(--c-border2);
             overflow: hidden;
             position: relative;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.8), 0 0 80px rgba(57, 255, 20, 0.1);
+        }
+
+        .product-modal-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--c-green-dim), transparent);
+            z-index: 10;
+            pointer-events: none;
         }
 
         .product-modal-card * {
-            user-select: none;
-            -webkit-user-select: none;
+            font-family: var(--font-mono);
         }
 
         .product-modal-header {
@@ -1536,7 +1753,7 @@ function pgLink($v, $p)
             width: 36px;
             height: 36px;
             background: rgba(0, 0, 0, 0.8);
-            border: 1px solid var(--c-green-mid);
+            border: 1px solid var(--c-border2);
             color: var(--c-green);
             font-family: var(--font-mono);
             font-size: 1.1rem;
@@ -1561,8 +1778,8 @@ function pgLink($v, $p)
             top: 42px;
             right: 0;
             min-width: 160px;
-            background: rgba(3, 10, 2, 0.98);
-            border: 1px solid var(--c-green-mid);
+            background: var(--c-panel);
+            border: 1px solid var(--c-border2);
             padding: 4px;
             display: none;
             z-index: 101;
@@ -1601,7 +1818,7 @@ function pgLink($v, $p)
             display: flex;
             flex-direction: column;
             border-right: 1px solid var(--c-border2);
-            background: #020802;
+            background: rgba(0, 0, 0, 0.3);
             padding: 16px;
             min-height: 0;
         }
@@ -1639,7 +1856,7 @@ function pgLink($v, $p)
             transform: translateY(-50%);
             background: rgba(0, 0, 0, 0.8);
             color: var(--c-green);
-            border: 1px solid var(--c-green-mid);
+            border: 1px solid var(--c-border2);
             width: 36px;
             height: 36px;
             cursor: pointer;
@@ -1684,6 +1901,7 @@ function pgLink($v, $p)
             cursor: pointer;
             transition: all 0.15s;
             overflow: hidden;
+            background: rgba(0, 0, 0, 0.5);
         }
 
         .product-thumbnail:hover,
@@ -1704,7 +1922,7 @@ function pgLink($v, $p)
             gap: 16px;
             padding: 20px;
             overflow-y: auto;
-            background: #020802;
+            background: rgba(0, 0, 0, 0.2);
         }
 
         .product-title {
@@ -1727,6 +1945,7 @@ function pgLink($v, $p)
         .product-seller {
             font-size: 0.85rem;
             color: var(--c-muted);
+            font-family: var(--font-mono);
         }
 
         .product-seller strong {
@@ -1737,6 +1956,7 @@ function pgLink($v, $p)
             font-size: 0.75rem;
             color: var(--c-green-dim);
             letter-spacing: 1px;
+            font-family: var(--font-mono);
         }
 
         .product-description {
@@ -1749,6 +1969,7 @@ function pgLink($v, $p)
             max-height: 260px;
             overflow-y: auto;
             white-space: pre-wrap;
+            font-family: var(--font-mono);
         }
 
         .product-buy-btn {
@@ -1892,7 +2113,7 @@ function pgLink($v, $p)
         .conv-avatars span {
             width: 32px;
             height: 32px;
-            border-radius: 50%;
+            border-radius: 0;
             background: var(--c-border2);
             color: var(--c-green);
             display: flex;
@@ -1971,7 +2192,7 @@ function pgLink($v, $p)
             max-width: 70%;
             background: rgba(0, 0, 0, 0.4);
             border: 1px solid var(--c-border);
-            border-radius: 8px;
+            border-radius: 0;
             padding: 0.6rem 0.9rem;
         }
 
@@ -2025,7 +2246,7 @@ function pgLink($v, $p)
             color: var(--c-green-mid);
         }
 
-        /* User popup overlay */
+        /* ═══════════ KATONAI USER POPUP ═══════════ */
         .user-popup-overlay {
             position: fixed;
             inset: 0;
@@ -2047,8 +2268,8 @@ function pgLink($v, $p)
         .user-popup-card {
             width: 100vw;
             height: 100vh;
-            background: rgba(5, 5, 5, 0.99);
-            border: none;
+            background: var(--c-panel);
+            border: 2px solid var(--c-border2);
             border-radius: 0;
             padding: 0;
             overflow: hidden;
@@ -2057,6 +2278,19 @@ function pgLink($v, $p)
             transition: transform 0.3s ease;
             display: flex;
             flex-direction: column;
+            box-shadow: 0 0 60px rgba(0, 0, 0, 0.9), 0 0 100px rgba(57, 255, 20, 0.15);
+        }
+
+        .user-popup-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--c-green-dim), transparent);
+            z-index: 10;
+            pointer-events: none;
         }
 
         .user-popup-overlay.active .user-popup-card {
@@ -2071,7 +2305,7 @@ function pgLink($v, $p)
             align-items: center;
             justify-content: space-between;
             padding: 0.75rem 1.5rem;
-            background: rgba(5, 5, 5, 0.92);
+            background: var(--c-panel);
             backdrop-filter: blur(12px);
             border-bottom: 1px solid var(--c-border2);
             flex-shrink: 0;
@@ -2083,7 +2317,7 @@ function pgLink($v, $p)
             color: var(--c-green);
             width: 42px;
             height: 42px;
-            border-radius: 50%;
+            border-radius: 0;
             cursor: pointer;
             font-size: 1.2rem;
             display: flex;
@@ -2102,6 +2336,8 @@ function pgLink($v, $p)
             font-size: 1rem;
             font-weight: 700;
             color: var(--c-green);
+            font-family: var(--font-vt);
+            letter-spacing: 2px;
         }
 
         .user-popup-body {
@@ -2119,7 +2355,7 @@ function pgLink($v, $p)
         .user-popup-avatar {
             width: 90px;
             height: 90px;
-            border-radius: 50%;
+            border-radius: 0;
             background: linear-gradient(135deg, var(--c-green), #0a4a00);
             display: flex;
             align-items: center;
@@ -2144,6 +2380,8 @@ function pgLink($v, $p)
             font-size: 1.8rem;
             font-weight: 700;
             color: var(--c-green);
+            font-family: var(--font-vt);
+            letter-spacing: 2px;
             margin-bottom: 0.35rem;
         }
 
@@ -2164,7 +2402,7 @@ function pgLink($v, $p)
             flex: 1;
             background: rgba(57, 255, 20, 0.07);
             border: 1px solid rgba(57, 255, 20, 0.15);
-            border-radius: 16px;
+            border-radius: 0;
             padding: 1.1rem;
             text-align: center;
         }
@@ -2173,6 +2411,7 @@ function pgLink($v, $p)
             font-size: 1.6rem;
             font-weight: 700;
             color: var(--c-green);
+            font-family: var(--font-vt);
         }
 
         .user-stat-label {
@@ -2199,7 +2438,7 @@ function pgLink($v, $p)
         }
 
         .user-item-thumb {
-            border-radius: 14px;
+            border-radius: 0;
             overflow: hidden;
             border: 1px solid rgba(57, 255, 20, 0.12);
             cursor: pointer;
@@ -2394,196 +2633,6 @@ function pgLink($v, $p)
             background: rgba(255, 140, 0, 0.1) !important;
             color: rgba(255, 140, 0, 0.4) !important;
         }
-
-        /* ═══════════ VIZSGALOCK PANEL (INLINE A TERMINAL-BODY-BAN) ═══════════ */
-        .vizsgalock-panel {
-            max-width: 600px;
-            margin: 0 auto;
-            background: var(--c-panel);
-            border: 2px solid #ff3333;
-            border-radius: 12px;
-            padding: 2rem;
-            box-shadow: 0 0 30px rgba(255, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.6);
-        }
-
-        .vizsgalock-header {
-            font-family: var(--font-vt);
-            font-size: 1.6rem;
-            color: #ff3333;
-            text-shadow: 0 0 12px #ff0000;
-            letter-spacing: 4px;
-            text-align: center;
-            margin-bottom: 1.5rem;
-        }
-
-        .vizsgalock-toggle-btn {
-            display: block;
-            width: 100%;
-            padding: 0.8rem 1.5rem;
-            font-family: var(--font-vt);
-            font-size: 1.4rem;
-            letter-spacing: 3px;
-            text-align: center;
-            cursor: pointer;
-            border: 2px solid;
-            border-radius: 8px;
-            background: transparent;
-            transition: all 0.2s;
-            margin-bottom: 1.5rem;
-        }
-
-        .vizsgalock-toggle-btn.off {
-            color: #888;
-            border-color: #444;
-        }
-
-        .vizsgalock-toggle-btn.off:hover {
-            color: #ff3333;
-            border-color: #ff3333;
-            background: rgba(255, 0, 0, 0.07);
-            box-shadow: 0 0 12px rgba(255, 0, 0, 0.3);
-        }
-
-        .vizsgalock-toggle-btn.on {
-            color: #ff3333;
-            border-color: #ff3333;
-            background: rgba(255, 0, 0, 0.1);
-            box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
-        }
-
-        .vizsgalock-toggle-btn.on:hover {
-            color: #ff5555;
-            border-color: #ff5555;
-            background: rgba(255, 0, 0, 0.15);
-            box-shadow: 0 0 30px rgba(255, 0, 0, 0.7);
-        }
-
-        .vizsgalock-exceptions-section {
-            display: none;
-            margin-top: 0.5rem;
-        }
-
-        .vizsgalock-exceptions-section.visible {
-            display: block;
-        }
-
-        .vizsgalock-exceptions-title {
-            font-family: var(--font-mono);
-            font-size: 0.75rem;
-            letter-spacing: 2px;
-            color: #ff6666;
-            text-transform: uppercase;
-            margin-bottom: 0.7rem;
-            border-bottom: 1px solid rgba(255, 0, 0, 0.25);
-            padding-bottom: 0.4rem;
-        }
-
-        .vizsgalock-exceptions-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 0.8rem;
-            font-family: var(--font-mono);
-            font-size: 0.8rem;
-        }
-
-        .vizsgalock-exceptions-table th {
-            color: #ff6666;
-            text-align: left;
-            padding: 5px 8px;
-            border-bottom: 1px solid rgba(255, 0, 0, 0.2);
-            font-size: 0.72rem;
-            letter-spacing: 1px;
-        }
-
-        .vizsgalock-exceptions-table td {
-            padding: 5px 8px;
-            border-bottom: 1px solid rgba(255, 0, 0, 0.1);
-            color: #d0a0a0;
-        }
-
-        .vizsgalock-exceptions-table tr:last-child td {
-            border-bottom: none;
-        }
-
-        .vizsgalock-exceptions-table .vl-remove-btn {
-            background: transparent;
-            border: 1px solid #ff4400;
-            color: #ff4400;
-            font-size: 0.7rem;
-            padding: 2px 8px;
-            cursor: pointer;
-            font-family: var(--font-mono);
-            letter-spacing: 1px;
-            transition: all 0.15s;
-        }
-
-        .vizsgalock-exceptions-table .vl-remove-btn:hover {
-            background: rgba(255, 68, 0, 0.1);
-        }
-
-        .vizsgalock-add-row {
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-        }
-
-        .vizsgalock-add-select {
-            flex: 1;
-            background: rgba(255, 0, 0, 0.07);
-            border: 1px solid rgba(255, 0, 0, 0.35);
-            color: #d0a0a0;
-            font-family: var(--font-mono);
-            font-size: 0.8rem;
-            padding: 5px 8px;
-        }
-
-        .vizsgalock-add-select option {
-            background: #1a1000;
-            color: #d0a0a0;
-        }
-
-        .vizsgalock-add-btn {
-            background: rgba(255, 0, 0, 0.1);
-            border: 1px solid #ff3333;
-            color: #ff3333;
-            font-family: var(--font-mono);
-            font-size: 0.8rem;
-            padding: 5px 14px;
-            cursor: pointer;
-            letter-spacing: 1px;
-            transition: all 0.15s;
-        }
-
-        .vizsgalock-add-btn:hover {
-            background: rgba(255, 0, 0, 0.2);
-        }
-
-        .vizsgalock-empty {
-            color: rgba(255, 0, 0, 0.4);
-            font-size: 0.8rem;
-            font-family: var(--font-mono);
-            text-align: center;
-            padding: 10px 0;
-            letter-spacing: 1px;
-        }
-
-        /* Light mode VIZSGALOCK panel */
-        html.light-mode .vizsgalock-panel {
-            background: #3a1a1a;
-            border-color: #cc0000;
-        }
-
-        html.light-mode .vizsgalock-header,
-        html.light-mode .vizsgalock-toggle-btn.on,
-        html.light-mode .vizsgalock-add-btn,
-        html.light-mode .vizsgalock-exceptions-table th {
-            color: #ff4444 !important;
-        }
-
-        html.light-mode .vizsgalock-exceptions-table td,
-        html.light-mode .vizsgalock-add-select {
-            color: #e0b0b0;
-        }
     </style>
 </head>
 
@@ -2646,10 +2695,16 @@ function pgLink($v, $p)
                         <div class="vizsgalock-exceptions-title">Kivételek</div>
                         <table class="vizsgalock-exceptions-table">
                             <thead>
-                                <tr><th>FELHASZNÁLÓ</th><th>HOZZÁADVA</th><th></th></tr>
+                                <tr>
+                                    <th>FELHASZNÁLÓ</th>
+                                    <th>HOZZÁADVA</th>
+                                    <th></th>
+                                </tr>
                             </thead>
                             <tbody id="vizsgalockExceptionsBody">
-                                <tr><td colspan="3" class="vizsgalock-empty">[ NINCS KIVÉTEL ]</td></tr>
+                                <tr>
+                                    <td colspan="3" class="vizsgalock-empty">[ NINCS KIVÉTEL ]</td>
+                                </tr>
                             </tbody>
                         </table>
                         <div class="vizsgalock-add-row">
@@ -2927,7 +2982,7 @@ function pgLink($v, $p)
                             <div class="chat-header">
                                 <span><?= htmlspecialchars($user1Name) ?> ↔ <?= htmlspecialchars($user2Name) ?></span>
                             </div>
-                            <div class="chat-messages">
+                            <div class="chat-messages" id="chatMessages">
                                 <?php foreach ($messages as $msg): ?>
                                     <div class="message-row <?= $msg['sender_id'] == $selectedUser1 ? 'left' : 'right' ?>">
                                         <div class="message-bubble">
@@ -3251,6 +3306,19 @@ function pgLink($v, $p)
             }
         });
 
+        // ── BESZÉLGETÉSEK SCROLL ALULRA ──
+        function scrollChatToBottom() {
+            const chatMessages = document.getElementById('chatMessages');
+            if (chatMessages) {
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        }
+        // Oldal betöltésekor azonnal görgetés alulra
+        document.addEventListener('DOMContentLoaded', () => {
+            scrollChatToBottom();
+        });
+        // Ha a chatMessages dinamikusan töltődik be (pl. AJAX), akkor is hívható
+
         // ── USER PROFILE POPUP ──
         const userPopup = document.getElementById('userProfilePopup');
         const userPopupContent = document.getElementById('userPopupContent');
@@ -3275,7 +3343,7 @@ function pgLink($v, $p)
 
                     let avatarHtml;
                     if (data.profile_picture && data.profile_picture.trim() !== '') {
-                        avatarHtml = `<img src="${escapeHtml(data.profile_picture)}" alt="${escapeHtml(data.username)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+                        avatarHtml = `<img src="${escapeHtml(data.profile_picture)}" alt="${escapeHtml(data.username)}" style="width:100%;height:100%;object-fit:cover;">`;
                     } else {
                         avatarHtml = initial;
                     }
@@ -3291,7 +3359,7 @@ function pgLink($v, $p)
                                 `<img src="${escapeHtml(item.thumb)}" alt="${escapeHtml(item.title)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><div class="user-item-thumb-placeholder" style="display:none;">📷</div>` :
                                 `<div class="user-item-thumb-placeholder" style="display: flex;">📷</div>`;
                             itemsHtml += `
-                                <div class="user-item-thumb${soldClass}" onclick="fetchItemDetailsAndOpen('${escapeHtml(item.id)}');">
+                                <div class="user-item-thumb${soldClass}" onclick="closeUserProfile(); fetchItemDetailsAndOpen('${escapeHtml(item.id)}');">
                                     ${imgHtml}
                                     ${soldBadge}
                                     <div class="user-item-info">
@@ -3545,7 +3613,12 @@ function pgLink($v, $p)
 
             function escHtml(s) {
                 if (!s) return '';
-                return String(s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+                return String(s).replace(/[&<>"]/g, m => ({
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;'
+                } [m]));
             }
 
             function renderState(locked, exceptions, availableUsers) {
@@ -3605,7 +3678,9 @@ function pgLink($v, $p)
             window.doVizsgalockToggle = function() {
                 fetch('admin.php', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
                     body: 'vizsgalock_toggle=1'
                 }).then(r => r.json()).then(d => {
                     if (!d.error) loadStatus();
@@ -3617,7 +3692,9 @@ function pgLink($v, $p)
                 if (!uid) return;
                 fetch('admin.php', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
                     body: 'vizsgalock_add_exception=1&user_id=' + encodeURIComponent(uid)
                 }).then(r => r.json()).then(d => {
                     if (!d.error) loadStatus();
@@ -3627,7 +3704,9 @@ function pgLink($v, $p)
             window._vlRemove = function(uid) {
                 fetch('admin.php', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
                     body: 'vizsgalock_remove_exception=1&user_id=' + encodeURIComponent(uid)
                 }).then(r => r.json()).then(d => {
                     if (!d.error) loadStatus();
