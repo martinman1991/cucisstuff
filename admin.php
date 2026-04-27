@@ -172,6 +172,11 @@ try {
             } else {
                 $conn->prepare("UPDATE items SET title=?,description=?,price=? WHERE id=?")->execute([$t, $d, (float)$p, $_POST['item_id']]);
                 $message = "Termék módosítva.";
+                if (isset($_POST['ajax'])) {
+                    header('Content-Type: application/json');
+                    echo json_encode(['success' => true, 'title' => $t, 'description' => $d, 'price' => number_format((float)$p, 0, ',', ' ') . ' Ft']);
+                    exit();
+                }
                 header("Location: admin.php?view=items&page=$page");
                 exit();
             }
@@ -313,7 +318,9 @@ try {
                    r.item_id AS ref_id,
                    i.title AS ref_title,
                    u.username AS reporter_name,
+                   u.id AS reporter_id,
                    owner.username AS target_name,
+                   owner.id AS target_id,
                    r.reason, r.status, r.created_at
             FROM reports r
             JOIN items i ON r.item_id = i.id
@@ -324,7 +331,9 @@ try {
                    mr.message_id AS ref_id,
                    CONCAT('Üzenet: ', LEFT(uz.message, 40)) AS ref_title,
                    reporter.username AS reporter_name,
+                   reporter.id AS reporter_id,
                    sender.username AS target_name,
+                   sender.id AS target_id,
                    mr.reason, mr.status, mr.created_at
             FROM message_reports mr
             JOIN uzenetek uz ON mr.message_id = uz.id
@@ -605,8 +614,12 @@ function pgLink($v, $p)
         }
 
         .chrome-top-right .live-clock {
-            color: var(--c-green);
+            color: #66ff66;
             letter-spacing: 1px;
+        }
+
+        html.light-mode .chrome-top-right .live-clock {
+            color: #ffbb44;
         }
 
         .chrome-nav {
@@ -729,10 +742,13 @@ function pgLink($v, $p)
         }
 
         @keyframes vlPulseDanger {
-            0%, 100% {
+
+            0%,
+            100% {
                 box-shadow: 0 0 20px rgba(255, 0, 0, 0.8), 0 0 40px rgba(255, 0, 0, 0.4);
                 text-shadow: 0 0 15px rgba(255, 0, 0, 0.9);
             }
+
             50% {
                 box-shadow: 0 0 35px rgba(255, 0, 0, 1), 0 0 70px rgba(255, 0, 0, 0.6), 0 0 100px rgba(255, 0, 0, 0.4);
                 text-shadow: 0 0 25px rgba(255, 0, 0, 1), 0 0 50px rgba(255, 0, 0, 0.8);
@@ -1896,13 +1912,24 @@ function pgLink($v, $p)
             object-fit: cover;
         }
 
-        .product-details {
+        .product-detail-view {
             display: flex;
             flex-direction: column;
             gap: 16px;
             padding: 20px;
             overflow-y: auto;
             background: rgba(0, 0, 0, 0.2);
+            height: 100%;
+        }
+
+        .product-edit-view {
+            display: none;
+            flex-direction: column;
+            gap: 16px;
+            padding: 20px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.2);
+            height: 100%;
         }
 
         .product-title {
@@ -1971,11 +1998,86 @@ function pgLink($v, $p)
             box-shadow: 0 0 20px rgba(0, 180, 60, 0.3);
         }
 
-        .product-buy-btn.sold {
+        .product-buy-btn.sold,
+        html.light-mode .product-buy-btn.sold {
             background: #555 !important;
             border-color: #777 !important;
             color: #aaa !important;
             cursor: not-allowed;
+        }
+
+        /* Product edit form */
+        .product-edit-view .edit-form-group {
+            margin-bottom: 1.2rem;
+        }
+
+        .product-edit-view .edit-form-label {
+            display: block;
+            font-size: 0.7rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--c-muted);
+            margin-bottom: 5px;
+        }
+
+        .product-edit-view .edit-form-input,
+        .product-edit-view .edit-form-textarea {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid var(--c-border2);
+            color: var(--c-green);
+            font-family: var(--font-mono);
+            font-size: 0.88rem;
+            padding: 8px 12px;
+            outline: none;
+            transition: all 0.15s;
+        }
+
+        .product-edit-view .edit-form-textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .product-edit-view .edit-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        .product-edit-view .btn-edit-save {
+            padding: 8px 24px;
+            background: rgba(57, 255, 20, 0.1);
+            border: 1px solid var(--c-green-mid);
+            color: var(--c-green);
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .product-edit-view .btn-edit-save:hover {
+            background: rgba(57, 255, 20, 0.2);
+            box-shadow: var(--c-glow-strong);
+        }
+
+        .product-edit-view .btn-edit-cancel {
+            padding: 8px 20px;
+            background: transparent;
+            border: 1px solid var(--c-border2);
+            color: var(--c-muted);
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .product-edit-view .btn-edit-cancel:hover {
+            border-color: var(--c-amber);
+            color: var(--c-amber);
         }
 
         /* Light mode termékmodál: narancssárga marad */
@@ -2060,12 +2162,6 @@ function pgLink($v, $p)
         html.light-mode .product-menu-item.delete:hover {
             color: #ff4433 !important;
             background: rgba(255, 50, 50, 0.1) !important;
-        }
-
-        html.light-mode .product-buy-btn {
-            color: #00ff66 !important;
-            border-color: #00aa3a !important;
-            background: rgba(0, 180, 60, 0.12) !important;
         }
 
         .lightbox-overlay {
@@ -2713,9 +2809,9 @@ function pgLink($v, $p)
             <div class="chrome-top">
                 <div class="chrome-top-left">
                     CUCI-SYS <span>// ADMIN TERMINAL // SECURITY LEVEL: A1</span>
-                    <button class="theme-btn" id="themeToggleBtn">MODE</button>
                 </div>
                 <div class="chrome-top-right">
+                    <button class="theme-btn" id="themeToggleBtn">MODE</button>
                     <span>OP: <strong style="color:var(--c-green)"><?php echo htmlspecialchars($_SESSION['username'] ?? 'UNKNOWN'); ?></strong></span>
                     <span class="live-clock" id="liveClock">--:--:--</span>
                 </div>
@@ -2767,10 +2863,16 @@ function pgLink($v, $p)
                         <div class="vizsgalock-exceptions-title">Kivételek</div>
                         <table class="vizsgalock-exceptions-table">
                             <thead>
-                                <tr><th>FELHASZNÁLÓ</th><th>HOZZÁADVA</th><th></th></tr>
+                                <tr>
+                                    <th>FELHASZNÁLÓ</th>
+                                    <th>HOZZÁADVA</th>
+                                    <th></th>
+                                </tr>
                             </thead>
                             <tbody id="vizsgalockExceptionsBody">
-                                <tr><td colspan="3" class="vizsgalock-empty">[ NINCS KIVÉTEL ]</td></tr>
+                                <tr>
+                                    <td colspan="3" class="vizsgalock-empty">[ NINCS KIVÉTEL ]</td>
+                                </tr>
                             </tbody>
                         </table>
                         <div class="vizsgalock-add-row">
@@ -2901,13 +3003,17 @@ function pgLink($v, $p)
                                                 <span style="color:var(--c-text);font-size:0.8rem;"><?= htmlspecialchars($r['ref_title']) ?></span>
                                             <?php endif; ?>
                                         </td>
-                                        <td><?= htmlspecialchars($r['reporter_name']) ?></td>
-                                        <td><?= htmlspecialchars($r['target_name']) ?></td>
+                                        <td>
+                                            <a href="#" onclick="openUserProfile(<?= $r['reporter_id'] ?>); return false;" style="color: var(--c-green-mid); text-decoration: underline;"><?= htmlspecialchars($r['reporter_name']) ?></a>
+                                        </td>
+                                        <td>
+                                            <a href="#" onclick="openUserProfile(<?= $r['target_id'] ?>); return false;" style="color: var(--c-green-mid); text-decoration: underline;"><?= htmlspecialchars($r['target_name']) ?></a>
+                                        </td>
                                         <td class="wrap"><?= htmlspecialchars($r['reason']) ?></td>
                                         <td class="mono"><?= date('Y-m-d', strtotime($r['created_at'])) ?></td>
                                         <td>
                                             <?php if ($r['report_type'] === 'item'): ?>
-                                                <a href="admin.php?view=items&id=<?= $r['ref_id'] ?>" class="act act-view">TERMÉK</a>
+                                                <button class="act act-view" onclick="fetchItemDetailsAndOpen('<?= $r['ref_id'] ?>'); return false;">TERMÉK</button>
                                             <?php endif; ?>
                                             <button class="act act-del" onclick="confirmThenPost('delete_report', { report_id: <?= $r['id'] ?>, report_type: '<?= $r['report_type'] ?>' })">TÖRL</button>
                                         </td>
@@ -2943,7 +3049,9 @@ function pgLink($v, $p)
                                 <?php foreach ($users as $u): ?>
                                     <tr>
                                         <td class="mono"><?= $u['id'] ?></td>
-                                        <td><?= htmlspecialchars($u['username']) ?></td>
+                                        <td>
+                                            <a href="#" onclick="openUserProfile(<?= $u['id'] ?>); return false;" style="color: var(--c-green-mid); text-decoration: underline;"><?= htmlspecialchars($u['username']) ?></a>
+                                        </td>
                                         <td class="mono"><?= htmlspecialchars($u['email']) ?></td>
                                         <td><?= $u['is_admin'] ? '<span style="color:var(--c-amber)">■ ADMIN</span>' : '<span style="color:var(--c-muted)">○ USER</span>' ?></td>
                                         <td><?= $u['item_count'] ?></td>
@@ -2991,7 +3099,9 @@ function pgLink($v, $p)
                                                 <?= htmlspecialchars($it['title']) ?>
                                             </button>
                                         </td>
-                                        <td><?= htmlspecialchars($it['seller_name']) ?></td>
+                                        <td>
+                                            <a href="#" onclick="openUserProfile(<?= $it['user_id'] ?>); return false;" style="color: var(--c-green-mid); text-decoration: underline;"><?= htmlspecialchars($it['seller_name']) ?></a>
+                                        </td>
                                         <td class="mono"><?= number_format($it['price'], 0, ',', ' ') ?> FT</td>
                                         <td class="wrap"><?= htmlspecialchars(mb_substr($it['description'], 0, 50)) ?>...</td>
                                         <td class="mono"><?= date('Y-m-d', strtotime($it['created_at'])) ?></td>
@@ -3215,13 +3325,37 @@ function pgLink($v, $p)
                 </div>
                 <div class="product-thumbnails" id="productThumbnails"></div>
             </div>
-            <div class="product-details">
+            <!-- Részletes nézet -->
+            <div class="product-detail-view" id="productDetailView">
                 <h2 class="product-title" id="productTitle"></h2>
                 <div class="product-price" id="productPrice"></div>
                 <div class="product-seller" id="productSeller"></div>
                 <div class="product-date" id="productDate"></div>
                 <div class="product-description" id="productDescription"></div>
                 <button class="product-buy-btn" id="productBuyBtn">[ VÁSÁRLÁS ]</button>
+            </div>
+            <!-- Szerkesztő nézet -->
+            <div class="product-edit-view" id="productEditView">
+                <h3 style="font-family: var(--font-vt); color: var(--c-green); letter-spacing: 2px; margin-bottom: 1rem;">[ TERMÉK SZERKESZTÉSE ]</h3>
+                <form id="productEditForm" onsubmit="saveProductEdit(event)">
+                    <input type="hidden" name="item_id" id="edit_product_id">
+                    <div class="edit-form-group">
+                        <label class="edit-form-label">Cím</label>
+                        <input type="text" name="item_title" id="edit_product_title" class="edit-form-input" required>
+                    </div>
+                    <div class="edit-form-group">
+                        <label class="edit-form-label">Leírás</label>
+                        <textarea name="item_description" id="edit_product_description" class="edit-form-textarea" required></textarea>
+                    </div>
+                    <div class="edit-form-group">
+                        <label class="edit-form-label">Ár (Ft)</label>
+                        <input type="number" name="item_price" id="edit_product_price" class="edit-form-input" min="0" step="1" required>
+                    </div>
+                    <div class="edit-actions">
+                        <button type="button" class="btn-edit-cancel" onclick="cancelProductEdit()">[ MÉGSE ]</button>
+                        <button type="submit" class="btn-edit-save">[ MENTÉS ]</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -3379,7 +3513,6 @@ function pgLink($v, $p)
                 chatMessages.scrollTop = chatMessages.scrollHeight;
             }
         }
-        // Oldal betöltésekor azonnal görgetés alulra
         document.addEventListener('DOMContentLoaded', () => {
             scrollChatToBottom();
         });
@@ -3506,6 +3639,8 @@ function pgLink($v, $p)
             editBtn: document.getElementById('productEditBtn'),
             delBtn: document.getElementById('productDeleteBtn'),
             buyBtn: document.getElementById('productBuyBtn'),
+            detailView: document.getElementById('productDetailView'),
+            editView: document.getElementById('productEditView'),
         };
         let imgs = [],
             imgIdx = 0,
@@ -3543,6 +3678,9 @@ function pgLink($v, $p)
         function openPM() {
             pm.modal.classList.add('active');
             document.body.style.overflow = 'hidden';
+            // Biztosítsuk, hogy a részletes nézet látszik
+            pm.detailView.style.display = '';
+            pm.editView.style.display = 'none';
             setTimeout(adjustH, 100);
         }
 
@@ -3552,7 +3690,45 @@ function pgLink($v, $p)
             document.body.style.overflow = '';
         }
 
-        // Fetch item details and open modal (user popup stays open)
+        function openProductEdit() {
+            pm.detailView.style.display = 'none';
+            pm.editView.style.display = '';
+            document.getElementById('edit_product_id').value = prodId;
+            document.getElementById('edit_product_title').value = pm.title.textContent;
+            document.getElementById('edit_product_description').value = pm.desc.textContent;
+            document.getElementById('edit_product_price').value = pm.price.textContent.replace(/[^0-9]/g, '');
+        }
+
+        function cancelProductEdit() {
+            pm.detailView.style.display = '';
+            pm.editView.style.display = 'none';
+        }
+
+        async function saveProductEdit(e) {
+            e.preventDefault();
+            const form = document.getElementById('productEditForm');
+            const formData = new FormData(form);
+            formData.append('ajax', '1');
+            formData.append('update_item', '1');
+            try {
+                const resp = await fetch('admin.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await resp.json();
+                if (result.success) {
+                    pm.title.textContent = result.title;
+                    pm.desc.textContent = result.description;
+                    pm.price.textContent = result.price;
+                    cancelProductEdit();
+                } else {
+                    alert('Hiba a mentés során!');
+                }
+            } catch (err) {
+                alert('Hálózati hiba!');
+            }
+        }
+
         function fetchItemDetailsAndOpen(itemId) {
             fetch('admin.php?get_item_data=' + itemId)
                 .then(r => r.json())
@@ -3605,7 +3781,7 @@ function pgLink($v, $p)
                             pm.reportBtn.style.display = 'none';
                             pm.editBtn.style.display = 'block';
                             pm.delBtn.style.display = 'block';
-                            pm.editBtn.onclick = () => location.href = 'admin.php?view=items&id=' + prodId;
+                            pm.editBtn.onclick = () => openProductEdit();
                             pm.delBtn.onclick = () => {
                                 confirmThenPost('delete_item', {
                                     item_id: prodId
@@ -3678,7 +3854,12 @@ function pgLink($v, $p)
 
             function escHtml(s) {
                 if (!s) return '';
-                return String(s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+                return String(s).replace(/[&<>"]/g, m => ({
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;'
+                } [m]));
             }
 
             function renderState(locked, exceptions, availableUsers) {
@@ -3738,7 +3919,9 @@ function pgLink($v, $p)
             window.doVizsgalockToggle = function() {
                 fetch('admin.php', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
                     body: 'vizsgalock_toggle=1'
                 }).then(r => r.json()).then(d => {
                     if (!d.error) loadStatus();
@@ -3750,7 +3933,9 @@ function pgLink($v, $p)
                 if (!uid) return;
                 fetch('admin.php', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
                     body: 'vizsgalock_add_exception=1&user_id=' + encodeURIComponent(uid)
                 }).then(r => r.json()).then(d => {
                     if (!d.error) loadStatus();
@@ -3760,7 +3945,9 @@ function pgLink($v, $p)
             window._vlRemove = function(uid) {
                 fetch('admin.php', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
                     body: 'vizsgalock_remove_exception=1&user_id=' + encodeURIComponent(uid)
                 }).then(r => r.json()).then(d => {
                     if (!d.error) loadStatus();
