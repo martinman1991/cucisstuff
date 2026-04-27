@@ -855,6 +855,7 @@ try {
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            cursor: pointer;
         }
 
         .order-card .order-price {
@@ -1806,7 +1807,9 @@ try {
                                     <div class="order-image-placeholder">📷</div>
                                 <?php endif; ?>
                                 <div class="order-info">
-                                    <div class="order-title"><?= htmlspecialchars($order['item_title']) ?></div>
+                                    <div class="order-title" data-item-id="<?= htmlspecialchars($order['item_id']) ?>">
+                                        <?= htmlspecialchars($order['item_title']) ?>
+                                    </div>
                                     <div class="order-price"><?= number_format($order['item_price'], 0, ',', ' ') ?> Ft</div>
                                     <div class="order-meta">
                                         Eladó: <strong><?= htmlspecialchars($order['seller_name']) ?></strong>
@@ -2468,6 +2471,15 @@ try {
 
         document.querySelectorAll('.mini-card').forEach(card => {
             card.addEventListener('click', function(e) {
+                const itemId = this.dataset.itemId;
+                if (itemId) fetchItemDetails(itemId);
+            });
+        });
+
+        // Rendelési tételek nevére kattintva termék modal megnyitása
+        document.querySelectorAll('.order-title').forEach(el => {
+            el.addEventListener('click', function(e) {
+                e.stopPropagation();
                 const itemId = this.dataset.itemId;
                 if (itemId) fetchItemDetails(itemId);
             });
