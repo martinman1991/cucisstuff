@@ -122,8 +122,9 @@ try {
     if (isset($_GET['get_item']) && !empty($_GET['get_item'])) {
         header('Content-Type: application/json');
         $itemId = $_GET['get_item'];
+        // MÓDOSÍTÁS: i.sold mező hozzáadva
         $stmt = $conn->prepare("
-            SELECT i.id, i.title, i.description, i.price, i.created_at, u.username as seller_name, i.user_id
+            SELECT i.id, i.title, i.description, i.price, i.created_at, i.sold, u.username as seller_name, i.user_id
             FROM items i
             JOIN users u ON i.user_id = u.id
             WHERE i.id = ?
@@ -1684,6 +1685,16 @@ try {
             box-shadow: 0 10px 30px rgba(0, 200, 0, 0.4);
         }
 
+        /* ========== ELKELT GOMB STÍLUSA (témafüggetlen) ========== */
+        .product-buy-btn.sold {
+            background: #555 !important;
+            color: #aaa !important;
+            cursor: not-allowed !important;
+            border: 1px solid #666 !important;
+            box-shadow: none !important;
+            pointer-events: none;
+        }
+
         .lightbox-overlay {
             position: fixed;
             inset: 0;
@@ -3049,6 +3060,7 @@ try {
             }
         });
 
+        // ========== fetchItemDetails MÓDOSÍTÁSOKKAL ==========
         function fetchItemDetails(itemId) {
             fetch(`?get_item=${itemId}`).then(r => r.json()).then(item => {
                 if (item.error) return;
@@ -3106,6 +3118,22 @@ try {
                     reportBtn.style.display = 'block';
                     hasVisibleMenu = true;
                     buyBtn.style.display = 'flex';
+
+                    // ---- MÓDOSÍTÁS: a sold mező alapján állítjuk a gombot ----
+                    if (item.sold == 1) {
+                        buyBtn.textContent = 'Elkelt';
+                        buyBtn.classList.add('sold');
+                        buyBtn.disabled = true;
+                        buyBtn.onclick = null;
+                    } else {
+                        buyBtn.textContent = '🛒 Vásárlás';
+                        buyBtn.classList.remove('sold');
+                        buyBtn.disabled = false;
+                        buyBtn.onclick = () => {
+                            window.location.href = 'vasarlas.php?item_id=' + encodeURIComponent(item.id);
+                        };
+                    }
+                    // ---- MÓDOSÍTÁS VÉGE ----
                 }
 
                 menuContainer.style.display = hasVisibleMenu ? 'block' : 'none';
@@ -3119,12 +3147,6 @@ try {
                 reportBtn.onclick = () => {
                     openReportModal(item.id);
                 };
-
-                if (!isOwner) {
-                    buyBtn.onclick = () => {
-                        window.location.href = 'vasarlas.php?item_id=' + encodeURIComponent(item.id);
-                    };
-                }
 
                 openProductModal();
             }).catch(err => console.error(err));

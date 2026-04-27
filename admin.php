@@ -742,13 +742,10 @@ function pgLink($v, $p)
         }
 
         @keyframes vlPulseDanger {
-
-            0%,
-            100% {
+            0%, 100% {
                 box-shadow: 0 0 20px rgba(255, 0, 0, 0.8), 0 0 40px rgba(255, 0, 0, 0.4);
                 text-shadow: 0 0 15px rgba(255, 0, 0, 0.9);
             }
-
             50% {
                 box-shadow: 0 0 35px rgba(255, 0, 0, 1), 0 0 70px rgba(255, 0, 0, 0.6), 0 0 100px rgba(255, 0, 0, 0.4);
                 text-shadow: 0 0 25px rgba(255, 0, 0, 1), 0 0 50px rgba(255, 0, 0, 0.8);
@@ -1998,15 +1995,19 @@ function pgLink($v, $p)
             box-shadow: 0 0 20px rgba(0, 180, 60, 0.3);
         }
 
+        /* ELKELT GOMB – MINDIG SZÜRKE GLOW */
         .product-buy-btn.sold,
-        html.light-mode .product-buy-btn.sold {
+        .product-buy-btn.sold:hover,
+        html.light-mode .product-buy-btn.sold,
+        html.light-mode .product-buy-btn.sold:hover {
             background: #555 !important;
             border-color: #777 !important;
             color: #aaa !important;
             cursor: not-allowed;
+            box-shadow: 0 0 12px rgba(128, 128, 128, 0.5) !important;
+            transform: none !important;
         }
 
-        /* Product edit form */
         .product-edit-view .edit-form-group {
             margin-bottom: 1.2rem;
         }
@@ -2080,7 +2081,6 @@ function pgLink($v, $p)
             color: var(--c-amber);
         }
 
-        /* Light mode termékmodál: narancssárga marad */
         html.light-mode .product-modal-overlay {
             background: rgba(20, 10, 0, 0.97) !important;
         }
@@ -2863,16 +2863,10 @@ function pgLink($v, $p)
                         <div class="vizsgalock-exceptions-title">Kivételek</div>
                         <table class="vizsgalock-exceptions-table">
                             <thead>
-                                <tr>
-                                    <th>FELHASZNÁLÓ</th>
-                                    <th>HOZZÁADVA</th>
-                                    <th></th>
-                                </tr>
+                                <tr><th>FELHASZNÁLÓ</th><th>HOZZÁADVA</th><th></th></tr>
                             </thead>
                             <tbody id="vizsgalockExceptionsBody">
-                                <tr>
-                                    <td colspan="3" class="vizsgalock-empty">[ NINCS KIVÉTEL ]</td>
-                                </tr>
+                                <tr><td colspan="3" class="vizsgalock-empty">[ NINCS KIVÉTEL ]</td></tr>
                             </tbody>
                         </table>
                         <div class="vizsgalock-add-row">
@@ -3678,7 +3672,6 @@ function pgLink($v, $p)
         function openPM() {
             pm.modal.classList.add('active');
             document.body.style.overflow = 'hidden';
-            // Biztosítsuk, hogy a részletes nézet látszik
             pm.detailView.style.display = '';
             pm.editView.style.display = 'none';
             setTimeout(adjustH, 100);
@@ -3711,10 +3704,7 @@ function pgLink($v, $p)
             formData.append('ajax', '1');
             formData.append('update_item', '1');
             try {
-                const resp = await fetch('admin.php', {
-                    method: 'POST',
-                    body: formData
-                });
+                const resp = await fetch('admin.php', { method: 'POST', body: formData });
                 const result = await resp.json();
                 if (result.success) {
                     pm.title.textContent = result.title;
@@ -3854,12 +3844,7 @@ function pgLink($v, $p)
 
             function escHtml(s) {
                 if (!s) return '';
-                return String(s).replace(/[&<>"]/g, m => ({
-                    '&': '&amp;',
-                    '<': '&lt;',
-                    '>': '&gt;',
-                    '"': '&quot;'
-                } [m]));
+                return String(s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
             }
 
             function renderState(locked, exceptions, availableUsers) {
@@ -3919,9 +3904,7 @@ function pgLink($v, $p)
             window.doVizsgalockToggle = function() {
                 fetch('admin.php', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    },
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                     body: 'vizsgalock_toggle=1'
                 }).then(r => r.json()).then(d => {
                     if (!d.error) loadStatus();
@@ -3933,9 +3916,7 @@ function pgLink($v, $p)
                 if (!uid) return;
                 fetch('admin.php', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    },
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                     body: 'vizsgalock_add_exception=1&user_id=' + encodeURIComponent(uid)
                 }).then(r => r.json()).then(d => {
                     if (!d.error) loadStatus();
@@ -3945,16 +3926,13 @@ function pgLink($v, $p)
             window._vlRemove = function(uid) {
                 fetch('admin.php', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    },
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                     body: 'vizsgalock_remove_exception=1&user_id=' + encodeURIComponent(uid)
                 }).then(r => r.json()).then(d => {
                     if (!d.error) loadStatus();
                 });
             };
 
-            // Oldalbetöltéskor frissítjük a nav gomb állapotát
             loadStatus();
         })();
 
