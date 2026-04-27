@@ -2402,6 +2402,7 @@ try {
                 const menuContainer = document.getElementById('productMenuContainer');
                 const deleteBtn = document.getElementById('productDeleteBtn');
                 const editBtn = document.getElementById('productEditBtn');
+                const buyBtn = document.getElementById('productBuyBtn');
                 const isOwner = (parseInt(item.user_id) === <?php echo (int)$_SESSION['user_id']; ?>);
                 menuContainer.style.display = 'block';
                 if (isOwner) {
@@ -2420,9 +2421,12 @@ try {
                             form.submit();
                         }
                     };
+                    // Saját termék – nincs vásárlás gomb
+                    buyBtn.style.display = 'none';
                 } else {
                     editBtn.style.display = 'none';
                     deleteBtn.style.display = 'none';
+                    buyBtn.style.display = 'flex';
                 }
                 openProductModal();
             }).catch(err => console.error(err));
