@@ -218,7 +218,7 @@ try {
                     (SELECT image_path FROM item_images WHERE item_id = i.id AND is_primary = 1 LIMIT 1) as primary_image
                 FROM items i
                 JOIN users u ON i.user_id = u.id
-                WHERE i.title LIKE :q OR i.description LIKE :q
+                WHERE (i.title LIKE :q OR i.description LIKE :q) AND i.sold = FALSE
                 ORDER BY i.created_at DESC
                 LIMIT 10
             ");
@@ -241,7 +241,7 @@ try {
 
             // Fetch item details
             $stmt = $conn->prepare("
-                SELECT i.id, i.title, i.description, i.price, i.created_at, u.username as seller_name, i.user_id
+                SELECT i.id, i.title, i.description, i.price, i.created_at, u.username as seller_name, i.user_id, i.sold
                 FROM items i
                 JOIN users u ON i.user_id = u.id
                 WHERE i.id = ?
@@ -574,8 +574,8 @@ try {
     $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
     $offset = ($page - 1) * $itemsPerPage;
 
-    // Get total items count
-    $totalStmt = $conn->query("SELECT COUNT(*) FROM items");
+    // Get total items count (csak nem elkelt termékek)
+    $totalStmt = $conn->query("SELECT COUNT(*) FROM items WHERE sold = FALSE");
     $totalItems = $totalStmt->fetchColumn();
     $totalPages = ceil($totalItems / $itemsPerPage);
 
@@ -590,11 +590,12 @@ try {
     }
     $seed = $_SESSION['items_seed'];
 
-    // Fetch items for current page with session-based RAND seed
+    // Fetch items for current page with session-based RAND seed (csak nem elkelt termékek)
     $stmt = $conn->prepare("
         SELECT i.*, u.username as seller_name
         FROM items i
         JOIN users u ON i.user_id = u.id
+        WHERE i.sold = FALSE
         ORDER BY RAND(:seed)
         LIMIT :offset, :itemsPerPage
     ");
@@ -690,51 +691,19 @@ try {
         }
 
         @keyframes noise {
-
-            0%,
-            100% {
-                transform: translate(0, 0);
-            }
-
-            10% {
-                transform: translate(-5%, -5%);
-            }
-
-            20% {
-                transform: translate(-10%, 5%);
-            }
-
-            30% {
-                transform: translate(5%, -10%);
-            }
-
-            40% {
-                transform: translate(-5%, 15%);
-            }
-
-            50% {
-                transform: translate(-10%, 5%);
-            }
-
-            60% {
-                transform: translate(15%, 0);
-            }
-
-            70% {
-                transform: translate(0, 10%);
-            }
-
-            80% {
-                transform: translate(-15%, 0);
-            }
-
-            90% {
-                transform: translate(10%, 5%);
-            }
+            0%, 100% { transform: translate(0, 0); }
+            10% { transform: translate(-5%, -5%); }
+            20% { transform: translate(-10%, 5%); }
+            30% { transform: translate(5%, -10%); }
+            40% { transform: translate(-5%, 15%); }
+            50% { transform: translate(-10%, 5%); }
+            60% { transform: translate(15%, 0); }
+            70% { transform: translate(0, 10%); }
+            80% { transform: translate(-15%, 0); }
+            90% { transform: translate(10%, 5%); }
         }
 
-        .orb-1,
-        .orb-2 {
+        .orb-1, .orb-2 {
             position: fixed;
             width: min(60vw, 600px);
             height: min(60vw, 600px);
@@ -760,35 +729,15 @@ try {
         }
 
         @keyframes float1 {
-
-            0%,
-            100% {
-                transform: translate(0, 0) scale(1);
-            }
-
-            33% {
-                transform: translate(10vw, 10vh) scale(1.1);
-            }
-
-            66% {
-                transform: translate(-5vw, 15vh) scale(0.9);
-            }
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(10vw, 10vh) scale(1.1); }
+            66% { transform: translate(-5vw, 15vh) scale(0.9); }
         }
 
         @keyframes float2 {
-
-            0%,
-            100% {
-                transform: translate(0, 0) scale(1);
-            }
-
-            33% {
-                transform: translate(-10vw, -10vh) scale(1.2);
-            }
-
-            66% {
-                transform: translate(5vw, -15vh) scale(0.8);
-            }
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(-10vw, -10vh) scale(1.2); }
+            66% { transform: translate(5vw, -15vh) scale(0.8); }
         }
 
         /* Top bar - KÖZÉPRE IGAZÍTOTT VERZIÓ */
@@ -1769,8 +1718,7 @@ try {
             -webkit-user-select: none;
         }
 
-        input,
-        textarea {
+        input, textarea {
             user-select: text;
             -webkit-user-select: text;
         }
@@ -2602,6 +2550,22 @@ try {
             box-shadow: 0 10px 30px rgba(0, 200, 0, 0.4);
         }
 
+        /* ========== ELKELT GOMB STÍLUSA (témafüggetlen) ========== */
+        .product-buy-btn.sold {
+            background: #555 !important;
+            color: #aaa !important;
+            cursor: not-allowed !important;
+            border: 1px solid #666 !important;
+            box-shadow: none !important;
+            pointer-events: none;
+        }
+
+        .product-buy-btn.sold:hover {
+            background: #555 !important;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
         /* =====================
         LIGHTBOX
         ===================== */
@@ -2752,17 +2716,7 @@ try {
         }
 
         @media (prefers-reduced-motion: reduce) {
-
-            .noise,
-            .orb-1,
-            .orb-2,
-            .item-card,
-            .account-dropdown,
-            .pagination-btn,
-            .modal-card,
-            .modal-overlay,
-            .product-modal-card,
-            .product-modal-overlay {
+            .noise, .orb-1, .orb-2, .item-card, .account-dropdown, .pagination-btn, .modal-card, .modal-overlay, .product-modal-card, .product-modal-overlay {
                 animation: none;
                 transition: none;
             }
@@ -3433,7 +3387,8 @@ try {
                         data-item-date="<?php echo date('Y-m-d', strtotime($item['created_at'])); ?>"
                         data-item-description="<?php echo htmlspecialchars($item['description']); ?>"
                         data-item-images='<?php echo json_encode($allImages); ?>'
-                        data-item-user-id="<?php echo $item['user_id']; ?>">
+                        data-item-user-id="<?php echo $item['user_id']; ?>"
+                        data-item-sold="0">
 
                         <?php
                         $isOwnerCard = ($item['user_id'] == $_SESSION['user_id']);
@@ -3506,6 +3461,7 @@ try {
         let currentImageIndex = 0;
         let currentProductId = null;
         let currentProductUserId = null;
+        let currentProductSold = false;
 
         // Upload modal functionality
         const modal = document.getElementById('uploadModal');
@@ -3782,6 +3738,27 @@ try {
             }
         }
 
+        function updateProductBuyBtn(sold) {
+            const buyBtn = document.getElementById('productBuyBtn');
+            if (sold) {
+                buyBtn.textContent = 'Elkelt';
+                buyBtn.classList.add('sold');
+                buyBtn.disabled = true;
+                buyBtn.onclick = null;
+            } else {
+                buyBtn.textContent = '🛒 Vásárlás';
+                buyBtn.classList.remove('sold');
+                buyBtn.disabled = false;
+                buyBtn.onclick = function() {
+                    if (currentProductId) {
+                        window.location.href = 'vasarlas.php?item_id=' + encodeURIComponent(currentProductId);
+                    } else {
+                        alert('Hiba: nincs termék kiválasztva.');
+                    }
+                };
+            }
+        }
+
         document.querySelectorAll('.item-card').forEach(card => {
             card.addEventListener('click', function(e) {
                 if (e.target.closest('.card-menu') || e.target.closest('.report-modal')) return;
@@ -3793,11 +3770,13 @@ try {
                 const description = this.dataset.itemDescription;
                 const images = JSON.parse(this.dataset.itemImages || '[]');
                 const userId = this.dataset.itemUserId;
+                const sold = this.dataset.itemSold === '1';
 
                 currentProductId = productId;
                 currentProductUserId = userId;
                 currentProductImages = images;
                 currentImageIndex = 0;
+                currentProductSold = sold;
 
                 document.getElementById('productTitle').textContent = title;
                 document.getElementById('productPrice').textContent = price;
@@ -3842,7 +3821,6 @@ try {
                     menuContainer.style.display = 'block';
 
                     // Report: visible for non-owners (or admins can report too)
-                    // IMPORTANT: Do NOT close product modal when opening report modal
                     if (!isOwner || isAdmin) {
                         reportBtn.style.display = 'block';
                         reportBtn.onclick = () => {
@@ -3853,7 +3831,6 @@ try {
                     }
 
                     // Edit: visible for owner or admin
-                    // IMPORTANT: Do NOT close product modal when opening edit modal
                     if (isOwner || isAdmin) {
                         editBtn.style.display = 'block';
                         editBtn.onclick = () => {
@@ -3869,7 +3846,6 @@ try {
                     }
 
                     // Delete: visible for owner or admin
-                    // IMPORTANT: Use delete confirm modal instead of confirm()
                     if (isOwner || isAdmin) {
                         deleteBtn.style.display = 'block';
                         deleteBtn.onclick = () => {
@@ -3880,14 +3856,8 @@ try {
                     }
                 <?php endif; ?>
 
-                // --- VÁSÁRLÁS GOMB MŰKÖDÉSE ---
-                document.getElementById('productBuyBtn').onclick = function() {
-                    if (currentProductId) {
-                        window.location.href = 'vasarlas.php?item_id=' + encodeURIComponent(currentProductId);
-                    } else {
-                        alert('Hiba: nincs termék kiválasztva.');
-                    }
-                };
+                // Vásárlás gomb frissítése
+                updateProductBuyBtn(sold);
 
                 openProductModal();
             });
@@ -3927,14 +3897,6 @@ try {
 
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && productModal.classList.contains('active')) closeProductModal();
-        });
-
-        document.getElementById('productBuyBtn').addEventListener('click', function() {
-            if (currentProductId) {
-                window.location.href = 'vasarlas.php?item_id=' + encodeURIComponent(currentProductId);
-            } else {
-                alert('Hiba: nincs termék kiválasztva.');
-            }
         });
 
         function toggleProductMenu(button) {
@@ -4090,6 +4052,7 @@ try {
                     currentProductUserId = item.user_id;
                     currentProductImages = item.images;
                     currentImageIndex = 0;
+                    currentProductSold = item.sold ? true : false;
 
                     document.getElementById('productTitle').textContent = item.title;
                     document.getElementById('productPrice').textContent = `${Number(item.price).toLocaleString('hu-HU')} Ft`;
@@ -4131,7 +4094,6 @@ try {
 
                     menuContainer.style.display = 'block';
 
-                    // Report: Do NOT close product modal
                     if (!isOwner || isAdmin) {
                         reportBtn.style.display = 'block';
                         reportBtn.onclick = () => {
@@ -4141,14 +4103,12 @@ try {
                         reportBtn.style.display = 'none';
                     }
 
-                    // Edit: Do NOT close product modal
                     if (isOwner || isAdmin) {
                         editBtn.style.display = 'block';
                         editBtn.onclick = () => {
                             openEditModal(item.id, item.title, item.description, item.price);
                         };
                         deleteBtn.style.display = 'block';
-                        // Use delete confirm modal instead of confirm()
                         deleteBtn.onclick = () => {
                             openDeleteConfirmModal(item.id);
                         };
@@ -4158,9 +4118,7 @@ try {
                     }
 
                     // Vásárlás gomb frissítése
-                    document.getElementById('productBuyBtn').onclick = function() {
-                        window.location.href = 'vasarlas.php?item_id=' + encodeURIComponent(item.id);
-                    };
+                    updateProductBuyBtn(currentProductSold);
 
                     openProductModal();
                 })
