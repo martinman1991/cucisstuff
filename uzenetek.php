@@ -165,25 +165,37 @@ try {
 
     // ================================
     // AJAX – Elérhető felhasználók listája (akikkel még nincs beszélgetés)
+    // JAVÍTVA: a rejtett beszélgetések partnerei is elérhetőek
     // ================================
     if (isset($_GET['ajax_get_available_users'])) {
         header('Content-Type: application/json');
+        // Kizárjuk azokat, akikkel van NEM REJTETT beszélgetés
         $stmt = $conn->prepare("
-            SELECT id, username 
-            FROM users 
-            WHERE id != ? 
-              AND id NOT IN (
-                  SELECT DISTINCT 
-                      CASE 
-                          WHEN sender_id = ? THEN receiver_id 
-                          ELSE sender_id 
-                      END 
-                  FROM uzenetek 
-                  WHERE sender_id = ? OR receiver_id = ?
-              )
-            ORDER BY username
+            SELECT u.id, u.username 
+            FROM users u
+            WHERE u.id != :me
+            AND u.id NOT IN (
+                SELECT DISTINCT partner_id FROM (
+                    SELECT 
+                        CASE 
+                            WHEN m.sender_id = :me THEN m.receiver_id 
+                            ELSE m.sender_id 
+                        END AS partner_id
+                    FROM uzenetek m
+                    WHERE (m.sender_id = :me OR m.receiver_id = :me)
+                    AND NOT EXISTS (
+                        SELECT 1 FROM hidden_conversations hc 
+                        WHERE hc.user_id = :me AND hc.partner_id = 
+                            CASE 
+                                WHEN m.sender_id = :me THEN m.receiver_id 
+                                ELSE m.sender_id 
+                            END
+                    )
+                ) AS non_hidden
+            )
+            ORDER BY u.username
         ");
-        $stmt->execute([$currentUserId, $currentUserId, $currentUserId, $currentUserId]);
+        $stmt->execute([':me' => $currentUserId]);
         $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
         echo json_encode($users);
         exit;
@@ -2573,7 +2585,7 @@ function formatPartnerTime($datetime) {
                     if (partnerIdToHide === partnerId) {
                         window.location.href = 'uzenetek.php';
                     }
-                    showToast('Beszélgetés elrejtve.');
+                    showToast('Beszélgetés elrejtve. Az illető az "Új beszélgetés" menüpontban elérhető.');
                 } else {
                     showToast('Hiba történt az elrejtés során.');
                 }
@@ -3320,5 +3332,4 @@ function formatPartnerTime($datetime) {
         scrollToBottom();
     </script>
 </body>
-
 </html>
