@@ -1,4 +1,4 @@
-﻿using MySql.Data.MySqlClient;
+﻿using MySqlConnector;
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
@@ -17,24 +17,23 @@ namespace cucisstuff
 {
     public partial class MainWindow : Window
     {
-        // Adatbázis kapcsolat adatai a config.php-ból
+        // ============================================================
+        // FONTOS: Ide írd be a MySQL szerver valódi IP-jét vagy hostname-jét!
+        // Ha ugyanazon a gépen fut a MySQL mint a WPF app: "localhost" vagy "127.0.0.1"
+        // Ha remote szerveren van: a szerver publikus IP-je, pl. "192.168.1.10"
+        // ============================================================
         private const string DB_HOST = "localhost";
         private const string DB_USER = "cuci_ady_pepa_hu_usr";
         private const string DB_PASS = "utQTkTN2Q5WD7zal8IBFmQ";
         private const string DB_NAME = "cuci_ady_pepa_hu";
 
         private string ConnectionString =>
-            $"Server={DB_HOST};Database={DB_NAME};Uid={DB_USER};Pwd={DB_PASS};Charset=utf8mb4;";
+            $"Server={DB_HOST};Port=3306;Database={DB_NAME};Uid={DB_USER};Pwd={DB_PASS};Charset=utf8mb4;" +
+            "AllowPublicKeyRetrieval=True;SslMode=None;ConnectionTimeout=10;";
 
-        // Session-szerű adatok
         public static int? LoggedInUserId { get; set; }
         public static string LoggedInUsername { get; set; }
         public static bool IsAdmin { get; set; }
-
-        private static readonly SolidColorBrush PlaceholderBrush =
-            new SolidColorBrush(Color.FromRgb(0x8A, 0x7A, 0x65));
-        private static readonly SolidColorBrush NormalTextBrush =
-            new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8));
 
         public MainWindow()
         {
@@ -44,7 +43,7 @@ namespace cucisstuff
 
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (e.ClickCount == 1)
+            if (e.ButtonState == MouseButtonState.Pressed)
                 DragMove();
         }
 
@@ -54,7 +53,7 @@ namespace cucisstuff
         }
 
         // ============================================
-        // NAVIGÁCIÓS SEGÉDFÜGGVÉNYEK
+        // NAVIGÁCIÓ
         // ============================================
         public void NavigateToLogin()
         {
@@ -95,7 +94,7 @@ namespace cucisstuff
         }
 
         // ============================================
-        // ADATBÁZIS SEGÉDFÜGGVÉNYEK
+        // ADATBÁZIS
         // ============================================
         public MySqlConnection GetConnection()
         {
@@ -116,10 +115,7 @@ namespace cucisstuff
                     return result != null && Convert.ToBoolean(result);
                 }
             }
-            catch
-            {
-                return false;
-            }
+            catch { return false; }
         }
 
         public bool IsVizsgalockExcepted(int userId)
@@ -128,29 +124,22 @@ namespace cucisstuff
             {
                 using (var conn = GetConnection())
                 {
-                    // Adminok automatikusan kivételek
                     using (var cmd = new MySqlCommand(
                         "SELECT COUNT(*) FROM admins WHERE user_id = @uid", conn))
                     {
                         cmd.Parameters.AddWithValue("@uid", userId);
-                        if (Convert.ToInt32(cmd.ExecuteScalar()) > 0)
-                            return true;
+                        if (Convert.ToInt32(cmd.ExecuteScalar()) > 0) return true;
                     }
-                    // Explicit kivételek
                     using (var cmd = new MySqlCommand(
                         "SELECT COUNT(*) FROM vizsgalock_exceptions WHERE user_id = @uid", conn))
                     {
                         cmd.Parameters.AddWithValue("@uid", userId);
-                        if (Convert.ToInt32(cmd.ExecuteScalar()) > 0)
-                            return true;
+                        if (Convert.ToInt32(cmd.ExecuteScalar()) > 0) return true;
                     }
                 }
                 return false;
             }
-            catch
-            {
-                return false;
-            }
+            catch { return false; }
         }
 
         public bool CanPerformWriteOperation()
@@ -168,9 +157,6 @@ namespace cucisstuff
                 .Select(_ => chars[random.Next(chars.Length)]).ToArray());
         }
 
-        // ============================================
-        // JELSZÓ HASH ELŐÁLLÍTÁS (BCrypt)
-        // ============================================
         public string BCryptHash(string password)
         {
             return BCrypt.Net.BCrypt.HashPassword(password, BCrypt.Net.BCrypt.GenerateSalt(12));
@@ -178,19 +164,10 @@ namespace cucisstuff
 
         public bool BCryptVerify(string password, string hash)
         {
-            try
-            {
-                return BCrypt.Net.BCrypt.Verify(password, hash);
-            }
-            catch
-            {
-                return false;
-            }
+            try { return BCrypt.Net.BCrypt.Verify(password, hash); }
+            catch { return false; }
         }
 
-        // ============================================
-        // KÉP ÁTMÉRETEZŐ FÜGGVÉNY (WPF verzió)
-        // ============================================
         public byte[] ResizeImage(byte[] imageData, int maxDim = 1024)
         {
             try
@@ -202,32 +179,24 @@ namespace cucisstuff
                     bitmap.CacheOption = BitmapCacheOption.OnLoad;
                     bitmap.StreamSource = ms;
                     bitmap.EndInit();
+                    bitmap.Freeze();
 
                     int srcWidth = bitmap.PixelWidth;
                     int srcHeight = bitmap.PixelHeight;
-
-                    if (srcWidth <= maxDim && srcHeight <= maxDim)
-                        return imageData;
+                    if (srcWidth <= maxDim && srcHeight <= maxDim) return imageData;
 
                     double ratio = (double)srcWidth / srcHeight;
                     int newWidth, newHeight;
                     if (srcWidth > srcHeight)
-                    {
-                        newWidth = maxDim;
-                        newHeight = (int)Math.Round(maxDim / ratio);
-                    }
+                    { newWidth = maxDim; newHeight = (int)Math.Round(maxDim / ratio); }
                     else
-                    {
-                        newHeight = maxDim;
-                        newWidth = (int)Math.Round(maxDim * ratio);
-                    }
+                    { newHeight = maxDim; newWidth = (int)Math.Round(maxDim * ratio); }
 
-                    var resizedBitmap = new TransformedBitmap(bitmap, new ScaleTransform(
-                        (double)newWidth / srcWidth, (double)newHeight / srcHeight));
+                    var resizedBitmap = new TransformedBitmap(bitmap,
+                        new ScaleTransform((double)newWidth / srcWidth, (double)newHeight / srcHeight));
 
                     var encoder = new JpegBitmapEncoder { QualityLevel = 85 };
                     encoder.Frames.Add(BitmapFrame.Create(resizedBitmap));
-
                     using (var outputMs = new MemoryStream())
                     {
                         encoder.Save(outputMs);
@@ -235,28 +204,124 @@ namespace cucisstuff
                     }
                 }
             }
-            catch
+            catch { return imageData; }
+        }
+
+        // Segéd: narancssárga gomb gyorsan
+        public static Button MakeOrangeButton(string content, double fontSize = 14)
+        {
+            var btn = new Button
             {
-                return imageData;
-            }
+                Content = content,
+                FontSize = fontSize,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x0A, 0x05, 0x00)),
+                Padding = new Thickness(16, 12, 16, 12),
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand
+            };
+            btn.Background = new LinearGradientBrush(
+                Color.FromRgb(0xFF, 0xAB, 0x35),
+                Color.FromRgb(0xB3, 0x55, 0x00), 90);
+            ApplyRoundedTemplate(btn, new CornerRadius(12));
+            return btn;
+        }
+
+        // Segéd: ghost (áttetsző keretű) gomb
+        public static Button MakeGhostButton(string content, double fontSize = 14)
+        {
+            var btn = new Button
+            {
+                Content = content,
+                FontSize = fontSize,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
+                Background = Brushes.Transparent,
+                Padding = new Thickness(16, 10, 16, 10),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x4D, 0xFF, 0x8C, 0x00)),
+                BorderThickness = new Thickness(1),
+                Cursor = Cursors.Hand
+            };
+            ApplyRoundedTemplate(btn, new CornerRadius(12));
+            return btn;
+        }
+
+        // Segéd: vörös ghost gomb
+        public static Button MakeRedGhostButton(string content, double fontSize = 14)
+        {
+            var btn = new Button
+            {
+                Content = content,
+                FontSize = fontSize,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x44, 0x44)),
+                Background = Brushes.Transparent,
+                Padding = new Thickness(16, 10, 16, 10),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x4D, 0xFF, 0x44, 0x44)),
+                BorderThickness = new Thickness(1),
+                Cursor = Cursors.Hand
+            };
+            ApplyRoundedTemplate(btn, new CornerRadius(12));
+            return btn;
+        }
+
+        private static void ApplyRoundedTemplate(Button btn, CornerRadius cr)
+        {
+            var t = new ControlTemplate(typeof(Button));
+            var bdrFef = new FrameworkElementFactory(typeof(Border));
+            bdrFef.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
+            bdrFef.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
+            bdrFef.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Button.BorderThicknessProperty));
+            bdrFef.SetValue(Border.PaddingProperty, new TemplateBindingExtension(Button.PaddingProperty));
+            bdrFef.SetValue(Border.CornerRadiusProperty, cr);
+            bdrFef.Name = "bd";
+            var cpFef = new FrameworkElementFactory(typeof(ContentPresenter));
+            cpFef.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+            cpFef.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+            bdrFef.AppendChild(cpFef);
+            t.VisualTree = bdrFef;
+            btn.Template = t;
+        }
+
+        // Input textbox gyorsan
+        public static TextBox MakeInput(string placeholder = "", bool isPassword = false)
+        {
+            var tb = new TextBox
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x24, 0x18)),
+                Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0x3D, 0x35, 0x28)),
+                BorderThickness = new Thickness(1),
+                FontSize = 14,
+                Padding = new Thickness(14, 12, 14, 12),
+                CaretBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F))
+            };
+            return tb;
+        }
+
+        public static TextBlock MakeLabel(string text)
+        {
+            return new TextBlock
+            {
+                Text = text,
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
+                Margin = new Thickness(0, 0, 0, 6)
+            };
         }
     }
 
     // ============================================
-    // VIEWMODEL ALAPOSZTÁLY
+    // VIEWMODEL ALAPOSZTÁLYOK
     // ============================================
     public class ViewModelBase : INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string name = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-        }
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
-    // ============================================
-    // ITEM VIEWMODEL
-    // ============================================
     public class ItemViewModel : ViewModelBase
     {
         public string Id { get; set; }
@@ -272,23 +337,12 @@ namespace cucisstuff
         public string FirstImagePath { get; set; }
         public List<string> AllImagePaths { get; set; } = new List<string>();
         public int ImageCount => AllImagePaths?.Count ?? 0;
-
         public string StatusText => IsSold ? "🔴 ELKELT" : "🟢 AKTÍV";
-        public Brush StatusColor
-        {
-            get
-            {
-                if (IsSold)
-                    return new SolidColorBrush(Color.FromRgb(0xFF, 0x44, 0x44));
-                else
-                    return new SolidColorBrush(Color.FromRgb(0x00, 0xC8, 0x51));
-            }
-        }
+        public Brush StatusColor => IsSold
+            ? new SolidColorBrush(Color.FromRgb(0xFF, 0x44, 0x44))
+            : new SolidColorBrush(Color.FromRgb(0x00, 0xC8, 0x51));
     }
 
-    // ============================================
-    // USER VIEWMODEL (admin táblázatokhoz)
-    // ============================================
     public class UserViewModel : ViewModelBase
     {
         public int Id { get; set; }
@@ -301,9 +355,6 @@ namespace cucisstuff
         public string RoleText => IsAdmin ? "■ ADMIN" : "○ USER";
     }
 
-    // ============================================
-    // ORDER VIEWMODEL
-    // ============================================
     public class OrderViewModel : ViewModelBase
     {
         public string Id { get; set; }
@@ -326,27 +377,14 @@ namespace cucisstuff
         public string Notes { get; set; }
         public DateTime CreatedAt { get; set; }
         public string CreatedAtFormatted => CreatedAt.ToString("yyyy-MM-dd");
-        public bool IsDetailsExpanded { get; set; }
     }
 
-    // ============================================
-    // MESSAGE / PARTNER VIEWMODEL
-    // ============================================
     public class PartnerViewModel : ViewModelBase
     {
         public int Id { get; set; }
         public string Username { get; set; }
         public string ProfilePicture { get; set; }
-        public string AvatarInitial
-        {
-            get
-            {
-                if (string.IsNullOrEmpty(Username))
-                    return "?";
-                else
-                    return Username[0].ToString().ToUpper();
-            }
-        }
+        public string AvatarInitial => string.IsNullOrEmpty(Username) ? "?" : Username[0].ToString().ToUpper();
         public int UnreadCount { get; set; }
         public bool HasUnread => UnreadCount > 0;
         public DateTime LastMessageAt { get; set; }
@@ -373,34 +411,8 @@ namespace cucisstuff
         public string SentAtFormatted => SentAt.ToString("HH:mm");
         public bool IsRead { get; set; }
         public bool IsOwn { get; set; }
-        public string Alignment => IsOwn ? "Right" : "Left";
-        public Brush BubbleBackground
-        {
-            get
-            {
-                if (IsOwn)
-                    return new LinearGradientBrush(
-                        Color.FromRgb(0xFF, 0x8C, 0x00),
-                        Color.FromRgb(0xC8, 0x50, 0x00), 45);
-                else
-                    return new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E));
-            }
-        }
-        public Brush BubbleForeground
-        {
-            get
-            {
-                if (IsOwn)
-                    return new SolidColorBrush(Colors.White);
-                else
-                    return new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8));
-            }
-        }
     }
 
-    // ============================================
-    // REPORT VIEWMODEL
-    // ============================================
     public class ReportViewModel : ViewModelBase
     {
         public int Id { get; set; }
@@ -417,35 +429,32 @@ namespace cucisstuff
         public string CreatedAtFormatted => CreatedAt.ToString("yyyy-MM-dd");
         public string TypeIcon => ReportType == "item" ? "◧ TERMÉK" : "✉ ÜZENET";
     }
-}
 
-// ============================================
-// BEJELENTKEZÉS / REGISZTRÁCIÓ OLDAL
-// ============================================
-namespace cucisstuff
-{
+    // ============================================
+    // LOGIN OLDAL
+    // ============================================
     public class LoginPage : Page
     {
-        private readonly MainWindow _mainWindow;
-        private TextBox LoginUsername;
-        private PasswordBox LoginPassword;
-        private TextBox RegUsername;
-        private TextBox RegEmail;
-        private PasswordBox RegPassword;
-        private PasswordBox RegPassword2;
-        private StackPanel LoginPanel;
-        private StackPanel RegisterPanel;
-        private TextBlock SubtitleText;
-        private Border ErrorBorder;
-        private TextBlock ErrorText;
+        private readonly MainWindow _mw;
+        private TextBox _loginUser;
+        private PasswordBox _loginPass;
+        private TextBox _regUser;
+        private TextBox _regEmail;
+        private PasswordBox _regPass;
+        private PasswordBox _regPass2;
+        private StackPanel _loginPanel;
+        private StackPanel _regPanel;
+        private TextBlock _subtitle;
+        private Border _errBorder;
+        private TextBlock _errText;
 
-        public LoginPage(MainWindow mainWindow)
+        public LoginPage(MainWindow mw)
         {
-            _mainWindow = mainWindow;
-            InitializeUI();
+            _mw = mw;
+            Build();
         }
 
-        private void InitializeUI()
+        private void Build()
         {
             Background = new SolidColorBrush(Color.FromRgb(0x05, 0x05, 0x05));
 
@@ -468,11 +477,11 @@ namespace cucisstuff
             Grid.SetColumn(card, 1);
             Grid.SetRow(card, 1);
 
-            var mainStack = new StackPanel();
-            card.Child = mainStack;
+            var stack = new StackPanel();
+            card.Child = stack;
 
-            // Cím
-            mainStack.Children.Add(new TextBlock
+            // Logo
+            stack.Children.Add(new TextBlock
             {
                 Text = "Cuci's Stuff",
                 FontSize = 28,
@@ -482,7 +491,7 @@ namespace cucisstuff
                 Margin = new Thickness(0, 0, 0, 6)
             });
 
-            SubtitleText = new TextBlock
+            _subtitle = new TextBlock
             {
                 Text = "Bejelentkezés",
                 FontSize = 14,
@@ -490,10 +499,10 @@ namespace cucisstuff
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Margin = new Thickness(0, 0, 0, 28)
             };
-            mainStack.Children.Add(SubtitleText);
+            stack.Children.Add(_subtitle);
 
-            // Hibaüzenet
-            ErrorBorder = new Border
+            // Hiba panel
+            _errBorder = new Border
             {
                 Background = new SolidColorBrush(Color.FromArgb(0x26, 0xFF, 0x32, 0x32)),
                 BorderBrush = new SolidColorBrush(Color.FromArgb(0x4D, 0xFF, 0x4D, 0x4D)),
@@ -503,155 +512,74 @@ namespace cucisstuff
                 Margin = new Thickness(0, 0, 0, 16),
                 Visibility = Visibility.Collapsed
             };
-            ErrorText = new TextBlock
+            _errText = new TextBlock
             {
                 Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x80, 0x80)),
                 FontSize = 13,
                 TextWrapping = TextWrapping.Wrap,
                 HorizontalAlignment = HorizontalAlignment.Center
             };
-            ErrorBorder.Child = ErrorText;
-            mainStack.Children.Add(ErrorBorder);
+            _errBorder.Child = _errText;
+            stack.Children.Add(_errBorder);
 
-            // ---- Login Panel ----
-            LoginPanel = new StackPanel { Visibility = Visibility.Visible };
+            // ---------- LOGIN panel ----------
+            _loginPanel = new StackPanel();
 
-            LoginUsername = CreateInput("Felhasználónév vagy email");
-            LoginPanel.Children.Add(LoginUsername);
-            LoginPanel.Children.Add(new FrameworkElement { Height = 12 });
+            _loginUser = MakePlaceholderBox("Felhasználónév vagy email");
+            _loginPanel.Children.Add(_loginUser);
+            _loginPanel.Children.Add(new FrameworkElement { Height = 12 });
 
-            LoginPassword = CreatePasswordBox();
-            LoginPanel.Children.Add(LoginPassword);
-            LoginPanel.Children.Add(new FrameworkElement { Height = 20 });
+            _loginPass = MakePwdBox();
+            _loginPanel.Children.Add(_loginPass);
+            _loginPanel.Children.Add(new FrameworkElement { Height = 20 });
 
-            var loginBtn = new Button
-            {
-                Content = "Bejelentkezés",
-                Margin = new Thickness(0, 0, 0, 16),
-                FontSize = 15,
-                FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x0A, 0x05, 0x00)),
-                Padding = new Thickness(0, 14, 0, 14),
-                BorderThickness = new Thickness(0),
-                Cursor = Cursors.Hand
-            };
-            loginBtn.Background = new LinearGradientBrush(
-                Color.FromRgb(0xFF, 0xAB, 0x35),
-                Color.FromRgb(0xB3, 0x55, 0x00), 90);
-            loginBtn.Click += LoginButton_Click;
-            LoginPanel.Children.Add(loginBtn);
+            var loginBtn = MainWindow.MakeOrangeButton("Bejelentkezés", 15);
+            loginBtn.Margin = new Thickness(0, 0, 0, 16);
+            loginBtn.Click += LoginBtn_Click;
+            _loginPanel.Children.Add(loginBtn);
 
-            // Elválasztó
-            var separatorGrid = new Grid { Margin = new Thickness(0, 6, 0, 10) };
-            separatorGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            separatorGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            separatorGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            _loginPanel.Children.Add(MakeSeparator());
 
-            var sepLeft = new Border
-            {
-                Height = 1,
-                Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0x8C, 0x00)),
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            Grid.SetColumn(sepLeft, 0);
+            var toRegBtn = MainWindow.MakeGhostButton("Regisztráció");
+            toRegBtn.Click += (s, e) => SwitchToReg();
+            _loginPanel.Children.Add(toRegBtn);
 
-            var sepText = new TextBlock
-            {
-                Text = "VAGY",
-                Foreground = new SolidColorBrush(Color.FromArgb(0x80, 0xFF, 0x8C, 0x00)),
-                FontSize = 11,
-                Margin = new Thickness(14, 0, 14, 0)
-            };
-            Grid.SetColumn(sepText, 1);
+            stack.Children.Add(_loginPanel);
 
-            var sepRight = new Border
-            {
-                Height = 1,
-                Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0x8C, 0x00)),
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            Grid.SetColumn(sepRight, 2);
+            // ---------- REGISTER panel ----------
+            _regPanel = new StackPanel { Visibility = Visibility.Collapsed };
 
-            separatorGrid.Children.Add(sepLeft);
-            separatorGrid.Children.Add(sepText);
-            separatorGrid.Children.Add(sepRight);
-            LoginPanel.Children.Add(separatorGrid);
+            _regUser = MakePlaceholderBox("Felhasználónév");
+            _regPanel.Children.Add(_regUser);
+            _regPanel.Children.Add(new FrameworkElement { Height = 12 });
 
-            var regBtn = new Button
-            {
-                Content = "Regisztráció",
-                Background = Brushes.Transparent,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                FontSize = 14,
-                FontWeight = FontWeights.Bold,
-                Padding = new Thickness(16, 10, 16, 10),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(0x4D, 0xFF, 0x8C, 0x00)),
-                BorderThickness = new Thickness(1),
-                Cursor = Cursors.Hand
-            };
-            regBtn.Click += SwitchToRegister_Click;
-            LoginPanel.Children.Add(regBtn);
+            _regEmail = MakePlaceholderBox("Email");
+            _regPanel.Children.Add(_regEmail);
+            _regPanel.Children.Add(new FrameworkElement { Height = 12 });
 
-            mainStack.Children.Add(LoginPanel);
+            _regPass = MakePwdBox();
+            _regPanel.Children.Add(_regPass);
+            _regPanel.Children.Add(new FrameworkElement { Height = 12 });
 
-            // ---- Register Panel ----
-            RegisterPanel = new StackPanel { Visibility = Visibility.Collapsed };
+            _regPass2 = MakePwdBox();
+            _regPanel.Children.Add(_regPass2);
+            _regPanel.Children.Add(new FrameworkElement { Height = 20 });
 
-            RegUsername = CreateInput("Felhasználónév");
-            RegisterPanel.Children.Add(RegUsername);
-            RegisterPanel.Children.Add(new FrameworkElement { Height = 12 });
+            var regBtn = MainWindow.MakeOrangeButton("Regisztráció", 15);
+            regBtn.Margin = new Thickness(0, 0, 0, 16);
+            regBtn.Click += RegBtn_Click;
+            _regPanel.Children.Add(regBtn);
 
-            RegEmail = CreateInput("Email");
-            RegisterPanel.Children.Add(RegEmail);
-            RegisterPanel.Children.Add(new FrameworkElement { Height = 12 });
+            var backBtn = MainWindow.MakeGhostButton("← Vissza a bejelentkezéshez");
+            backBtn.Click += (s, e) => SwitchToLogin();
+            _regPanel.Children.Add(backBtn);
 
-            RegPassword = CreatePasswordBox();
-            RegisterPanel.Children.Add(RegPassword);
-            RegisterPanel.Children.Add(new FrameworkElement { Height = 12 });
-
-            RegPassword2 = CreatePasswordBox();
-            RegisterPanel.Children.Add(RegPassword2);
-            RegisterPanel.Children.Add(new FrameworkElement { Height = 20 });
-
-            var regSubmitBtn = new Button
-            {
-                Content = "Regisztráció",
-                Margin = new Thickness(0, 0, 0, 16),
-                FontSize = 15,
-                FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x0A, 0x05, 0x00)),
-                Padding = new Thickness(0, 14, 0, 14),
-                BorderThickness = new Thickness(0),
-                Cursor = Cursors.Hand
-            };
-            regSubmitBtn.Background = new LinearGradientBrush(
-                Color.FromRgb(0xFF, 0xAB, 0x35),
-                Color.FromRgb(0xB3, 0x55, 0x00), 90);
-            regSubmitBtn.Click += RegisterButton_Click;
-            RegisterPanel.Children.Add(regSubmitBtn);
-
-            var backBtn = new Button
-            {
-                Content = "Vissza a bejelentkezéshez",
-                Background = Brushes.Transparent,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                FontSize = 14,
-                FontWeight = FontWeights.Bold,
-                Padding = new Thickness(16, 10, 16, 10),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(0x4D, 0xFF, 0x8C, 0x00)),
-                BorderThickness = new Thickness(1),
-                Cursor = Cursors.Hand
-            };
-            backBtn.Click += SwitchToLogin_Click;
-            RegisterPanel.Children.Add(backBtn);
-
-            mainStack.Children.Add(RegisterPanel);
-
+            stack.Children.Add(_regPanel);
             outerGrid.Children.Add(card);
             Content = outerGrid;
         }
 
-        private TextBox CreateInput(string placeholder)
+        private TextBox MakePlaceholderBox(string placeholder)
         {
             var tb = new TextBox
             {
@@ -662,12 +590,12 @@ namespace cucisstuff
                 FontSize = 14,
                 Padding = new Thickness(14, 12, 14, 12),
                 Text = placeholder,
-                CaretBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F))
+                CaretBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
+                Tag = placeholder
             };
-
             tb.GotFocus += (s, e) =>
             {
-                if (tb.Text == placeholder)
+                if (tb.Text == (string)tb.Tag)
                 {
                     tb.Text = "";
                     tb.Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8));
@@ -677,15 +605,14 @@ namespace cucisstuff
             {
                 if (string.IsNullOrWhiteSpace(tb.Text))
                 {
-                    tb.Text = placeholder;
+                    tb.Text = (string)tb.Tag;
                     tb.Foreground = new SolidColorBrush(Color.FromRgb(0x8A, 0x7A, 0x65));
                 }
             };
-
             return tb;
         }
 
-        private PasswordBox CreatePasswordBox()
+        private PasswordBox MakePwdBox()
         {
             return new PasswordBox
             {
@@ -699,279 +626,222 @@ namespace cucisstuff
             };
         }
 
-        private void ShowError(string message)
+        private UIElement MakeSeparator()
         {
-            ErrorText.Text = message;
-            ErrorBorder.Visibility = Visibility.Visible;
-            var timer = new System.Windows.Threading.DispatcherTimer
-            {
-                Interval = TimeSpan.FromSeconds(5)
-            };
-            timer.Tick += (s, e) =>
-            {
-                ErrorBorder.Visibility = Visibility.Collapsed;
-                ((System.Windows.Threading.DispatcherTimer)s).Stop();
-            };
-            timer.Start();
+            var g = new Grid { Margin = new Thickness(0, 6, 0, 10) };
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            var left = new Border { Height = 1, Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0x8C, 0x00)), VerticalAlignment = VerticalAlignment.Center };
+            var mid = new TextBlock { Text = "VAGY", Foreground = new SolidColorBrush(Color.FromArgb(0x80, 0xFF, 0x8C, 0x00)), FontSize = 11, Margin = new Thickness(14, 0, 14, 0) };
+            var right = new Border { Height = 1, Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0x8C, 0x00)), VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(left, 0); Grid.SetColumn(mid, 1); Grid.SetColumn(right, 2);
+            g.Children.Add(left); g.Children.Add(mid); g.Children.Add(right);
+            return g;
         }
 
-        private void ShowSuccess(string message)
+        private void ShowError(string msg)
         {
-            MessageBox.Show(message, "Siker", MessageBoxButton.OK, MessageBoxImage.Information);
+            _errText.Text = msg;
+            _errBorder.Visibility = Visibility.Visible;
+            var t = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+            t.Tick += (s, e) => { _errBorder.Visibility = Visibility.Collapsed; ((System.Windows.Threading.DispatcherTimer)s).Stop(); };
+            t.Start();
         }
 
-        private void SwitchToRegister_Click(object sender, RoutedEventArgs e)
+        private void SwitchToReg()
         {
-            LoginPanel.Visibility = Visibility.Collapsed;
-            RegisterPanel.Visibility = Visibility.Visible;
-            SubtitleText.Text = "Regisztráció";
-            ErrorBorder.Visibility = Visibility.Collapsed;
+            _loginPanel.Visibility = Visibility.Collapsed;
+            _regPanel.Visibility = Visibility.Visible;
+            _subtitle.Text = "Regisztráció";
+            _errBorder.Visibility = Visibility.Collapsed;
         }
 
-        private void SwitchToLogin_Click(object sender, RoutedEventArgs e)
+        private void SwitchToLogin()
         {
-            RegisterPanel.Visibility = Visibility.Collapsed;
-            LoginPanel.Visibility = Visibility.Visible;
-            SubtitleText.Text = "Bejelentkezés";
-            ErrorBorder.Visibility = Visibility.Collapsed;
+            _regPanel.Visibility = Visibility.Collapsed;
+            _loginPanel.Visibility = Visibility.Visible;
+            _subtitle.Text = "Bejelentkezés";
+            _errBorder.Visibility = Visibility.Collapsed;
         }
 
-        private void LoginButton_Click(object sender, RoutedEventArgs e)
+        private void LoginBtn_Click(object sender, RoutedEventArgs e)
         {
-            string username = LoginUsername.Text.Trim();
-            string password = LoginPassword.Password;
+            string user = _loginUser.Text.Trim();
+            string pass = _loginPass.Password;
 
-            if (string.IsNullOrWhiteSpace(username) || username == "Felhasználónév vagy email")
-            {
-                ShowError("Add meg a felhasználónevet vagy email címet!");
-                return;
-            }
-            if (string.IsNullOrWhiteSpace(password))
-            {
-                ShowError("Add meg a jelszót!");
-                return;
-            }
+            if (string.IsNullOrWhiteSpace(user) || user == "Felhasználónév vagy email")
+            { ShowError("Add meg a felhasználónevet vagy email-t!"); return; }
+            if (string.IsNullOrWhiteSpace(pass))
+            { ShowError("Add meg a jelszót!"); return; }
 
             try
             {
-                using (var conn = _mainWindow.GetConnection())
+                using (var conn = _mw.GetConnection())
                 using (var cmd = new MySqlCommand(
-                    @"SELECT users.id, users.username, passwords.password_hash 
-                      FROM users 
-                      JOIN passwords ON users.password_id = passwords.id 
-                      WHERE users.email = @login OR users.username = @login", conn))
+                    @"SELECT u.id, u.username, p.password_hash
+                      FROM users u
+                      JOIN passwords p ON u.password_id = p.id
+                      WHERE u.email = @login OR u.username = @login
+                      LIMIT 1", conn))
                 {
-                    cmd.Parameters.AddWithValue("@login", username);
-                    using (var reader = cmd.ExecuteReader())
+                    cmd.Parameters.AddWithValue("@login", user);
+                    using (var r = cmd.ExecuteReader())
                     {
-                        if (reader.Read())
+                        if (r.Read())
                         {
-                            string hash = reader.GetString("password_hash");
-                            int uid = reader.GetInt32("id");
-                            string uname = reader.GetString("username");
-                            reader.Close();
+                            string hash = r.GetString("password_hash");
+                            int uid = r.GetInt32("id");
+                            string uname = r.GetString("username");
+                            r.Close();
 
-                            if (_mainWindow.BCryptVerify(password, hash))
+                            if (_mw.BCryptVerify(pass, hash))
                             {
                                 MainWindow.LoggedInUserId = uid;
                                 MainWindow.LoggedInUsername = uname;
 
-                                // Admin ellenőrzés
-                                using (var adminCmd = new MySqlCommand(
+                                using (var ac = new MySqlCommand(
                                     "SELECT COUNT(*) FROM admins WHERE user_id = @uid", conn))
                                 {
-                                    adminCmd.Parameters.AddWithValue("@uid", uid);
-                                    MainWindow.IsAdmin = Convert.ToInt32(adminCmd.ExecuteScalar()) > 0;
+                                    ac.Parameters.AddWithValue("@uid", uid);
+                                    MainWindow.IsAdmin = Convert.ToInt32(ac.ExecuteScalar()) > 0;
                                 }
-
-                                _mainWindow.NavigateToMain();
+                                _mw.NavigateToMain();
                             }
-                            else
-                            {
-                                ShowError("Hibás jelszó!");
-                            }
+                            else ShowError("Hibás jelszó!");
                         }
-                        else
-                        {
-                            ShowError("Nem létező felhasználó!");
-                        }
+                        else ShowError("Nem létező felhasználó!");
                     }
                 }
             }
-            catch (MySqlException ex)
-            {
-                ShowError("Adatbázis hiba: " + ex.Message);
-            }
+            catch (MySqlException ex) { ShowError("Adatbázis hiba: " + ex.Message); }
+            catch (Exception ex) { ShowError("Hiba: " + ex.Message); }
         }
 
-        private void RegisterButton_Click(object sender, RoutedEventArgs e)
+        private void RegBtn_Click(object sender, RoutedEventArgs e)
         {
-            string username = RegUsername.Text.Trim();
-            string email = RegEmail.Text.Trim();
-            string password = RegPassword.Password;
-            string password2 = RegPassword2.Password;
+            string uname = _regUser.Text.Trim();
+            string email = _regEmail.Text.Trim();
+            string pass = _regPass.Password;
+            string pass2 = _regPass2.Password;
 
-            if (string.IsNullOrWhiteSpace(username) || username == "Felhasználónév")
-            {
-                ShowError("Add meg a felhasználónevet!");
-                return;
-            }
+            if (string.IsNullOrWhiteSpace(uname) || uname == "Felhasználónév")
+            { ShowError("Add meg a felhasználónevet!"); return; }
             if (string.IsNullOrWhiteSpace(email) || email == "Email" || !email.Contains("@"))
-            {
-                ShowError("Érvénytelen email cím!");
-                return;
-            }
-            if (string.IsNullOrWhiteSpace(password))
-            {
-                ShowError("Add meg a jelszót!");
-                return;
-            }
-            if (password != password2)
-            {
-                ShowError("A jelszavak nem egyeznek!");
-                return;
-            }
-            if (password.Length < 6)
-            {
-                ShowError("A jelszónak legalább 6 karakter hosszúnak kell lennie!");
-                return;
-            }
-
-            // VIZSGALOCK ellenőrzés
-            if (_mainWindow.CheckVizsgalock())
-            {
-                ShowError("Regisztráció jelenleg nem lehetséges (VIZSGALOCK aktív).");
-                return;
-            }
+            { ShowError("Érvénytelen email cím!"); return; }
+            if (string.IsNullOrWhiteSpace(pass))
+            { ShowError("Add meg a jelszót!"); return; }
+            if (pass != pass2)
+            { ShowError("A jelszavak nem egyeznek!"); return; }
+            if (pass.Length < 6)
+            { ShowError("A jelszónak legalább 6 karakter kell!"); return; }
+            if (_mw.CheckVizsgalock())
+            { ShowError("Regisztráció most nem lehetséges (VIZSGALOCK aktív)."); return; }
 
             try
             {
-                using (var conn = _mainWindow.GetConnection())
+                using (var conn = _mw.GetConnection())
                 {
-                    // Foglaltság ellenőrzése
-                    using (var checkCmd = new MySqlCommand(
-                        "SELECT email, username FROM users WHERE email = @email OR username = @username LIMIT 1", conn))
+                    using (var chk = new MySqlCommand(
+                        "SELECT email, username FROM users WHERE email=@email OR username=@uname LIMIT 1", conn))
                     {
-                        checkCmd.Parameters.AddWithValue("@email", email);
-                        checkCmd.Parameters.AddWithValue("@username", username);
-                        using (var reader = checkCmd.ExecuteReader())
+                        chk.Parameters.AddWithValue("@email", email);
+                        chk.Parameters.AddWithValue("@uname", uname);
+                        using (var r = chk.ExecuteReader())
                         {
-                            if (reader.Read())
+                            if (r.Read())
                             {
-                                string existingEmail = reader.GetString("email");
-                                if (existingEmail == email)
-                                    ShowError("Ez az email cím már foglalt!");
-                                else
-                                    ShowError("Ez a felhasználónév már foglalt!");
+                                ShowError(r.GetString("email") == email
+                                    ? "Ez az email már foglalt!"
+                                    : "Ez a felhasználónév már foglalt!");
                                 return;
                             }
                         }
                     }
 
-                    string hash = _mainWindow.BCryptHash(password);
-                    using (var transaction = conn.BeginTransaction())
+                    string hash = _mw.BCryptHash(pass);
+                    using (var tr = conn.BeginTransaction())
                     {
                         try
                         {
-                            long passwordId;
-                            using (var pwdCmd = new MySqlCommand(
-                                "INSERT INTO passwords (password_hash) VALUES (@hash); SELECT LAST_INSERT_ID();",
-                                conn, transaction))
+                            long pwdId;
+                            using (var pc = new MySqlCommand(
+                                "INSERT INTO passwords (password_hash) VALUES (@h)", conn, tr))
                             {
-                                pwdCmd.Parameters.AddWithValue("@hash", hash);
-                                passwordId = Convert.ToInt64(pwdCmd.ExecuteScalar());
+                                pc.Parameters.AddWithValue("@h", hash);
+                                pc.ExecuteNonQuery();
+                                pwdId = pc.LastInsertedId;
                             }
-                            using (var userCmd = new MySqlCommand(
-                                "INSERT INTO users (email, username, password_id) VALUES (@email, @username, @pwdId)",
-                                conn, transaction))
+                            using (var uc = new MySqlCommand(
+                                "INSERT INTO users (email, username, password_id) VALUES (@email, @uname, @pid)",
+                                conn, tr))
                             {
-                                userCmd.Parameters.AddWithValue("@email", email);
-                                userCmd.Parameters.AddWithValue("@username", username);
-                                userCmd.Parameters.AddWithValue("@pwdId", passwordId);
-                                userCmd.ExecuteNonQuery();
+                                uc.Parameters.AddWithValue("@email", email);
+                                uc.Parameters.AddWithValue("@uname", uname);
+                                uc.Parameters.AddWithValue("@pid", pwdId);
+                                uc.ExecuteNonQuery();
                             }
-                            transaction.Commit();
-                            ShowSuccess("Sikeres regisztráció! Most már bejelentkezhetsz.");
-                            SwitchToLogin_Click(null, null);
-                            LoginUsername.Text = username;
-                            LoginUsername.Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8));
+                            tr.Commit();
+                            MessageBox.Show("Sikeres regisztráció! Most már bejelentkezhetsz.", "Siker",
+                                MessageBoxButton.OK, MessageBoxImage.Information);
+                            SwitchToLogin();
+                            _loginUser.Text = uname;
+                            _loginUser.Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8));
                         }
-                        catch (Exception)
-                        {
-                            transaction.Rollback();
-                            throw;
-                        }
+                        catch { tr.Rollback(); throw; }
                     }
                 }
             }
-            catch (MySqlException ex)
-            {
-                ShowError("Adatbázis hiba: " + ex.Message);
-            }
+            catch (MySqlException ex) { ShowError("Adatbázis hiba: " + ex.Message); }
+            catch (Exception ex) { ShowError("Hiba: " + ex.Message); }
         }
     }
-}
 
-// ============================================
-// FŐOLDAL (TERMÉKEK LISTÁJA)
-// ============================================
-namespace cucisstuff
-{
+    // ============================================
+    // FŐOLDAL
+    // ============================================
     public class MainPage : Page
     {
-        private readonly MainWindow _mainWindow;
-        private WrapPanel ItemsWrapPanel;
-        private TextBox SearchBox;
-        private List<ItemViewModel> allItems = new List<ItemViewModel>();
+        private readonly MainWindow _mw;
+        private WrapPanel _itemsPanel;
+        private TextBox _searchBox;
+        private List<ItemViewModel> _allItems = new List<ItemViewModel>();
 
-        public MainPage(MainWindow mainWindow)
+        public MainPage(MainWindow mw)
         {
-            _mainWindow = mainWindow;
-            InitializeUI();
+            _mw = mw;
+            Build();
             Loaded += (s, e) => LoadItems();
         }
 
-        private void InitializeUI()
+        private void Build()
         {
             Background = new SolidColorBrush(Color.FromRgb(0x05, 0x05, 0x05));
-
-            var dockPanel = new DockPanel();
-            Content = dockPanel;
+            var dock = new DockPanel();
+            Content = dock;
 
             // Top bar
             var topBar = new Border
             {
                 Background = new SolidColorBrush(Color.FromRgb(0x0A, 0x0A, 0x0A)),
-                Padding = new Thickness(10, 10, 10, 10)
+                Padding = new Thickness(10)
             };
             DockPanel.SetDock(topBar, Dock.Top);
 
             var topGrid = new Grid();
-            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // upload
+            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // search
+            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // account
+            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // messages
+            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // admin (opcionális)
+            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // logout
 
-            // Feltöltés gomb
-            var uploadBtn = new Button
-            {
-                Content = "＋ Hirdetés feladása",
-                Background = Brushes.Transparent,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                FontSize = 14,
-                FontWeight = FontWeights.Bold,
-                Padding = new Thickness(16, 10, 16, 10),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(0x4D, 0xFF, 0x8C, 0x00)),
-                BorderThickness = new Thickness(1),
-                Cursor = Cursors.Hand,
-                Margin = new Thickness(0, 0, 10, 0)
-            };
-            uploadBtn.Click += (s, e) => _mainWindow.NavigateToUpload();
+            var uploadBtn = MainWindow.MakeGhostButton("＋ Hirdetés feladása");
+            uploadBtn.Margin = new Thickness(0, 0, 8, 0);
+            uploadBtn.Click += (s, e) => _mw.NavigateToUpload();
             Grid.SetColumn(uploadBtn, 0);
 
-            // Keresőmező
-            SearchBox = new TextBox
+            _searchBox = new TextBox
             {
                 Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x24, 0x18)),
                 Foreground = new SolidColorBrush(Color.FromRgb(0x8A, 0x7A, 0x65)),
@@ -979,68 +849,38 @@ namespace cucisstuff
                 BorderThickness = new Thickness(1),
                 FontSize = 14,
                 Padding = new Thickness(14, 10, 14, 10),
-                Margin = new Thickness(10, 0, 10, 0),
-                Text = "Keresés..."
+                Margin = new Thickness(0, 0, 8, 0),
+                Text = "Keresés...",
+                VerticalAlignment = VerticalAlignment.Center
             };
-            SearchBox.GotFocus += (s, e) =>
+            _searchBox.GotFocus += (s, e) =>
             {
-                if (SearchBox.Text == "Keresés...")
-                {
-                    SearchBox.Text = "";
-                    SearchBox.Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8));
-                }
+                if (_searchBox.Text == "Keresés...")
+                { _searchBox.Text = ""; _searchBox.Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)); }
             };
-            SearchBox.LostFocus += (s, e) =>
+            _searchBox.LostFocus += (s, e) =>
             {
-                if (string.IsNullOrWhiteSpace(SearchBox.Text))
-                {
-                    SearchBox.Text = "Keresés...";
-                    SearchBox.Foreground = new SolidColorBrush(Color.FromRgb(0x8A, 0x7A, 0x65));
-                }
+                if (string.IsNullOrWhiteSpace(_searchBox.Text))
+                { _searchBox.Text = "Keresés..."; _searchBox.Foreground = new SolidColorBrush(Color.FromRgb(0x8A, 0x7A, 0x65)); }
             };
-            SearchBox.TextChanged += (s, e) => FilterItems();
-            Grid.SetColumn(SearchBox, 1);
+            _searchBox.TextChanged += (s, e) => FilterItems();
+            Grid.SetColumn(_searchBox, 1);
 
-            // Fiók gomb
-            var accountBtn = new Button
-            {
-                Content = "⚙️ FIÓK",
-                Background = Brushes.Transparent,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                FontSize = 14,
-                FontWeight = FontWeights.Bold,
-                Padding = new Thickness(16, 10, 16, 10),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(0x4D, 0xFF, 0x8C, 0x00)),
-                BorderThickness = new Thickness(1),
-                Cursor = Cursors.Hand,
-                Margin = new Thickness(0, 0, 10, 0)
-            };
-            accountBtn.Click += (s, e) => _mainWindow.NavigateToAccount();
+            var accountBtn = MainWindow.MakeGhostButton("⚙ Fiók");
+            accountBtn.Margin = new Thickness(0, 0, 8, 0);
+            accountBtn.Click += (s, e) => _mw.NavigateToAccount();
             Grid.SetColumn(accountBtn, 2);
 
-            // Üzenetek gomb
-            var messagesBtn = new Button
-            {
-                Content = "💬 Üzenetek",
-                Background = Brushes.Transparent,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                FontSize = 14,
-                FontWeight = FontWeights.Bold,
-                Padding = new Thickness(16, 10, 16, 10),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(0x4D, 0xFF, 0x8C, 0x00)),
-                BorderThickness = new Thickness(1),
-                Cursor = Cursors.Hand,
-                Margin = new Thickness(0, 0, 10, 0)
-            };
-            messagesBtn.Click += (s, e) => _mainWindow.NavigateToMessages();
-            Grid.SetColumn(messagesBtn, 3);
+            var msgBtn = MainWindow.MakeGhostButton("💬 Üzenetek");
+            msgBtn.Margin = new Thickness(0, 0, 8, 0);
+            msgBtn.Click += (s, e) => _mw.NavigateToMessages();
+            Grid.SetColumn(msgBtn, 3);
 
-            // Admin gomb (csak ha admin) vagy kijelentkezés gomb
             if (MainWindow.IsAdmin)
             {
                 var adminBtn = new Button
                 {
-                    Content = "🛡️ Admin",
+                    Content = "🛡 Admin",
                     Background = new SolidColorBrush(Color.FromArgb(0x1F, 0xFF, 0xD7, 0x00)),
                     Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0xD7, 0x00)),
                     FontSize = 14,
@@ -1048,291 +888,237 @@ namespace cucisstuff
                     Padding = new Thickness(16, 10, 16, 10),
                     BorderBrush = new SolidColorBrush(Color.FromArgb(0x4D, 0xFF, 0xD7, 0x00)),
                     BorderThickness = new Thickness(1),
-                    Cursor = Cursors.Hand
+                    Cursor = Cursors.Hand,
+                    Margin = new Thickness(0, 0, 8, 0)
                 };
-                adminBtn.Click += (s, e) => _mainWindow.NavigateToAdmin();
+                adminBtn.Click += (s, e) => _mw.NavigateToAdmin();
                 Grid.SetColumn(adminBtn, 4);
+                topGrid.Children.Add(adminBtn);
             }
 
-            // Kijelentkezés gomb
-            var logoutBtn = new Button
-            {
-                Content = "🚪 Kilépés",
-                Background = Brushes.Transparent,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x44, 0x44)),
-                FontSize = 14,
-                FontWeight = FontWeights.Bold,
-                Padding = new Thickness(16, 10, 16, 10),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(0x4D, 0xFF, 0x44, 0x44)),
-                BorderThickness = new Thickness(1),
-                Cursor = Cursors.Hand,
-                Margin = new Thickness(10, 0, 0, 0)
-            };
-            logoutBtn.Click += (s, e) => _mainWindow.NavigateToLogin();
-            Grid.SetColumn(logoutBtn, 4);
+            var logoutBtn = MainWindow.MakeRedGhostButton("🚪 Kilépés");
+            logoutBtn.Click += (s, e) => _mw.NavigateToLogin();
+            Grid.SetColumn(logoutBtn, 5);
 
             topGrid.Children.Add(uploadBtn);
-            topGrid.Children.Add(SearchBox);
+            topGrid.Children.Add(_searchBox);
             topGrid.Children.Add(accountBtn);
-            topGrid.Children.Add(messagesBtn);
+            topGrid.Children.Add(msgBtn);
             topGrid.Children.Add(logoutBtn);
             topBar.Child = topGrid;
-            dockPanel.Children.Add(topBar);
+            dock.Children.Add(topBar);
 
-            // Termék lista
-            var scrollViewer = new ScrollViewer();
-            ItemsWrapPanel = new WrapPanel { Margin = new Thickness(20, 20, 20, 20) };
-            scrollViewer.Content = ItemsWrapPanel;
-            dockPanel.Children.Add(scrollViewer);
+            var sv = new ScrollViewer();
+            _itemsPanel = new WrapPanel { Margin = new Thickness(20) };
+            sv.Content = _itemsPanel;
+            dock.Children.Add(sv);
         }
 
         private void LoadItems()
         {
-            allItems.Clear();
+            _allItems.Clear();
             try
             {
-                using (var conn = _mainWindow.GetConnection())
+                using (var conn = _mw.GetConnection())
                 using (var cmd = new MySqlCommand(
                     @"SELECT i.id, i.title, i.price, i.description, i.created_at, i.sold,
                              i.user_id, u.username AS seller_name,
-                             (SELECT image_path FROM item_images WHERE item_id = i.id AND is_primary = 1 LIMIT 1) AS first_image
+                             (SELECT image_path FROM item_images WHERE item_id=i.id AND is_primary=1 LIMIT 1) AS first_image
                       FROM items i
                       JOIN users u ON i.user_id = u.id
                       WHERE i.sold = FALSE
                       ORDER BY i.created_at DESC", conn))
-                using (var reader = cmd.ExecuteReader())
+                using (var r = cmd.ExecuteReader())
                 {
-                    while (reader.Read())
+                    while (r.Read())
                     {
-                        var item = new ItemViewModel
+                        _allItems.Add(new ItemViewModel
                         {
-                            Id = reader.GetString("id"),
-                            Title = reader.GetString("title"),
-                            Price = reader.GetDecimal("price"),
-                            Description = reader.IsDBNull(reader.GetOrdinal("description")) ? "" : reader.GetString("description"),
-                            CreatedAt = reader.GetDateTime("created_at"),
-                            IsSold = reader.GetBoolean("sold"),
-                            SellerId = reader.GetInt32("user_id"),
-                            SellerName = reader.GetString("seller_name"),
-                            FirstImagePath = reader.IsDBNull(reader.GetOrdinal("first_image")) ? null : reader.GetString("first_image")
-                        };
-                        allItems.Add(item);
+                            Id = r.GetString("id"),
+                            Title = r.GetString("title"),
+                            Price = r.GetDecimal("price"),
+                            Description = r.IsDBNull(r.GetOrdinal("description")) ? "" : r.GetString("description"),
+                            CreatedAt = r.GetDateTime("created_at"),
+                            IsSold = r.GetBoolean("sold"),
+                            SellerId = r.GetInt32("user_id"),
+                            SellerName = r.GetString("seller_name"),
+                            FirstImagePath = r.IsDBNull(r.GetOrdinal("first_image")) ? null : r.GetString("first_image")
+                        });
                     }
                 }
+            }
+            catch (Exception ex) { MessageBox.Show("Adatbázis hiba: " + ex.Message); }
 
-                // Képek betöltése
-                foreach (var item in allItems)
-                {
-                    try
-                    {
-                        using (var conn = _mainWindow.GetConnection())
-                        using (var imgCmd = new MySqlCommand(
-                            "SELECT image_path FROM item_images WHERE item_id = @id ORDER BY sort_order", conn))
-                        {
-                            imgCmd.Parameters.AddWithValue("@id", item.Id);
-                            using (var imgReader = imgCmd.ExecuteReader())
-                            {
-                                while (imgReader.Read())
-                                {
-                                    item.AllImagePaths.Add(imgReader.GetString("image_path"));
-                                }
-                            }
-                        }
-                    }
-                    catch { }
-                }
-            }
-            catch (MySqlException ex)
-            {
-                MessageBox.Show("Adatbázis hiba: " + ex.Message);
-            }
-            DisplayItems(allItems);
+            DisplayItems(_allItems);
         }
 
         private void DisplayItems(IEnumerable<ItemViewModel> items)
         {
-            ItemsWrapPanel.Children.Clear();
+            _itemsPanel.Children.Clear();
             foreach (var item in items)
-            {
-                var card = CreateItemCard(item);
-                ItemsWrapPanel.Children.Add(card);
-            }
+                _itemsPanel.Children.Add(BuildCard(item));
         }
 
-        private Border CreateItemCard(ItemViewModel item)
+        private Border BuildCard(ItemViewModel item)
         {
-            var border = new Border
+            var card = new Border
             {
                 Background = new SolidColorBrush(Color.FromRgb(0x0F, 0x0F, 0x0F)),
                 BorderBrush = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00)),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(12),
                 Width = 180,
-                Margin = new Thickness(6, 6, 6, 6),
+                Margin = new Thickness(6),
                 Cursor = Cursors.Hand,
                 Tag = item
             };
-            border.MouseLeftButtonDown += ItemCard_Click;
-            border.MouseEnter += (s, e) => border.BorderBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x8C, 0x00));
-            border.MouseLeave += (s, e) => border.BorderBrush = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00));
+            card.MouseLeftButtonDown += (s, e) =>
+            {
+                var w = new ProductDetailWindow(_mw, item);
+                w.Owner = Window.GetWindow(this);
+                w.ShowDialog();
+                LoadItems(); // frissít visszatéréskor
+            };
+            card.MouseEnter += (s, e) => card.BorderBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x8C, 0x00));
+            card.MouseLeave += (s, e) => card.BorderBrush = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00));
 
-            var stack = new StackPanel();
+            var stack = new StackPanel { Margin = new Thickness(8) };
 
             // Kép
             if (!string.IsNullOrEmpty(item.FirstImagePath) && File.Exists(item.FirstImagePath))
             {
-                var img = new Image
-                {
-                    Width = 160,
-                    Height = 160,
-                    Stretch = Stretch.UniformToFill
-                };
                 try
                 {
-                    img.Source = new BitmapImage(new Uri(item.FirstImagePath, UriKind.Absolute));
+                    var bmp = new BitmapImage();
+                    bmp.BeginInit();
+                    bmp.UriSource = new Uri(Path.GetFullPath(item.FirstImagePath), UriKind.Absolute);
+                    bmp.CacheOption = BitmapCacheOption.OnLoad;
+                    bmp.DecodePixelWidth = 164;
+                    bmp.EndInit();
+                    bmp.Freeze();
+                    stack.Children.Add(new Image
+                    {
+                        Source = bmp,
+                        Width = 164,
+                        Height = 164,
+                        Stretch = Stretch.UniformToFill,
+                        Margin = new Thickness(-8, -8, -8, 4),
+                        HorizontalAlignment = HorizontalAlignment.Center
+                    });
                 }
-                catch { }
-                stack.Children.Add(img);
+                catch { stack.Children.Add(MakeImagePlaceholder()); }
             }
-            else
-            {
-                var placeholder = new Border
-                {
-                    Width = 160,
-                    Height = 160,
-                    Background = new SolidColorBrush(Color.FromArgb(0x1A, 0xFF, 0x8C, 0x00)),
-                    BorderBrush = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00)),
-                    BorderThickness = new Thickness(1),
-                    CornerRadius = new CornerRadius(8)
-                };
-                placeholder.Child = new TextBlock
-                {
-                    Text = "📷",
-                    FontSize = 32,
-                    Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-                stack.Children.Add(placeholder);
-            }
-
-            // Képszám badge
-            if (item.ImageCount > 1)
-            {
-                var badge = new Border
-                {
-                    Background = new SolidColorBrush(Color.FromArgb(0xBF, 0x00, 0x00, 0x00)),
-                    BorderBrush = new SolidColorBrush(Color.FromArgb(0x4D, 0xFF, 0x8C, 0x00)),
-                    BorderThickness = new Thickness(1),
-                    CornerRadius = new CornerRadius(10),
-                    Padding = new Thickness(8, 3, 8, 3),
-                    HorizontalAlignment = HorizontalAlignment.Left,
-                    Margin = new Thickness(4, -24, 0, 0)
-                };
-                badge.Child = new TextBlock
-                {
-                    Text = $"+{item.ImageCount - 1} kép",
-                    FontSize = 11,
-                    Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                    FontWeight = FontWeights.Bold
-                };
-                stack.Children.Add(badge);
-            }
+            else stack.Children.Add(MakeImagePlaceholder());
 
             stack.Children.Add(new TextBlock
             {
                 Text = item.Title,
                 Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
                 FontWeight = FontWeights.Bold,
+                FontSize = 13,
                 TextTrimming = TextTrimming.CharacterEllipsis,
-                Margin = new Thickness(0, 6, 0, 2)
+                Margin = new Thickness(0, 2, 0, 2)
             });
             stack.Children.Add(new TextBlock
             {
                 Text = item.PriceFormatted,
                 Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
                 FontSize = 16,
-                Margin = new Thickness(0, 0, 0, 4)
+                FontWeight = FontWeights.Bold
             });
             stack.Children.Add(new TextBlock
             {
                 Text = item.SellerName,
                 Foreground = new SolidColorBrush(Color.FromRgb(0x8A, 0x7A, 0x65)),
-                FontSize = 12,
-                TextTrimming = TextTrimming.CharacterEllipsis
+                FontSize = 12
             });
             stack.Children.Add(new TextBlock
             {
                 Text = item.CreatedAtFormatted,
                 Foreground = new SolidColorBrush(Color.FromArgb(0x80, 0xFF, 0xFF, 0xFF)),
-                FontSize = 11,
-                Margin = new Thickness(0, 2, 0, 0)
+                FontSize = 11
             });
 
-            border.Child = stack;
-            return border;
+            card.Child = stack;
+            return card;
         }
 
-        private void ItemCard_Click(object sender, MouseButtonEventArgs e)
+        private UIElement MakeImagePlaceholder()
         {
-            var border = sender as Border;
-            if (border?.Tag is ItemViewModel item)
+            return new Border
             {
-                var detailWindow = new ProductDetailWindow(_mainWindow, item);
-                detailWindow.Owner = Window.GetWindow(this);
-                detailWindow.ShowDialog();
-            }
+                Width = 164,
+                Height = 164,
+                Background = new SolidColorBrush(Color.FromArgb(0x1A, 0xFF, 0x8C, 0x00)),
+                CornerRadius = new CornerRadius(8),
+                Margin = new Thickness(-8, -8, -8, 4),
+                Child = new TextBlock
+                {
+                    Text = "📷",
+                    FontSize = 32,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                }
+            };
         }
 
         private void FilterItems()
         {
-            string query = SearchBox.Text.Trim().ToLower();
-            if (string.IsNullOrEmpty(query) || query == "keresés...")
-                DisplayItems(allItems);
+            string q = _searchBox.Text.Trim().ToLower();
+            if (string.IsNullOrEmpty(q) || q == "keresés...")
+                DisplayItems(_allItems);
             else
-                DisplayItems(allItems.Where(i =>
-                    i.Title.ToLower().Contains(query) ||
-                    i.SellerName.ToLower().Contains(query) ||
-                    i.Description.ToLower().Contains(query)));
+                DisplayItems(_allItems.Where(i =>
+                    i.Title.ToLower().Contains(q) ||
+                    i.SellerName.ToLower().Contains(q) ||
+                    i.Description.ToLower().Contains(q)));
         }
     }
-}
 
-// ============================================
-// TERMÉK RÉSZLETEK MODÁL ABLAK
-// ============================================
-namespace cucisstuff
-{
+    // ============================================
+    // TERMÉK RÉSZLETEK ABLAK
+    // ============================================
     public class ProductDetailWindow : Window
     {
-        private readonly MainWindow _mainWindow;
+        private readonly MainWindow _mw;
         private readonly ItemViewModel _item;
-        private Image MainImage;
-        private TextBlock NoImagePlaceholder;
-        private int currentImageIndex = 0;
-        private WrapPanel ThumbnailsPanel;
-        private Button PrevBtn, NextBtn;
+        private Image _mainImg;
+        private TextBlock _noImgText;
+        private WrapPanel _thumbsPanel;
+        private int _imgIdx;
 
-        public ProductDetailWindow(MainWindow mainWindow, ItemViewModel item)
+        public ProductDetailWindow(MainWindow mw, ItemViewModel item)
         {
-            _mainWindow = mainWindow;
+            _mw = mw;
             _item = item;
-
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             WindowStyle = WindowStyle.None;
             AllowsTransparency = true;
             Background = Brushes.Transparent;
-            Width = 900;
-            Height = 650;
+            Width = 900; Height = 650;
             ResizeMode = ResizeMode.CanResize;
 
-            InitializeUI();
-            LoadAllImages();
+            // Frissítjük a képlistát
+            try
+            {
+                using (var conn = mw.GetConnection())
+                using (var cmd = new MySqlCommand(
+                    "SELECT image_path FROM item_images WHERE item_id=@id ORDER BY sort_order", conn))
+                {
+                    cmd.Parameters.AddWithValue("@id", item.Id);
+                    _item.AllImagePaths.Clear();
+                    using (var r = cmd.ExecuteReader())
+                        while (r.Read()) _item.AllImagePaths.Add(r.GetString("image_path"));
+                }
+            }
+            catch { }
+
+            Build();
         }
 
-        private void InitializeUI()
+        private void Build()
         {
-            var mainBorder = new Border
+            var outer = new Border
             {
                 Background = new SolidColorBrush(Color.FromArgb(0xF5, 0x05, 0x05, 0x05)),
                 BorderBrush = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00)),
@@ -1341,85 +1127,98 @@ namespace cucisstuff
             };
 
             var outerGrid = new Grid();
-            mainBorder.Child = outerGrid;
+            outer.Child = outerGrid;
+
+            // Bezáró gomb
+            var closeBtn = new Button
+            {
+                Content = "✕",
+                Background = Brushes.Transparent,
+                Foreground = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)),
+                FontSize = 18,
+                Width = 36,
+                Height = 36,
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, 8, 8, 0)
+            };
+            closeBtn.Click += (s, e) => Close();
+            Panel.SetZIndex(closeBtn, 20);
+            outerGrid.Children.Add(closeBtn);
 
             var grid = new Grid();
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.5, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             outerGrid.Children.Add(grid);
 
-            // Bal oldal: galéria
-            var galleryPanel = new Grid { Margin = new Thickness(10, 10, 10, 10) };
-            galleryPanel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            galleryPanel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            // Sol: galéria
+            var galGrid = new Grid { Margin = new Thickness(16) };
+            galGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            galGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-            // Kép konténer
-            var imageContainer = new Border
+            var imgContainer = new Grid();
+            var imgBorder = new Border
             {
-                Background = new SolidColorBrush(Color.FromArgb(0x80, 0x00, 0x00, 0x00)),
+                Background = new SolidColorBrush(Color.FromArgb(0x80, 0, 0, 0)),
                 BorderBrush = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00)),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(12)
             };
-            Grid.SetRow(imageContainer, 0);
-
-            var imageGrid = new Grid();
-            MainImage = new Image
-            {
-                Stretch = Stretch.Uniform,
-                Visibility = Visibility.Collapsed,
-                Cursor = Cursors.Hand
-            };
-            NoImagePlaceholder = new TextBlock
+            _mainImg = new Image { Stretch = Stretch.Uniform, Visibility = Visibility.Collapsed };
+            _noImgText = new TextBlock
             {
                 Text = "📷 Nincs kép",
                 FontSize = 18,
                 Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
                 HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                Visibility = Visibility.Visible
+                VerticalAlignment = VerticalAlignment.Center
             };
-            imageGrid.Children.Add(MainImage);
-            imageGrid.Children.Add(NoImagePlaceholder);
+            imgBorder.Child = new Grid { Children = { _mainImg, _noImgText } };
+            imgContainer.Children.Add(imgBorder);
 
-            // Navigációs gombok
-            PrevBtn = new Button
+            // Nav gombok
+            if (_item.AllImagePaths.Count > 1)
             {
-                Content = "❮",
-                Background = Brushes.Transparent,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                FontSize = 24,
-                Width = 40,
-                Height = 40,
-                HorizontalAlignment = HorizontalAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(10, 0, 0, 0),
-                Cursor = Cursors.Hand,
-                BorderThickness = new Thickness(0)
-            };
-            PrevBtn.Click += (s, e) => NavigateImage(-1);
-            NextBtn = new Button
-            {
-                Content = "❯",
-                Background = Brushes.Transparent,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                FontSize = 24,
-                Width = 40,
-                Height = 40,
-                HorizontalAlignment = HorizontalAlignment.Right,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 10, 0),
-                Cursor = Cursors.Hand,
-                BorderThickness = new Thickness(0)
-            };
-            NextBtn.Click += (s, e) => NavigateImage(1);
+                var prevBtn = new Button
+                {
+                    Content = "❮",
+                    Background = Brushes.Transparent,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
+                    FontSize = 24,
+                    Width = 40,
+                    Height = 40,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(8, 0, 0, 0),
+                    BorderThickness = new Thickness(0),
+                    Cursor = Cursors.Hand
+                };
+                prevBtn.Click += (s, e) => { _imgIdx = (_imgIdx - 1 + _item.AllImagePaths.Count) % _item.AllImagePaths.Count; UpdateImg(); };
+                var nextBtn = new Button
+                {
+                    Content = "❯",
+                    Background = Brushes.Transparent,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
+                    FontSize = 24,
+                    Width = 40,
+                    Height = 40,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 8, 0),
+                    BorderThickness = new Thickness(0),
+                    Cursor = Cursors.Hand
+                };
+                nextBtn.Click += (s, e) => { _imgIdx = (_imgIdx + 1) % _item.AllImagePaths.Count; UpdateImg(); };
+                imgContainer.Children.Add(prevBtn);
+                imgContainer.Children.Add(nextBtn);
+            }
 
-            imageGrid.Children.Add(PrevBtn);
-            imageGrid.Children.Add(NextBtn);
-            imageContainer.Child = imageGrid;
-            galleryPanel.Children.Add(imageContainer);
+            Grid.SetRow(imgContainer, 0);
+            galGrid.Children.Add(imgContainer);
 
-            // Bélyegképek
+            // Thumbs
             var thumbScroll = new ScrollViewer
             {
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -1427,27 +1226,29 @@ namespace cucisstuff
                 Height = 80,
                 Margin = new Thickness(0, 8, 0, 0)
             };
-            ThumbnailsPanel = new WrapPanel();
-            thumbScroll.Content = ThumbnailsPanel;
+            _thumbsPanel = new WrapPanel();
+            thumbScroll.Content = _thumbsPanel;
             Grid.SetRow(thumbScroll, 1);
-            galleryPanel.Children.Add(thumbScroll);
+            galGrid.Children.Add(thumbScroll);
 
-            Grid.SetColumn(galleryPanel, 0);
+            Grid.SetColumn(galGrid, 0);
+            grid.Children.Add(galGrid);
 
-            // Jobb oldal: termék adatok
-            var detailsPanel = new StackPanel { Margin = new Thickness(20, 20, 20, 20) };
+            // Jobb: adatok
+            var details = new ScrollViewer { Margin = new Thickness(0, 16, 16, 16) };
+            var dStack = new StackPanel();
+            details.Content = dStack;
 
-            detailsPanel.Children.Add(new TextBlock
+            dStack.Children.Add(new TextBlock
             {
                 Text = _item.Title,
-                FontSize = 28,
+                FontSize = 24,
                 FontWeight = FontWeights.Bold,
                 Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
                 TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 0, 0, 12)
+                Margin = new Thickness(0, 0, 0, 8)
             });
-
-            detailsPanel.Children.Add(new TextBlock
+            dStack.Children.Add(new TextBlock
             {
                 Text = _item.PriceFormatted,
                 FontSize = 32,
@@ -1455,29 +1256,14 @@ namespace cucisstuff
                 Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
                 Margin = new Thickness(0, 0, 0, 8)
             });
-
-            var sellerText = new TextBlock
+            dStack.Children.Add(new TextBlock
             {
+                Text = $"Eladó: {_item.SellerName}",
                 FontSize = 14,
                 Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
                 Margin = new Thickness(0, 0, 0, 4)
-            };
-            sellerText.Inlines.Add(new System.Windows.Documents.Run("Eladó: "));
-            sellerText.Inlines.Add(new System.Windows.Documents.Run(_item.SellerName)
-            {
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                FontWeight = FontWeights.Bold,
-                FontSize = 16
             });
-            sellerText.Cursor = Cursors.Hand;
-            sellerText.MouseLeftButtonDown += (s, e) =>
-            {
-                MessageBox.Show($"Eladó: {_item.SellerName}\nTag azóta: {_item.CreatedAtFormatted}",
-                    "Eladó profilja", MessageBoxButton.OK, MessageBoxImage.Information);
-            };
-            detailsPanel.Children.Add(sellerText);
-
-            detailsPanel.Children.Add(new TextBlock
+            dStack.Children.Add(new TextBlock
             {
                 Text = _item.CreatedAtFormatted,
                 FontSize = 13,
@@ -1487,257 +1273,165 @@ namespace cucisstuff
 
             var descBorder = new Border
             {
-                Background = new SolidColorBrush(Color.FromArgb(0x80, 0x00, 0x00, 0x00)),
+                Background = new SolidColorBrush(Color.FromArgb(0x80, 0, 0, 0)),
                 BorderBrush = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00)),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(12),
-                Padding = new Thickness(16, 16, 16, 16),
-                MaxHeight = 200,
+                Padding = new Thickness(16),
+                MaxHeight = 180,
                 Margin = new Thickness(0, 0, 0, 16)
             };
-            var scrollDesc = new ScrollViewer();
-            scrollDesc.Content = new TextBlock
+            descBorder.Child = new ScrollViewer
             {
-                Text = string.IsNullOrEmpty(_item.Description) ? "Nincs leírás." : _item.Description,
-                TextWrapping = TextWrapping.Wrap,
-                FontSize = 14,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
-                LineHeight = 22
+                Content = new TextBlock
+                {
+                    Text = string.IsNullOrEmpty(_item.Description) ? "Nincs leírás." : _item.Description,
+                    TextWrapping = TextWrapping.Wrap,
+                    FontSize = 14,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8))
+                }
             };
-            descBorder.Child = scrollDesc;
-            detailsPanel.Children.Add(descBorder);
+            dStack.Children.Add(descBorder);
 
             // Vásárlás gomb
-            var buyBtn = new Button
-            {
-                FontSize = 18,
-                FontWeight = FontWeights.Bold,
-                Padding = new Thickness(0, 16, 0, 16),
-                Margin = new Thickness(0, 16, 0, 0),
-                Cursor = Cursors.Hand,
-                BorderThickness = new Thickness(0)
-            };
-
             if (_item.IsSold)
             {
-                buyBtn.Content = "Elkelt";
-                buyBtn.Background = new SolidColorBrush(Color.FromRgb(0x55, 0x55, 0x55));
-                buyBtn.Foreground = new SolidColorBrush(Color.FromRgb(0xAA, 0xAA, 0xAA));
-                buyBtn.IsEnabled = false;
+                dStack.Children.Add(new TextBlock
+                {
+                    Text = "🔴 Ez a termék már elkelt",
+                    FontSize = 16,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x44, 0x44)),
+                    Margin = new Thickness(0, 8, 0, 0)
+                });
             }
             else
             {
-                buyBtn.Content = "🛒 Vásárlás";
+                var buyBtn = new Button
+                {
+                    Content = "🛒 Vásárlás",
+                    FontSize = 18,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = Brushes.White,
+                    Padding = new Thickness(0, 16, 0, 16),
+                    BorderThickness = new Thickness(0),
+                    Cursor = Cursors.Hand,
+                    Margin = new Thickness(0, 16, 0, 0)
+                };
                 buyBtn.Background = new LinearGradientBrush(
                     Color.FromRgb(0x00, 0xC8, 0x51),
                     Color.FromRgb(0x00, 0x7E, 0x33), 45);
-                buyBtn.Foreground = new SolidColorBrush(Colors.White);
-                buyBtn.Click += (s, ev) =>
-                {
-                    Close();
-                    _mainWindow.NavigateToPurchase(_item.Id);
-                };
+                MainWindow.MakeOrangeButton(""); // init helper – just reuse template apply
+                var t = new ControlTemplate(typeof(Button));
+                var bFef = new FrameworkElementFactory(typeof(Border));
+                bFef.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
+                bFef.SetValue(Border.CornerRadiusProperty, new CornerRadius(14));
+                bFef.SetValue(Border.PaddingProperty, new TemplateBindingExtension(Button.PaddingProperty));
+                var cpFef = new FrameworkElementFactory(typeof(ContentPresenter));
+                cpFef.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+                cpFef.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+                bFef.AppendChild(cpFef);
+                t.VisualTree = bFef;
+                buyBtn.Template = t;
+                buyBtn.Click += (s, e) => { Close(); _mw.NavigateToPurchase(_item.Id); };
+                dStack.Children.Add(buyBtn);
             }
 
-            // Stílus hozzárendelése a gombhoz - Template beállítása
-            var templateBtn = new Button();
-            var style = new Style(typeof(Button));
-            style.Setters.Add(new Setter(Button.BackgroundProperty, buyBtn.Background));
-            style.Setters.Add(new Setter(Button.ForegroundProperty, buyBtn.Foreground));
-            style.Setters.Add(new Setter(Button.FontSizeProperty, buyBtn.FontSize));
-            style.Setters.Add(new Setter(Button.FontWeightProperty, buyBtn.FontWeight));
-            style.Setters.Add(new Setter(Button.PaddingProperty, buyBtn.Padding));
-            style.Setters.Add(new Setter(Button.MarginProperty, buyBtn.Margin));
-            style.Setters.Add(new Setter(Button.CursorProperty, buyBtn.Cursor));
-            style.Setters.Add(new Setter(Button.BorderThicknessProperty, buyBtn.BorderThickness));
-            style.Setters.Add(new Setter(Button.ContentProperty, buyBtn.Content));
-            style.Setters.Add(new Setter(Button.IsEnabledProperty, buyBtn.IsEnabled));
+            Grid.SetColumn(details, 1);
+            grid.Children.Add(details);
 
-            var controlTemplate = new ControlTemplate(typeof(Button));
-            var frameworkElementFactory = new FrameworkElementFactory(typeof(Border));
-            frameworkElementFactory.Name = "border";
-            frameworkElementFactory.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
-            frameworkElementFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(14));
-            frameworkElementFactory.SetValue(Border.PaddingProperty, new TemplateBindingExtension(Button.PaddingProperty));
-            frameworkElementFactory.AppendChild(new FrameworkElementFactory(typeof(ContentPresenter)));
-            controlTemplate.VisualTree = frameworkElementFactory;
-
-            var trigger = new Trigger { Property = Button.IsMouseOverProperty, Value = true };
-            trigger.Setters.Add(new Setter(Border.BackgroundProperty, buyBtn.Background, "border"));
-            controlTemplate.Triggers.Add(trigger);
-
-            style.Setters.Add(new Setter(Button.TemplateProperty, controlTemplate));
-            buyBtn.Style = style;
-
-            // Bezáró gomb az overlay-re
-            var closeBtn = new Button
-            {
-                Content = "✕",
-                Background = Brushes.Transparent,
-                Foreground = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)),
-                FontSize = 18,
-                Width = 40,
-                Height = 40,
-                Cursor = Cursors.Hand,
-                BorderThickness = new Thickness(0),
-                Margin = new Thickness(0, 8, 8, 0)
-            };
-            closeBtn.Click += (s, e) => Close();
-
-            outerGrid.Children.Add(closeBtn);
-            Panel.SetZIndex(closeBtn, 10);
-
-            detailsPanel.Children.Add(buyBtn);
-            Grid.SetColumn(detailsPanel, 1);
-            grid.Children.Add(detailsPanel);
-
-            Content = mainBorder;
+            Content = outer;
+            UpdateImg();
+            BuildThumbs();
         }
 
-        private void LoadAllImages()
+        private void UpdateImg()
         {
-            try
+            if (_item.AllImagePaths.Count > 0 && _imgIdx < _item.AllImagePaths.Count &&
+                File.Exists(_item.AllImagePaths[_imgIdx]))
             {
-                using (var conn = _mainWindow.GetConnection())
-                using (var cmd = new MySqlCommand(
-                    "SELECT image_path FROM item_images WHERE item_id = @id ORDER BY sort_order", conn))
+                try
                 {
-                    cmd.Parameters.AddWithValue("@id", _item.Id);
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        _item.AllImagePaths.Clear();
-                        while (reader.Read())
-                            _item.AllImagePaths.Add(reader.GetString("image_path"));
-                    }
+                    var bmp = new BitmapImage();
+                    bmp.BeginInit();
+                    bmp.UriSource = new Uri(Path.GetFullPath(_item.AllImagePaths[_imgIdx]), UriKind.Absolute);
+                    bmp.CacheOption = BitmapCacheOption.OnLoad;
+                    bmp.EndInit(); bmp.Freeze();
+                    _mainImg.Source = bmp;
+                    _mainImg.Visibility = Visibility.Visible;
+                    _noImgText.Visibility = Visibility.Collapsed;
+                    BuildThumbs();
+                    return;
                 }
+                catch { }
             }
-            catch { }
-
-            UpdateImageDisplay();
-            UpdateThumbnails();
+            _mainImg.Visibility = Visibility.Collapsed;
+            _noImgText.Visibility = Visibility.Visible;
         }
 
-        private void UpdateImageDisplay()
+        private void BuildThumbs()
         {
-            if (_item.AllImagePaths.Count > 0 && currentImageIndex < _item.AllImagePaths.Count)
-            {
-                string path = _item.AllImagePaths[currentImageIndex];
-                if (File.Exists(path))
-                {
-                    try
-                    {
-                        MainImage.Source = new BitmapImage(new Uri(path, UriKind.Absolute));
-                        MainImage.Visibility = Visibility.Visible;
-                        NoImagePlaceholder.Visibility = Visibility.Collapsed;
-                    }
-                    catch
-                    {
-                        MainImage.Visibility = Visibility.Collapsed;
-                        NoImagePlaceholder.Visibility = Visibility.Visible;
-                    }
-                }
-                else
-                {
-                    MainImage.Visibility = Visibility.Collapsed;
-                    NoImagePlaceholder.Visibility = Visibility.Visible;
-                }
-            }
-            else
-            {
-                MainImage.Visibility = Visibility.Collapsed;
-                NoImagePlaceholder.Visibility = Visibility.Visible;
-            }
-            PrevBtn.Visibility = _item.AllImagePaths.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
-            NextBtn.Visibility = _item.AllImagePaths.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
-        }
-
-        private void UpdateThumbnails()
-        {
-            ThumbnailsPanel.Children.Clear();
+            _thumbsPanel.Children.Clear();
             for (int i = 0; i < _item.AllImagePaths.Count; i++)
             {
-                int index = i;
-                var thumbBorder = new Border
+                int idx = i;
+                var tb = new Border
                 {
                     Width = 64,
                     Height = 64,
-                    Margin = new Thickness(3, 3, 3, 3),
-                    BorderBrush = i == currentImageIndex
+                    Margin = new Thickness(3),
+                    BorderBrush = i == _imgIdx
                         ? new SolidColorBrush(Color.FromRgb(0xFF, 0x8C, 0x00))
                         : new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00)),
                     BorderThickness = new Thickness(2),
                     CornerRadius = new CornerRadius(6),
                     Cursor = Cursors.Hand,
-                    Background = new SolidColorBrush(Color.FromArgb(0x80, 0x00, 0x00, 0x00))
+                    Background = new SolidColorBrush(Color.FromArgb(0x80, 0, 0, 0))
                 };
                 if (File.Exists(_item.AllImagePaths[i]))
                 {
                     try
                     {
-                        thumbBorder.Child = new Image
-                        {
-                            Source = new BitmapImage(new Uri(_item.AllImagePaths[i], UriKind.Absolute)),
-                            Stretch = Stretch.UniformToFill
-                        };
+                        var bmp = new BitmapImage();
+                        bmp.BeginInit();
+                        bmp.UriSource = new Uri(Path.GetFullPath(_item.AllImagePaths[i]), UriKind.Absolute);
+                        bmp.CacheOption = BitmapCacheOption.OnLoad;
+                        bmp.DecodePixelWidth = 64;
+                        bmp.EndInit(); bmp.Freeze();
+                        tb.Child = new Image { Source = bmp, Stretch = Stretch.UniformToFill };
                     }
                     catch { }
                 }
-                thumbBorder.MouseLeftButtonDown += (s, e) =>
-                {
-                    currentImageIndex = index;
-                    UpdateImageDisplay();
-                    UpdateThumbnails();
-                };
-                ThumbnailsPanel.Children.Add(thumbBorder);
+                tb.MouseLeftButtonDown += (s, e) => { _imgIdx = idx; UpdateImg(); };
+                _thumbsPanel.Children.Add(tb);
             }
         }
-
-        private void NavigateImage(int direction)
-        {
-            if (_item.AllImagePaths.Count == 0) return;
-            currentImageIndex = (currentImageIndex + direction + _item.AllImagePaths.Count) % _item.AllImagePaths.Count;
-            UpdateImageDisplay();
-            UpdateThumbnails();
-        }
     }
-}
 
-// ============================================
-// TOVÁBBI OLDALAK VÁZAI
-// ============================================
-namespace cucisstuff
-{
-    // Fiók oldal
+    // ============================================
+    // FIÓK OLDAL
+    // ============================================
     public class AccountPage : Page
     {
-        private readonly MainWindow _mainWindow;
-        public AccountPage(MainWindow mainWindow)
+        private readonly MainWindow _mw;
+        private TextBox _unameBox, _emailBox;
+        private PasswordBox _pwdBox;
+
+        public AccountPage(MainWindow mw)
         {
-            _mainWindow = mainWindow;
-            InitializeUI();
-            LoadUserData();
+            _mw = mw;
+            Build();
+            LoadData();
         }
 
-        private void InitializeUI()
+        private void Build()
         {
             Background = new SolidColorBrush(Color.FromRgb(0x05, 0x05, 0x05));
-            var scroll = new ScrollViewer();
-            var stack = new StackPanel { Margin = new Thickness(40, 40, 40, 40) };
+            var sv = new ScrollViewer();
+            var stack = new StackPanel { Margin = new Thickness(40) };
 
-            var backBtn = new Button
-            {
-                Content = "← Vissza a főoldalra",
-                Background = Brushes.Transparent,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                FontSize = 14,
-                FontWeight = FontWeights.Bold,
-                Padding = new Thickness(16, 10, 16, 10),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(0x4D, 0xFF, 0x8C, 0x00)),
-                BorderThickness = new Thickness(1),
-                Cursor = Cursors.Hand,
-                HorizontalAlignment = HorizontalAlignment.Left
-            };
-            backBtn.Click += (s, e) => _mainWindow.NavigateToMain();
+            var backBtn = MainWindow.MakeGhostButton("← Vissza");
+            backBtn.HorizontalAlignment = HorizontalAlignment.Left;
+            backBtn.Click += (s, e) => _mw.NavigateToMain();
             stack.Children.Add(backBtn);
 
             stack.Children.Add(new TextBlock
@@ -1749,16 +1443,18 @@ namespace cucisstuff
                 Margin = new Thickness(0, 16, 0, 16)
             });
 
-            // Felhasználónév
-            stack.Children.Add(new TextBlock
-            {
-                Text = "Felhasználónév",
-                FontSize = 12,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                Margin = new Thickness(0, 0, 0, 6)
-            });
-            var usernameBox = new TextBox
+            stack.Children.Add(MainWindow.MakeLabel("Felhasználónév"));
+            _unameBox = MainWindow.MakeInput();
+            _unameBox.Margin = new Thickness(0, 0, 0, 12);
+            stack.Children.Add(_unameBox);
+
+            stack.Children.Add(MainWindow.MakeLabel("Email"));
+            _emailBox = MainWindow.MakeInput();
+            _emailBox.Margin = new Thickness(0, 0, 0, 12);
+            stack.Children.Add(_emailBox);
+
+            stack.Children.Add(MainWindow.MakeLabel("Új jelszó (ha módosítani szeretnéd)"));
+            _pwdBox = new PasswordBox
             {
                 Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x24, 0x18)),
                 Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
@@ -1766,183 +1462,256 @@ namespace cucisstuff
                 BorderThickness = new Thickness(1),
                 FontSize = 14,
                 Padding = new Thickness(14, 12, 14, 12),
-                Margin = new Thickness(0, 0, 0, 12)
+                Margin = new Thickness(0, 0, 0, 16)
             };
-            stack.Children.Add(usernameBox);
+            stack.Children.Add(_pwdBox);
 
-            // Email
-            stack.Children.Add(new TextBlock
-            {
-                Text = "Email",
-                FontSize = 12,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                Margin = new Thickness(0, 0, 0, 6)
-            });
-            var emailBox = new TextBox
-            {
-                Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x24, 0x18)),
-                Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(0x3D, 0x35, 0x28)),
-                BorderThickness = new Thickness(1),
-                FontSize = 14,
-                Padding = new Thickness(14, 12, 14, 12),
-                Margin = new Thickness(0, 0, 0, 12)
-            };
-            stack.Children.Add(emailBox);
-
-            // Jelszó
-            stack.Children.Add(new TextBlock
-            {
-                Text = "Új jelszó (ha módosítani szeretnéd)",
-                FontSize = 12,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                Margin = new Thickness(0, 0, 0, 6)
-            });
-            var pwdBox = new PasswordBox
-            {
-                Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x24, 0x18)),
-                Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(0x3D, 0x35, 0x28)),
-                BorderThickness = new Thickness(1),
-                FontSize = 14,
-                Padding = new Thickness(14, 12, 14, 12),
-                Margin = new Thickness(0, 0, 0, 12)
-            };
-            stack.Children.Add(pwdBox);
-
-            var saveBtn = new Button
-            {
-                Content = "Mentés",
-                FontSize = 15,
-                FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x0A, 0x05, 0x00)),
-                Padding = new Thickness(0, 14, 0, 14),
-                BorderThickness = new Thickness(0),
-                Cursor = Cursors.Hand,
-                Width = 200,
-                Margin = new Thickness(0, 12, 0, 0)
-            };
-            saveBtn.Background = new LinearGradientBrush(
-                Color.FromRgb(0xFF, 0xAB, 0x35),
-                Color.FromRgb(0xB3, 0x55, 0x00), 90);
-            saveBtn.Click += (s, e) => SaveUserData(usernameBox.Text, emailBox.Text, pwdBox.Password);
+            var saveBtn = MainWindow.MakeOrangeButton("Mentés", 15);
+            saveBtn.Width = 200;
+            saveBtn.HorizontalAlignment = HorizontalAlignment.Left;
+            saveBtn.Click += (s, e) => Save();
             stack.Children.Add(saveBtn);
 
-            scroll.Content = stack;
-            Content = scroll;
+            // Saját termékek szekció
+            stack.Children.Add(new TextBlock
+            {
+                Text = "Saját hirdetéseim",
+                FontSize = 20,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
+                Margin = new Thickness(0, 32, 0, 16)
+            });
+
+            var myItemsPanel = new StackPanel();
+            stack.Children.Add(myItemsPanel);
+            LoadMyItems(myItemsPanel);
+
+            sv.Content = stack;
+            Content = sv;
         }
 
-        private void LoadUserData()
+        private void LoadMyItems(StackPanel panel)
         {
-            // Betöltési logika...
-        }
-
-        private void SaveUserData(string username, string email, string password)
-        {
-            if (string.IsNullOrWhiteSpace(username))
-            {
-                MessageBox.Show("A felhasználónév nem lehet üres!");
-                return;
-            }
-            if (string.IsNullOrWhiteSpace(email) || !email.Contains("@"))
-            {
-                MessageBox.Show("Érvénytelen email cím!");
-                return;
-            }
-
             try
             {
-                using (var conn = _mainWindow.GetConnection())
+                using (var conn = _mw.GetConnection())
+                using (var cmd = new MySqlCommand(
+                    "SELECT id, title, price, sold, created_at FROM items WHERE user_id=@uid ORDER BY created_at DESC", conn))
                 {
-                    // Foglaltság ellenőrzése
-                    using (var checkCmd = new MySqlCommand(
-                        "SELECT id FROM users WHERE (username = @uname OR email = @email) AND id != @uid",
-                        conn))
+                    cmd.Parameters.AddWithValue("@uid", MainWindow.LoggedInUserId);
+                    using (var r = cmd.ExecuteReader())
                     {
-                        checkCmd.Parameters.AddWithValue("@uname", username);
-                        checkCmd.Parameters.AddWithValue("@email", email);
-                        checkCmd.Parameters.AddWithValue("@uid", MainWindow.LoggedInUserId);
-                        if (checkCmd.ExecuteScalar() != null)
+                        while (r.Read())
                         {
-                            MessageBox.Show("A felhasználónév vagy email már foglalt!");
-                            return;
+                            string iid = r.GetString("id");
+                            string ititle = r.GetString("title");
+                            decimal iprice = r.GetDecimal("price");
+                            bool isold = r.GetBoolean("sold");
+
+                            var row = new Border
+                            {
+                                Background = new SolidColorBrush(Color.FromRgb(0x0F, 0x0F, 0x0F)),
+                                BorderBrush = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00)),
+                                BorderThickness = new Thickness(1),
+                                CornerRadius = new CornerRadius(10),
+                                Padding = new Thickness(16, 12, 16, 12),
+                                Margin = new Thickness(0, 0, 0, 8)
+                            };
+                            var rowGrid = new Grid();
+                            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                            var info = new StackPanel();
+                            info.Children.Add(new TextBlock
+                            {
+                                Text = ititle,
+                                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
+                                FontWeight = FontWeights.Bold,
+                                FontSize = 14
+                            });
+                            info.Children.Add(new TextBlock
+                            {
+                                Text = $"{iprice:N0} Ft  ·  {(isold ? "🔴 Elkelt" : "🟢 Aktív")}",
+                                Foreground = new SolidColorBrush(Color.FromRgb(0x8A, 0x7A, 0x65)),
+                                FontSize = 12
+                            });
+                            Grid.SetColumn(info, 0);
+                            rowGrid.Children.Add(info);
+
+                            if (!isold)
+                            {
+                                var soldBtn = MainWindow.MakeGhostButton("Megjelölés elkeltként", 12);
+                                soldBtn.Margin = new Thickness(8, 0, 8, 0);
+                                string capturedId = iid;
+                                soldBtn.Click += (s, e) => MarkAsSold(capturedId, panel);
+                                Grid.SetColumn(soldBtn, 1);
+                                rowGrid.Children.Add(soldBtn);
+                            }
+
+                            var delBtn = MainWindow.MakeRedGhostButton("Törlés", 12);
+                            string capturedId2 = iid;
+                            delBtn.Click += (s, e) => DeleteItem(capturedId2, panel);
+                            Grid.SetColumn(delBtn, 2);
+                            rowGrid.Children.Add(delBtn);
+
+                            row.Child = rowGrid;
+                            panel.Children.Add(row);
                         }
                     }
+                }
+            }
+            catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
+        }
 
-                    using (var cmd = new MySqlCommand(
-                        "UPDATE users SET username = @uname, email = @email WHERE id = @uid", conn))
+        private void MarkAsSold(string itemId, StackPanel panel)
+        {
+            if (MessageBox.Show("Biztosan elkeltnek jelölöd ezt a terméket?", "Megerősítés",
+                MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+            {
+                try
+                {
+                    using (var conn = _mw.GetConnection())
+                    using (var cmd = new MySqlCommand("UPDATE items SET sold=1 WHERE id=@id AND user_id=@uid", conn))
                     {
-                        cmd.Parameters.AddWithValue("@uname", username);
-                        cmd.Parameters.AddWithValue("@email", email);
+                        cmd.Parameters.AddWithValue("@id", itemId);
                         cmd.Parameters.AddWithValue("@uid", MainWindow.LoggedInUserId);
                         cmd.ExecuteNonQuery();
                     }
+                    panel.Children.Clear();
+                    LoadMyItems(panel);
+                }
+                catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
+            }
+        }
 
-                    // Jelszó módosítása ha meg van adva
-                    if (!string.IsNullOrWhiteSpace(password) && password.Length >= 6)
+        private void DeleteItem(string itemId, StackPanel panel)
+        {
+            if (MessageBox.Show("Biztosan törlöd ezt a hirdetést?", "Törlés",
+                MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+            {
+                try
+                {
+                    using (var conn = _mw.GetConnection())
+                    using (var cmd = new MySqlCommand("DELETE FROM items WHERE id=@id AND user_id=@uid", conn))
                     {
-                        string hash = _mainWindow.BCryptHash(password);
-                        long pwdId;
-                        using (var pwdCmd = new MySqlCommand(
-                            "INSERT INTO passwords (password_hash) VALUES (@hash); SELECT LAST_INSERT_ID();", conn))
+                        cmd.Parameters.AddWithValue("@id", itemId);
+                        cmd.Parameters.AddWithValue("@uid", MainWindow.LoggedInUserId);
+                        cmd.ExecuteNonQuery();
+                    }
+                    panel.Children.Clear();
+                    LoadMyItems(panel);
+                }
+                catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
+            }
+        }
+
+        private void LoadData()
+        {
+            try
+            {
+                using (var conn = _mw.GetConnection())
+                using (var cmd = new MySqlCommand("SELECT username, email FROM users WHERE id=@uid", conn))
+                {
+                    cmd.Parameters.AddWithValue("@uid", MainWindow.LoggedInUserId);
+                    using (var r = cmd.ExecuteReader())
+                    {
+                        if (r.Read())
                         {
-                            pwdCmd.Parameters.AddWithValue("@hash", hash);
-                            pwdId = Convert.ToInt64(pwdCmd.ExecuteScalar());
+                            _unameBox.Text = r.GetString("username");
+                            _emailBox.Text = r.GetString("email");
                         }
-                        using (var updCmd = new MySqlCommand(
-                            "UPDATE users SET password_id = @pwdId WHERE id = @uid", conn))
+                    }
+                }
+            }
+            catch (Exception ex) { MessageBox.Show("Adatbázis hiba: " + ex.Message); }
+        }
+
+        private void Save()
+        {
+            string uname = _unameBox.Text.Trim();
+            string email = _emailBox.Text.Trim();
+            string pwd = _pwdBox.Password;
+
+            if (string.IsNullOrWhiteSpace(uname)) { MessageBox.Show("Felhasználónév nem lehet üres!"); return; }
+            if (!email.Contains("@")) { MessageBox.Show("Érvénytelen email!"); return; }
+
+            try
+            {
+                using (var conn = _mw.GetConnection())
+                {
+                    using (var chk = new MySqlCommand(
+                        "SELECT id FROM users WHERE (username=@u OR email=@e) AND id!=@me", conn))
+                    {
+                        chk.Parameters.AddWithValue("@u", uname);
+                        chk.Parameters.AddWithValue("@e", email);
+                        chk.Parameters.AddWithValue("@me", MainWindow.LoggedInUserId);
+                        if (chk.ExecuteScalar() != null)
+                        { MessageBox.Show("A felhasználónév vagy email már foglalt!"); return; }
+                    }
+
+                    using (var cmd = new MySqlCommand(
+                        "UPDATE users SET username=@u, email=@e WHERE id=@me", conn))
+                    {
+                        cmd.Parameters.AddWithValue("@u", uname);
+                        cmd.Parameters.AddWithValue("@e", email);
+                        cmd.Parameters.AddWithValue("@me", MainWindow.LoggedInUserId);
+                        cmd.ExecuteNonQuery();
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(pwd) && pwd.Length >= 6)
+                    {
+                        string hash = _mw.BCryptHash(pwd);
+                        long pwdId;
+                        using (var pc = new MySqlCommand(
+                            "INSERT INTO passwords (password_hash) VALUES (@h)", conn))
                         {
-                            updCmd.Parameters.AddWithValue("@pwdId", pwdId);
-                            updCmd.Parameters.AddWithValue("@uid", MainWindow.LoggedInUserId);
-                            updCmd.ExecuteNonQuery();
+                            pc.Parameters.AddWithValue("@h", hash);
+                            pc.ExecuteNonQuery();
+                            pwdId = pc.LastInsertedId;
+                        }
+                        using (var uc = new MySqlCommand(
+                            "UPDATE users SET password_id=@pid WHERE id=@me", conn))
+                        {
+                            uc.Parameters.AddWithValue("@pid", pwdId);
+                            uc.Parameters.AddWithValue("@me", MainWindow.LoggedInUserId);
+                            uc.ExecuteNonQuery();
                         }
                     }
 
-                    MainWindow.LoggedInUsername = username;
+                    MainWindow.LoggedInUsername = uname;
                     MessageBox.Show("Adatok mentve!", "Siker", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
             }
-            catch (MySqlException ex)
-            {
-                MessageBox.Show("Adatbázis hiba: " + ex.Message);
-            }
+            catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
         }
     }
 
-    // Termék feltöltés oldal
+    // ============================================
+    // FELTÖLTÉS OLDAL
+    // ============================================
     public class UploadPage : Page
     {
-        private readonly MainWindow _mainWindow;
-        private List<byte[]> selectedImages = new List<byte[]>();
+        private readonly MainWindow _mw;
+        private List<byte[]> _imgs = new List<byte[]>();
+        private TextBox _titleBox, _descBox, _priceBox;
+        private TextBlock _imgCountText;
 
-        public UploadPage(MainWindow mainWindow)
+        public UploadPage(MainWindow mw)
         {
-            _mainWindow = mainWindow;
-            InitializeUI();
+            _mw = mw;
+            Build();
         }
 
-        private void InitializeUI()
+        private void Build()
         {
             Background = new SolidColorBrush(Color.FromRgb(0x05, 0x05, 0x05));
-            var scroll = new ScrollViewer();
-            var stack = new StackPanel { Margin = new Thickness(40, 40, 40, 40) };
+            var sv = new ScrollViewer();
+            var stack = new StackPanel { Margin = new Thickness(40) };
 
-            var backBtn = new Button
-            {
-                Content = "← Vissza",
-                Background = Brushes.Transparent,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                FontSize = 14,
-                FontWeight = FontWeights.Bold,
-                Padding = new Thickness(16, 10, 16, 10),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(0x4D, 0xFF, 0x8C, 0x00)),
-                BorderThickness = new Thickness(1),
-                Cursor = Cursors.Hand,
-                HorizontalAlignment = HorizontalAlignment.Left
-            };
-            backBtn.Click += (s, e) => _mainWindow.NavigateToMain();
+            var backBtn = MainWindow.MakeGhostButton("← Vissza");
+            backBtn.HorizontalAlignment = HorizontalAlignment.Left;
+            backBtn.Click += (s, e) => _mw.NavigateToMain();
             stack.Children.Add(backBtn);
 
             stack.Children.Add(new TextBlock
@@ -1953,76 +1722,29 @@ namespace cucisstuff
                 Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
                 Margin = new Thickness(0, 16, 0, 8)
             });
-            stack.Children.Add(new TextBlock
+
+            var imgRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 16) };
+            var imgBtn = MainWindow.MakeGhostButton("📸 Képek kiválasztása");
+            imgBtn.Click += PickImages;
+            imgRow.Children.Add(imgBtn);
+            _imgCountText = new TextBlock
             {
-                Text = "Tölts fel legalább 1 képet a termékről",
                 Foreground = new SolidColorBrush(Color.FromRgb(0x8A, 0x7A, 0x65)),
-                Margin = new Thickness(0, 0, 0, 16)
-            });
-
-            // Képfeltöltés gomb
-            var imgBtn = new Button
-            {
-                Content = "📸 Képek kiválasztása",
-                Background = Brushes.Transparent,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                FontSize = 14,
-                FontWeight = FontWeights.Bold,
-                Padding = new Thickness(16, 10, 16, 10),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(0x4D, 0xFF, 0x8C, 0x00)),
-                BorderThickness = new Thickness(1),
-                Cursor = Cursors.Hand,
-                Margin = new Thickness(0, 0, 0, 12)
+                FontSize = 13,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(12, 0, 0, 0),
+                Text = "Nincs kép kiválasztva"
             };
-            imgBtn.Click += (s, e) =>
-            {
-                var openFileDialog = new OpenFileDialog
-                {
-                    Filter = "Képfájlok|*.jpg;*.jpeg;*.png;*.gif;*.webp",
-                    Multiselect = true
-                };
-                if (openFileDialog.ShowDialog() == true)
-                {
-                    foreach (var file in openFileDialog.FileNames)
-                    {
-                        selectedImages.Add(File.ReadAllBytes(file));
-                    }
-                    MessageBox.Show($"{selectedImages.Count} kép kiválasztva.");
-                }
-            };
-            stack.Children.Add(imgBtn);
+            imgRow.Children.Add(_imgCountText);
+            stack.Children.Add(imgRow);
 
-            // Cím
-            stack.Children.Add(new TextBlock
-            {
-                Text = "Cím *",
-                FontSize = 12,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                Margin = new Thickness(0, 0, 0, 6)
-            });
-            var titleBox = new TextBox
-            {
-                Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x24, 0x18)),
-                Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(0x3D, 0x35, 0x28)),
-                BorderThickness = new Thickness(1),
-                FontSize = 14,
-                Padding = new Thickness(14, 12, 14, 12),
-                Margin = new Thickness(0, 0, 0, 12)
-            };
-            stack.Children.Add(titleBox);
+            stack.Children.Add(MainWindow.MakeLabel("Cím *"));
+            _titleBox = MainWindow.MakeInput();
+            _titleBox.Margin = new Thickness(0, 0, 0, 12);
+            stack.Children.Add(_titleBox);
 
-            // Leírás
-            stack.Children.Add(new TextBlock
-            {
-                Text = "Leírás *",
-                FontSize = 12,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                Margin = new Thickness(0, 0, 0, 6)
-            });
-            var descBox = new TextBox
+            stack.Children.Add(MainWindow.MakeLabel("Leírás *"));
+            _descBox = new TextBox
             {
                 Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x24, 0x18)),
                 Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
@@ -2036,170 +1758,137 @@ namespace cucisstuff
                 Height = 120,
                 Margin = new Thickness(0, 0, 0, 12)
             };
-            stack.Children.Add(descBox);
+            stack.Children.Add(_descBox);
 
-            // Ár
-            stack.Children.Add(new TextBlock
-            {
-                Text = "Ár (Ft) *",
-                FontSize = 12,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                Margin = new Thickness(0, 0, 0, 6)
-            });
-            var priceBox = new TextBox
-            {
-                Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x24, 0x18)),
-                Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(0x3D, 0x35, 0x28)),
-                BorderThickness = new Thickness(1),
-                FontSize = 14,
-                Padding = new Thickness(14, 12, 14, 12),
-                Margin = new Thickness(0, 0, 0, 12)
-            };
-            stack.Children.Add(priceBox);
+            stack.Children.Add(MainWindow.MakeLabel("Ár (Ft) *"));
+            _priceBox = MainWindow.MakeInput();
+            _priceBox.Margin = new Thickness(0, 0, 0, 20);
+            stack.Children.Add(_priceBox);
 
-            var submitBtn = new Button
-            {
-                Content = "Hirdetés feladása",
-                FontSize = 15,
-                FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x0A, 0x05, 0x00)),
-                Padding = new Thickness(0, 14, 0, 14),
-                BorderThickness = new Thickness(0),
-                Cursor = Cursors.Hand
-            };
-            submitBtn.Background = new LinearGradientBrush(
-                Color.FromRgb(0xFF, 0xAB, 0x35),
-                Color.FromRgb(0xB3, 0x55, 0x00), 90);
-            submitBtn.Click += (s, e) => SubmitItem(titleBox.Text, descBox.Text, priceBox.Text);
+            var submitBtn = MainWindow.MakeOrangeButton("Hirdetés feladása", 15);
+            submitBtn.Click += (s, e) => Submit();
             stack.Children.Add(submitBtn);
 
-            scroll.Content = stack;
-            Content = scroll;
+            sv.Content = stack;
+            Content = sv;
         }
 
-        private void SubmitItem(string title, string desc, string priceText)
+        private void PickImages(object sender, RoutedEventArgs e)
         {
-            if (!_mainWindow.CanPerformWriteOperation())
+            var dlg = new OpenFileDialog
             {
-                MessageBox.Show("VIZSGALOCK aktív!", "Hiba", MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
+                Filter = "Képfájlok|*.jpg;*.jpeg;*.png;*.gif;*.webp",
+                Multiselect = true
+            };
+            if (dlg.ShowDialog() == true)
+            {
+                foreach (var f in dlg.FileNames)
+                    _imgs.Add(File.ReadAllBytes(f));
+                _imgCountText.Text = $"{_imgs.Count} kép kiválasztva";
+                _imgCountText.Foreground = new SolidColorBrush(Color.FromRgb(0x00, 0xC8, 0x51));
             }
+        }
+
+        private void Submit()
+        {
+            string title = _titleBox.Text.Trim();
+            string desc = _descBox.Text.Trim();
+            string priceStr = _priceBox.Text.Trim();
+
+            if (!_mw.CanPerformWriteOperation())
+            { MessageBox.Show("VIZSGALOCK aktív!", "Hiba", MessageBoxButton.OK, MessageBoxImage.Error); return; }
             if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(desc) ||
-                !decimal.TryParse(priceText, out decimal price) || price < 0)
-            {
-                MessageBox.Show("Minden mezőt ki kell tölteni!", "Hiba", MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
-            }
-            if (selectedImages.Count == 0)
-            {
-                MessageBox.Show("Legalább egy kép szükséges!", "Hiba", MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
-            }
+                !decimal.TryParse(priceStr, out decimal price) || price < 0)
+            { MessageBox.Show("Minden mező kitöltése kötelező!"); return; }
+            if (_imgs.Count == 0)
+            { MessageBox.Show("Legalább egy kép szükséges!"); return; }
 
             try
             {
-                string itemId = _mainWindow.GenerateId();
-                using (var conn = _mainWindow.GetConnection())
-                using (var transaction = conn.BeginTransaction())
+                string itemId = _mw.GenerateId();
+                using (var conn = _mw.GetConnection())
+                using (var tr = conn.BeginTransaction())
                 {
                     try
                     {
                         using (var cmd = new MySqlCommand(
-                            "INSERT INTO items (id, user_id, title, description, price) VALUES (@id, @uid, @title, @desc, @price)",
-                            conn, transaction))
+                            "INSERT INTO items (id,user_id,title,description,price) VALUES(@id,@uid,@t,@d,@p)",
+                            conn, tr))
                         {
                             cmd.Parameters.AddWithValue("@id", itemId);
                             cmd.Parameters.AddWithValue("@uid", MainWindow.LoggedInUserId);
-                            cmd.Parameters.AddWithValue("@title", title);
-                            cmd.Parameters.AddWithValue("@desc", desc);
-                            cmd.Parameters.AddWithValue("@price", price);
+                            cmd.Parameters.AddWithValue("@t", title);
+                            cmd.Parameters.AddWithValue("@d", desc);
+                            cmd.Parameters.AddWithValue("@p", price);
                             cmd.ExecuteNonQuery();
                         }
 
                         string uploadDir = Path.Combine("uploads", itemId);
                         Directory.CreateDirectory(uploadDir);
-                        for (int i = 0; i < selectedImages.Count; i++)
-                        {
-                            string ext = ".jpg";
-                            byte[] imgData = _mainWindow.ResizeImage(selectedImages[i]);
-                            string filename = $"{Guid.NewGuid()}_{i}{ext}";
-                            string filepath = Path.Combine(uploadDir, filename);
-                            File.WriteAllBytes(filepath, imgData);
 
-                            using (var imgCmd = new MySqlCommand(
-                                "INSERT INTO item_images (item_id, image_path, image_filename, is_primary, sort_order) VALUES (@iid, @path, @fname, @primary, @sort)",
-                                conn, transaction))
+                        for (int i = 0; i < _imgs.Count; i++)
+                        {
+                            byte[] imgData = _mw.ResizeImage(_imgs[i]);
+                            string fname = $"{Guid.NewGuid()}_{i}.jpg";
+                            string fpath = Path.Combine(uploadDir, fname);
+                            File.WriteAllBytes(fpath, imgData);
+
+                            using (var ic = new MySqlCommand(
+                                "INSERT INTO item_images(item_id,image_path,image_filename,is_primary,sort_order) VALUES(@iid,@path,@fn,@pri,@sort)",
+                                conn, tr))
                             {
-                                imgCmd.Parameters.AddWithValue("@iid", itemId);
-                                imgCmd.Parameters.AddWithValue("@path", filepath);
-                                imgCmd.Parameters.AddWithValue("@fname", filename);
-                                imgCmd.Parameters.AddWithValue("@primary", i == 0);
-                                imgCmd.Parameters.AddWithValue("@sort", i);
-                                imgCmd.ExecuteNonQuery();
+                                ic.Parameters.AddWithValue("@iid", itemId);
+                                ic.Parameters.AddWithValue("@path", fpath);
+                                ic.Parameters.AddWithValue("@fn", fname);
+                                ic.Parameters.AddWithValue("@pri", i == 0);
+                                ic.Parameters.AddWithValue("@sort", i);
+                                ic.ExecuteNonQuery();
                             }
                         }
-                        transaction.Commit();
+                        tr.Commit();
                         MessageBox.Show("Hirdetés sikeresen feladva!", "Siker", MessageBoxButton.OK, MessageBoxImage.Information);
-                        _mainWindow.NavigateToMain();
+                        _mw.NavigateToMain();
                     }
-                    catch
-                    {
-                        transaction.Rollback();
-                        throw;
-                    }
+                    catch { tr.Rollback(); throw; }
                 }
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Hiba: " + ex.Message, "Hiba", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
         }
     }
 
-    // Admin oldal
+    // ============================================
+    // ADMIN OLDAL
+    // ============================================
     public class AdminPage : Page
     {
-        private readonly MainWindow _mainWindow;
-        private TabControl TabControl;
+        private readonly MainWindow _mw;
+        private TabControl _tabs;
 
-        public AdminPage(MainWindow mainWindow)
+        public AdminPage(MainWindow mw)
         {
-            _mainWindow = mainWindow;
-            InitializeUI();
-            LoadAdminData();
+            _mw = mw;
+            Build();
+            LoadData();
         }
 
-        private void InitializeUI()
+        private void Build()
         {
             Background = new SolidColorBrush(Color.FromRgb(0x05, 0x05, 0x05));
-            var dockPanel = new DockPanel();
+            var dock = new DockPanel();
 
             var topBar = new Border
             {
                 Background = new SolidColorBrush(Color.FromRgb(0x0A, 0x0A, 0x0A)),
-                Padding = new Thickness(10, 10, 10, 10)
+                Padding = new Thickness(10)
             };
             DockPanel.SetDock(topBar, Dock.Top);
 
-            var topStack = new StackPanel { Orientation = Orientation.Horizontal };
-            var backBtn = new Button
-            {
-                Content = "← Vissza",
-                Background = Brushes.Transparent,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                FontSize = 14,
-                FontWeight = FontWeights.Bold,
-                Padding = new Thickness(16, 10, 16, 10),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(0x4D, 0xFF, 0x8C, 0x00)),
-                BorderThickness = new Thickness(1),
-                Cursor = Cursors.Hand
-            };
-            backBtn.Click += (s, e) => _mainWindow.NavigateToMain();
-            topStack.Children.Add(backBtn);
+            var topRow = new StackPanel { Orientation = Orientation.Horizontal };
+            var backBtn = MainWindow.MakeGhostButton("← Vissza");
+            backBtn.Click += (s, e) => _mw.NavigateToMain();
+            topRow.Children.Add(backBtn);
 
-            topStack.Children.Add(new TextBlock
+            topRow.Children.Add(new TextBlock
             {
                 Text = "ADMIN TERMINAL",
                 Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
@@ -2209,59 +1898,36 @@ namespace cucisstuff
                 VerticalAlignment = VerticalAlignment.Center
             });
 
-            var vlBtn = new Button
-            {
-                Content = "⚠ VIZSGALOCK",
-                Background = Brushes.Transparent,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x33, 0x33)),
-                FontSize = 14,
-                FontWeight = FontWeights.Bold,
-                Padding = new Thickness(16, 10, 16, 10),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x33, 0x33)),
-                BorderThickness = new Thickness(1),
-                Cursor = Cursors.Hand,
-                Margin = new Thickness(20, 0, 0, 0)
-            };
+            var vlBtn = MainWindow.MakeRedGhostButton("⚠ VIZSGALOCK");
+            vlBtn.Margin = new Thickness(20, 0, 0, 0);
             vlBtn.Click += (s, e) => ToggleVizsgalock();
-            topStack.Children.Add(vlBtn);
+            topRow.Children.Add(vlBtn);
 
-            var purgeBtn = new Button
+            var purgeBtn = MainWindow.MakeRedGhostButton("⚠ VIZSGAPURGE");
+            purgeBtn.Margin = new Thickness(10, 0, 0, 0);
+            purgeBtn.Click += (s, e) => Purge();
+            topRow.Children.Add(purgeBtn);
+
+            topBar.Child = topRow;
+            dock.Children.Add(topBar);
+
+            _tabs = new TabControl
             {
-                Content = "⚠ VIZSGAPURGE",
-                Background = Brushes.Transparent,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x33, 0x33)),
-                FontSize = 14,
-                FontWeight = FontWeights.Bold,
-                Padding = new Thickness(16, 10, 16, 10),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x33, 0x33)),
-                BorderThickness = new Thickness(1),
-                Cursor = Cursors.Hand,
-                Margin = new Thickness(20, 0, 0, 0)
-            };
-            purgeBtn.Click += (s, e) => PerformPurge();
-            topStack.Children.Add(purgeBtn);
-
-            topBar.Child = topStack;
-            dockPanel.Children.Add(topBar);
-
-            TabControl = new TabControl
-            {
-                Margin = new Thickness(10, 10, 10, 10),
+                Margin = new Thickness(10),
                 Background = new SolidColorBrush(Color.FromRgb(0x05, 0x05, 0x05)),
-                Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
                 BorderBrush = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00))
             };
 
-            TabControl.Items.Add(CreateTab("◧ TERMÉKEK", "ItemsGrid"));
-            TabControl.Items.Add(CreateTab("◈ FELHASZNÁLÓK", "UsersGrid"));
-            TabControl.Items.Add(CreateTab("📦 RENDELÉSEK", "OrdersGrid"));
-            TabControl.Items.Add(CreateTab("⚠ REPORTOK", "ReportsGrid"));
+            _tabs.Items.Add(MakeTab("◧ TERMÉKEK"));
+            _tabs.Items.Add(MakeTab("◈ FELHASZNÁLÓK"));
+            _tabs.Items.Add(MakeTab("📦 RENDELÉSEK"));
+            _tabs.Items.Add(MakeTab("⚠ REPORTOK"));
 
-            dockPanel.Children.Add(TabControl);
-            Content = dockPanel;
+            dock.Children.Add(_tabs);
+            Content = dock;
         }
 
-        private TabItem CreateTab(string header, string gridName)
+        private TabItem MakeTab(string header)
         {
             var tab = new TabItem
             {
@@ -2270,9 +1936,8 @@ namespace cucisstuff
                 Background = new SolidColorBrush(Color.FromRgb(0x0F, 0x0F, 0x0F)),
                 FontWeight = FontWeights.Bold
             };
-            var dataGrid = new DataGrid
+            tab.Content = new DataGrid
             {
-                Name = gridName,
                 Background = new SolidColorBrush(Color.FromRgb(0x0F, 0x0F, 0x0F)),
                 Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
                 BorderBrush = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00)),
@@ -2281,94 +1946,86 @@ namespace cucisstuff
                 IsReadOnly = true,
                 CanUserAddRows = false,
                 CanUserDeleteRows = false,
-                SelectionMode = DataGridSelectionMode.Single
+                SelectionMode = DataGridSelectionMode.Single,
+                RowBackground = new SolidColorBrush(Color.FromRgb(0x0F, 0x0F, 0x0F)),
+                AlternatingRowBackground = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A))
             };
-            tab.Content = dataGrid;
             return tab;
         }
 
-        private void LoadAdminData()
+        private DataGrid GetGrid(int idx) => (DataGrid)((TabItem)_tabs.Items[idx]).Content;
+
+        private void LoadData()
         {
             try
             {
-                using (var conn = _mainWindow.GetConnection())
+                using (var conn = _mw.GetConnection())
                 {
                     // Termékek
-                    var itemsTable = new System.Data.DataTable();
+                    var dt = new System.Data.DataTable();
                     using (var cmd = new MySqlCommand(
-                        @"SELECT i.id, i.title, u.username AS seller, i.price, 
-                                 CASE WHEN i.sold THEN 'Elkelt' ELSE 'Aktív' END AS status,
-                                 i.created_at
-                          FROM items i JOIN users u ON i.user_id = u.id
+                        @"SELECT i.id, i.title, u.username AS elado, i.price AS ar,
+                                 CASE WHEN i.sold THEN 'Elkelt' ELSE 'Aktív' END AS allapot,
+                                 i.created_at AS letrehozva
+                          FROM items i JOIN users u ON i.user_id=u.id
                           ORDER BY i.created_at DESC", conn))
-                    using (var adapter = new MySql.Data.MySqlClient.MySqlDataAdapter(cmd))
-                    {
-                        adapter.Fill(itemsTable);
-                    }
-                    ((DataGrid)((TabItem)TabControl.Items[0]).Content).ItemsSource = itemsTable.DefaultView;
+                    using (var ada = new MySqlConnector.MySqlDataAdapter(cmd))
+                        ada.Fill(dt);
+                    GetGrid(0).ItemsSource = dt.DefaultView;
 
                     // Felhasználók
-                    var usersTable = new System.Data.DataTable();
+                    var dt2 = new System.Data.DataTable();
                     using (var cmd = new MySqlCommand(
                         @"SELECT u.id, u.username, u.email,
-                                 CASE WHEN a.user_id IS NOT NULL THEN 'Admin' ELSE 'User' END AS role,
-                                 COUNT(i.id) AS items,
-                                 u.created_at
+                                 CASE WHEN a.user_id IS NOT NULL THEN 'Admin' ELSE 'User' END AS szerepkor,
+                                 COUNT(i.id) AS hirdetesek,
+                                 u.created_at AS regisztralt
                           FROM users u
-                          LEFT JOIN admins a ON u.id = a.user_id
-                          LEFT JOIN items i ON u.id = i.user_id
+                          LEFT JOIN admins a ON u.id=a.user_id
+                          LEFT JOIN items i ON u.id=i.user_id
                           GROUP BY u.id, u.username, u.email, a.user_id, u.created_at
                           ORDER BY u.created_at DESC", conn))
-                    using (var adapter = new MySql.Data.MySqlClient.MySqlDataAdapter(cmd))
-                    {
-                        adapter.Fill(usersTable);
-                    }
-                    ((DataGrid)((TabItem)TabControl.Items[1]).Content).ItemsSource = usersTable.DefaultView;
+                    using (var ada = new MySqlConnector.MySqlDataAdapter(cmd))
+                        ada.Fill(dt2);
+                    GetGrid(1).ItemsSource = dt2.DefaultView;
 
-                    // Rendelések
-                    var ordersTable = new System.Data.DataTable();
+                    // Rendelések - item_price NEM létezik az orders táblában, az items-ből kell joinolni
+                    var dt3 = new System.Data.DataTable();
                     using (var cmd = new MySqlCommand(
-                        @"SELECT o.id, i.title AS item, b.username AS buyer, s.username AS seller,
-                                 o.item_price, o.status, o.payment_method, o.created_at
+                        @"SELECT o.id, i.title AS termek, b.username AS vevo, s.username AS elado,
+                                 i.price AS ar, o.status AS allapot,
+                                 o.payment_method AS fizetes, o.created_at AS letrehozva
                           FROM orders o
-                          JOIN items i ON o.item_id = i.id
-                          JOIN users b ON o.buyer_id = b.id
-                          JOIN users s ON o.seller_id = s.id
+                          JOIN items i ON o.item_id=i.id
+                          JOIN users b ON o.buyer_id=b.id
+                          JOIN users s ON o.seller_id=s.id
                           ORDER BY o.created_at DESC", conn))
-                    using (var adapter = new MySql.Data.MySqlClient.MySqlDataAdapter(cmd))
-                    {
-                        adapter.Fill(ordersTable);
-                    }
-                    ((DataGrid)((TabItem)TabControl.Items[2]).Content).ItemsSource = ordersTable.DefaultView;
+                    using (var ada = new MySqlConnector.MySqlDataAdapter(cmd))
+                        ada.Fill(dt3);
+                    GetGrid(2).ItemsSource = dt3.DefaultView;
 
-                    // Riportok
+                    // Reportok
                     try
                     {
-                        var reportsTable = new System.Data.DataTable();
+                        var dt4 = new System.Data.DataTable();
                         using (var cmd = new MySqlCommand(
-                            @"SELECT r.id, 'item' AS type, r.item_id, i.title, rep.username AS reporter,
-                                    own.username AS target, r.reason, r.status, r.created_at
-                             FROM reports r
-                             JOIN items i ON r.item_id = i.id
-                             JOIN users rep ON r.user_id = rep.id
-                             JOIN users own ON i.user_id = own.id
-                             ORDER BY r.created_at DESC", conn))
-                        using (var adapter = new MySql.Data.MySqlClient.MySqlDataAdapter(cmd))
-                        {
-                            adapter.Fill(reportsTable);
-                        }
-                        ((DataGrid)((TabItem)TabControl.Items[3]).Content).ItemsSource = reportsTable.DefaultView;
+                            @"SELECT r.id, 'termek' AS tipus, r.item_id,
+                                     i.title AS targy, rep.username AS bejelento,
+                                     own.username AS celpont, r.reason AS ok,
+                                     r.status AS allapot, r.created_at AS letrehozva
+                              FROM reports r
+                              JOIN items i ON r.item_id=i.id
+                              JOIN users rep ON r.user_id=rep.id
+                              JOIN users own ON i.user_id=own.id
+                              ORDER BY r.created_at DESC", conn))
+                        using (var ada = new MySqlConnector.MySqlDataAdapter(cmd))
+                            ada.Fill(dt4);
+                        GetGrid(3).ItemsSource = dt4.DefaultView;
                     }
-                    catch
-                    {
-                        ((DataGrid)((TabItem)TabControl.Items[3]).Content).ItemsSource = null;
-                    }
+                    catch { GetGrid(3).ItemsSource = null; }
                 }
             }
-            catch (MySqlException ex)
-            {
-                MessageBox.Show("Adatbázis hiba: " + ex.Message);
-            }
+            catch (Exception ex) { MessageBox.Show("Adatbázis hiba: " + ex.Message); }
         }
 
         private void ToggleVizsgalock()
@@ -2378,242 +2035,219 @@ namespace cucisstuff
             {
                 try
                 {
-                    using (var conn = _mainWindow.GetConnection())
+                    using (var conn = _mw.GetConnection())
                     {
-                        bool currentState = _mainWindow.CheckVizsgalock();
+                        bool cur = _mw.CheckVizsgalock();
                         using (var cmd = new MySqlCommand(
-                            "UPDATE vizsgalock_settings SET is_locked = @newState WHERE id = 1", conn))
+                            "UPDATE vizsgalock_settings SET is_locked=@v WHERE id=1", conn))
                         {
-                            cmd.Parameters.AddWithValue("@newState", !currentState);
+                            cmd.Parameters.AddWithValue("@v", !cur);
                             cmd.ExecuteNonQuery();
                         }
-                        MessageBox.Show($"VIZSGALOCK: {(!currentState ? "BEKAPCSOLVA" : "KIKAPCSOLVA")}",
+                        MessageBox.Show($"VIZSGALOCK: {(!cur ? "BEKAPCSOLVA" : "KIKAPCSOLVA")}",
                             "Info", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                 }
-                catch (Exception ex)
-                {
-                    MessageBox.Show("Hiba: " + ex.Message);
-                }
+                catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
             }
         }
 
-        private void PerformPurge()
+        private void Purge()
         {
             if (MessageBox.Show(
-                "Ez véglegesen TÖRLI az összes nem-admin felhasználót (kivéve: gabi, martin, cuci, admin)!\nBiztosan folytatod?",
+                "Ez véglegesen TÖRLI az összes nem-admin felhasználót (kivéve: gabi, martin, cuci, admin)!\nBiztosan?",
                 "VIZSGAPURGE", MessageBoxButton.YesNo, MessageBoxImage.Error) == MessageBoxResult.Yes)
             {
                 try
                 {
-                    using (var conn = _mainWindow.GetConnection())
-                    using (var transaction = conn.BeginTransaction())
+                    using (var conn = _mw.GetConnection())
+                    using (var tr = conn.BeginTransaction())
                     {
                         try
                         {
-                            string[] keepers = { "gabi", "martin", "cuci", "admin" };
-                            var keeperParams = string.Join(",", keepers.Select(k => $"'{k}'"));
                             using (var cmd = new MySqlCommand(
-                                $"SELECT id FROM users WHERE LOWER(username) NOT IN ({keeperParams})",
-                                conn, transaction))
-                            using (var reader = cmd.ExecuteReader())
-                            {
-                                var idsToDelete = new List<int>();
-                                while (reader.Read()) idsToDelete.Add(reader.GetInt32("id"));
-                                reader.Close();
-
-                                if (idsToDelete.Count > 0)
-                                {
-                                    var idList = string.Join(",", idsToDelete);
-                                    using (var delCmd = new MySqlCommand(
-                                        $"DELETE FROM users WHERE id IN ({idList})", conn, transaction))
-                                    {
-                                        delCmd.ExecuteNonQuery();
-                                    }
-                                }
-                            }
-                            transaction.Commit();
-                            MessageBox.Show("Purge sikeres!", "Kész", MessageBoxButton.OK, MessageBoxImage.Information);
-                            LoadAdminData();
+                                @"DELETE FROM users
+                                  WHERE LOWER(username) NOT IN ('gabi','martin','cuci','admin')
+                                    AND id NOT IN (SELECT user_id FROM admins)",
+                                conn, tr))
+                                cmd.ExecuteNonQuery();
+                            tr.Commit();
+                            MessageBox.Show("Purge kész!", "Kész", MessageBoxButton.OK, MessageBoxImage.Information);
+                            LoadData();
                         }
-                        catch
-                        {
-                            transaction.Rollback();
-                            throw;
-                        }
+                        catch { tr.Rollback(); throw; }
                     }
                 }
-                catch (Exception ex)
-                {
-                    MessageBox.Show("Hiba: " + ex.Message);
-                }
+                catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
             }
         }
     }
 
-    // Üzenetek oldal
+    // ============================================
+    // ÜZENETEK OLDAL
+    // ============================================
     public class MessagesPage : Page
     {
-        private readonly MainWindow _mainWindow;
-        private ListBox PartnersList;
-        private ListBox MessagesList;
-        private TextBox MessageInput;
-        private int? selectedPartnerId;
-        private List<PartnerViewModel> partners = new List<PartnerViewModel>();
-        private ObservableCollection<MessageViewModel> messages = new ObservableCollection<MessageViewModel>();
+        private readonly MainWindow _mw;
+        private ListBox _partnersList;
+        private StackPanel _msgContainer;
+        private TextBox _msgInput;
+        private ScrollViewer _msgScroll;
+        private int? _partnerId;
+        private List<PartnerViewModel> _partners = new List<PartnerViewModel>();
 
-        public MessagesPage(MainWindow mainWindow)
+        public MessagesPage(MainWindow mw)
         {
-            _mainWindow = mainWindow;
-            InitializeUI();
+            _mw = mw;
+            Build();
             LoadPartners();
         }
 
-        private void InitializeUI()
+        private void Build()
         {
             Background = new SolidColorBrush(Color.FromRgb(0x05, 0x05, 0x05));
             var grid = new Grid();
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(250) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(5) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(260) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-            // Partnerek lista
-            var partnersStack = new StackPanel();
-            var partnersHeader = new Border
+            // Sol panel
+            var leftDock = new DockPanel();
+            var leftTop = new Border
             {
                 Background = new SolidColorBrush(Color.FromRgb(0x0A, 0x0A, 0x0A)),
-                Padding = new Thickness(10, 10, 10, 10)
+                Padding = new Thickness(10)
             };
-            partnersHeader.Child = new TextBlock
+            DockPanel.SetDock(leftTop, Dock.Top);
+            var leftTopStack = new StackPanel();
+            leftTopStack.Children.Add(new TextBlock
             {
                 Text = "Beszélgetések",
                 Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                FontWeight = FontWeights.Bold
-            };
-            partnersStack.Children.Add(partnersHeader);
+                FontWeight = FontWeights.Bold,
+                FontSize = 15,
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+            var backBtn = MainWindow.MakeGhostButton("← Vissza", 12);
+            backBtn.HorizontalAlignment = HorizontalAlignment.Left;
+            backBtn.Click += (s, e) => _mw.NavigateToMain();
+            leftTopStack.Children.Add(backBtn);
+            leftTop.Child = leftTopStack;
 
-            PartnersList = new ListBox
+            _partnersList = new ListBox
             {
                 Background = new SolidColorBrush(Color.FromRgb(0x05, 0x05, 0x05)),
                 Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00)),
-                BorderThickness = new Thickness(1),
-                DisplayMemberPath = "Username"
+                BorderThickness = new Thickness(0)
             };
-            PartnersList.SelectionChanged += (s, e) =>
+            _partnersList.SelectionChanged += (s, e) =>
             {
-                if (PartnersList.SelectedItem is PartnerViewModel p)
+                if (_partnersList.SelectedItem is PartnerViewModel p)
                 {
-                    selectedPartnerId = p.Id;
+                    _partnerId = p.Id;
                     LoadMessages(p.Id);
                 }
             };
-            partnersStack.Children.Add(PartnersList);
-            Grid.SetColumn(partnersStack, 0);
+
+            leftDock.Children.Add(leftTop);
+            leftDock.Children.Add(_partnersList);
+            Grid.SetColumn(leftDock, 0);
 
             // Elválasztó
-            var separator = new Border
+            var sep = new Border
             {
-                Background = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00)),
-                Width = 1
+                Background = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00))
             };
-            Grid.SetColumn(separator, 1);
+            Grid.SetColumn(sep, 1);
 
-            // Üzenetek
-            var messagesStack = new StackPanel();
-            var messagesHeader = new Border
+            // Jobb panel
+            var rightDock = new DockPanel();
+
+            var rightTop = new Border
             {
                 Background = new SolidColorBrush(Color.FromRgb(0x0A, 0x0A, 0x0A)),
-                Padding = new Thickness(10, 10, 10, 10)
+                Padding = new Thickness(16, 12, 16, 12)
             };
-            messagesHeader.Child = new TextBlock
+            DockPanel.SetDock(rightTop, Dock.Top);
+            rightTop.Child = new TextBlock
             {
                 Text = "Üzenetek",
                 Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                FontWeight = FontWeights.Bold
+                FontWeight = FontWeights.Bold,
+                FontSize = 15
             };
-            messagesStack.Children.Add(messagesHeader);
 
-            MessagesList = new ListBox
-            {
-                Background = new SolidColorBrush(Color.FromRgb(0x05, 0x05, 0x05)),
-                Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00)),
-                BorderThickness = new Thickness(1),
-                DisplayMemberPath = "Text"
-            };
-            messagesStack.Children.Add(MessagesList);
-
-            // Input
+            // Input bar bottom
             var inputBar = new Border
             {
                 Background = new SolidColorBrush(Color.FromRgb(0x0A, 0x0A, 0x0A)),
-                Padding = new Thickness(10, 10, 10, 10)
+                Padding = new Thickness(10)
             };
+            DockPanel.SetDock(inputBar, Dock.Bottom);
+
             var inputGrid = new Grid();
             inputGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             inputGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            MessageInput = new TextBox
+            _msgInput = new TextBox
             {
                 Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x24, 0x18)),
                 Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
                 BorderBrush = new SolidColorBrush(Color.FromRgb(0x3D, 0x35, 0x28)),
                 BorderThickness = new Thickness(1),
                 FontSize = 14,
-                Padding = new Thickness(14, 12, 14, 12)
+                Padding = new Thickness(14, 10, 14, 10),
+                VerticalAlignment = VerticalAlignment.Center
             };
-            Grid.SetColumn(MessageInput, 0);
+            _msgInput.KeyDown += (s, e) => { if (e.Key == Key.Return && !Keyboard.IsKeyDown(Key.LeftShift)) { Send(); e.Handled = true; } };
+            Grid.SetColumn(_msgInput, 0);
 
-            var sendBtn = new Button
-            {
-                Content = "➤",
-                FontSize = 15,
-                FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x0A, 0x05, 0x00)),
-                Padding = new Thickness(0, 10, 0, 10),
-                BorderThickness = new Thickness(0),
-                Cursor = Cursors.Hand,
-                Width = 44,
-                Height = 44,
-                Margin = new Thickness(10, 0, 0, 0)
-            };
-            sendBtn.Background = new LinearGradientBrush(
-                Color.FromRgb(0xFF, 0xAB, 0x35),
-                Color.FromRgb(0xB3, 0x55, 0x00), 90);
-            sendBtn.Click += (s, e) => SendMessage();
+            var sendBtn = MainWindow.MakeOrangeButton("➤");
+            sendBtn.Width = 44; sendBtn.Height = 44;
+            sendBtn.Margin = new Thickness(8, 0, 0, 0);
+            sendBtn.Click += (s, e) => Send();
             Grid.SetColumn(sendBtn, 1);
 
-            inputGrid.Children.Add(MessageInput);
+            inputGrid.Children.Add(_msgInput);
             inputGrid.Children.Add(sendBtn);
             inputBar.Child = inputGrid;
-            messagesStack.Children.Add(inputBar);
 
-            Grid.SetColumn(messagesStack, 2);
+            // Messages scroll
+            _msgScroll = new ScrollViewer
+            {
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Padding = new Thickness(16, 8, 16, 8)
+            };
+            _msgContainer = new StackPanel();
+            _msgScroll.Content = _msgContainer;
 
-            grid.Children.Add(partnersStack);
-            grid.Children.Add(separator);
-            grid.Children.Add(messagesStack);
+            rightDock.Children.Add(rightTop);
+            rightDock.Children.Add(inputBar);
+            rightDock.Children.Add(_msgScroll);
+            Grid.SetColumn(rightDock, 2);
+
+            grid.Children.Add(leftDock);
+            grid.Children.Add(sep);
+            grid.Children.Add(rightDock);
             Content = grid;
         }
 
         private void LoadPartners()
         {
-            partners.Clear();
+            _partners.Clear();
             try
             {
-                using (var conn = _mainWindow.GetConnection())
+                using (var conn = _mw.GetConnection())
                 using (var cmd = new MySqlCommand(
                     @"SELECT u.id, u.username,
                              MAX(m.sent_at) AS last_msg,
-                             SUM(CASE WHEN m.receiver_id = @me AND m.is_read = 0 THEN 1 ELSE 0 END) AS unread
+                             SUM(CASE WHEN m.receiver_id=@me AND m.is_read=0 THEN 1 ELSE 0 END) AS unread
                       FROM users u
                       JOIN uzenetek m ON (
-                          (m.sender_id = u.id AND m.receiver_id = @me2)
-                          OR (m.receiver_id = u.id AND m.sender_id = @me3)
+                          (m.sender_id=u.id AND m.receiver_id=@me2)
+                          OR (m.receiver_id=u.id AND m.sender_id=@me3)
                       )
-                      LEFT JOIN hidden_conversations hc ON hc.user_id = @me4 AND hc.partner_id = u.id
-                      WHERE u.id != @me5 AND hc.user_id IS NULL
+                      WHERE u.id != @me4
                       GROUP BY u.id, u.username
                       ORDER BY last_msg DESC", conn))
                 {
@@ -2621,143 +2255,207 @@ namespace cucisstuff
                     cmd.Parameters.AddWithValue("@me2", MainWindow.LoggedInUserId);
                     cmd.Parameters.AddWithValue("@me3", MainWindow.LoggedInUserId);
                     cmd.Parameters.AddWithValue("@me4", MainWindow.LoggedInUserId);
-                    cmd.Parameters.AddWithValue("@me5", MainWindow.LoggedInUserId);
-                    using (var reader = cmd.ExecuteReader())
+                    using (var r = cmd.ExecuteReader())
                     {
-                        while (reader.Read())
+                        while (r.Read())
                         {
-                            partners.Add(new PartnerViewModel
+                            _partners.Add(new PartnerViewModel
                             {
-                                Id = reader.GetInt32("id"),
-                                Username = reader.GetString("username"),
-                                UnreadCount = reader.GetInt32("unread"),
-                                LastMessageAt = reader.IsDBNull(reader.GetOrdinal("last_msg"))
-                                    ? DateTime.MinValue
-                                    : reader.GetDateTime("last_msg")
+                                Id = r.GetInt32("id"),
+                                Username = r.GetString("username"),
+                                UnreadCount = r.IsDBNull(r.GetOrdinal("unread")) ? 0 : Convert.ToInt32(r["unread"]),
+                                LastMessageAt = r.IsDBNull(r.GetOrdinal("last_msg")) ? DateTime.MinValue : r.GetDateTime("last_msg")
                             });
                         }
                     }
                 }
             }
             catch { }
-            PartnersList.ItemsSource = partners;
+
+            _partnersList.Items.Clear();
+            foreach (var p in _partners)
+            {
+                var item = new Border
+                {
+                    Padding = new Thickness(12, 8, 12, 8),
+                    Cursor = Cursors.Hand,
+                    Tag = p
+                };
+                var row = new StackPanel { Orientation = Orientation.Horizontal };
+                var avatar = new Border
+                {
+                    Width = 36,
+                    Height = 36,
+                    CornerRadius = new CornerRadius(18),
+                    Background = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00)),
+                    Margin = new Thickness(0, 0, 10, 0)
+                };
+                avatar.Child = new TextBlock
+                {
+                    Text = p.AvatarInitial,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
+                    FontWeight = FontWeights.Bold,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                row.Children.Add(avatar);
+
+                var nameStack = new StackPanel();
+                nameStack.Children.Add(new TextBlock
+                {
+                    Text = p.Username + (p.HasUnread ? $" ({p.UnreadCount})" : ""),
+                    Foreground = new SolidColorBrush(p.HasUnread ? Color.FromRgb(0xFF, 0xFF, 0xFF) : Color.FromRgb(0xF5, 0xF0, 0xE8)),
+                    FontWeight = p.HasUnread ? FontWeights.Bold : FontWeights.Normal,
+                    FontSize = 14
+                });
+                nameStack.Children.Add(new TextBlock
+                {
+                    Text = p.LastMessageTimeFormatted,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0x8A, 0x7A, 0x65)),
+                    FontSize = 11
+                });
+                row.Children.Add(nameStack);
+                item.Child = row;
+
+                var li = new ListBoxItem { Content = item, Background = Brushes.Transparent, Tag = p };
+                li.Selected += (s, e) => { if (li.Tag is PartnerViewModel pv) { _partnerId = pv.Id; LoadMessages(pv.Id); } };
+                _partnersList.Items.Add(li);
+            }
         }
 
         private void LoadMessages(int partnerId)
         {
-            messages.Clear();
+            _msgContainer.Children.Clear();
             try
             {
-                using (var conn = _mainWindow.GetConnection())
+                using (var conn = _mw.GetConnection())
                 {
-                    // Olvasottá jelölés
-                    using (var markCmd = new MySqlCommand(
-                        "UPDATE uzenetek SET is_read = 1 WHERE sender_id = @pid AND receiver_id = @me AND is_read = 0",
-                        conn))
+                    using (var mark = new MySqlCommand(
+                        "UPDATE uzenetek SET is_read=1 WHERE sender_id=@pid AND receiver_id=@me AND is_read=0", conn))
                     {
-                        markCmd.Parameters.AddWithValue("@pid", partnerId);
-                        markCmd.Parameters.AddWithValue("@me", MainWindow.LoggedInUserId);
-                        markCmd.ExecuteNonQuery();
+                        mark.Parameters.AddWithValue("@pid", partnerId);
+                        mark.Parameters.AddWithValue("@me", MainWindow.LoggedInUserId);
+                        mark.ExecuteNonQuery();
                     }
 
                     using (var cmd = new MySqlCommand(
-                        @"SELECT id, sender_id, receiver_id, message, sent_at, is_read
+                        @"SELECT id, sender_id, message, sent_at
                           FROM uzenetek
-                          WHERE (sender_id = @me AND receiver_id = @pid)
-                             OR (sender_id = @pid AND receiver_id = @me2)
+                          WHERE (sender_id=@me AND receiver_id=@pid)
+                             OR (sender_id=@pid AND receiver_id=@me2)
                           ORDER BY sent_at ASC", conn))
                     {
                         cmd.Parameters.AddWithValue("@me", MainWindow.LoggedInUserId);
                         cmd.Parameters.AddWithValue("@pid", partnerId);
                         cmd.Parameters.AddWithValue("@me2", MainWindow.LoggedInUserId);
-                        using (var reader = cmd.ExecuteReader())
+                        using (var r = cmd.ExecuteReader())
                         {
-                            while (reader.Read())
+                            while (r.Read())
                             {
-                                messages.Add(new MessageViewModel
-                                {
-                                    Id = reader.GetString("id"),
-                                    SenderId = reader.GetInt32("sender_id"),
-                                    ReceiverId = reader.GetInt32("receiver_id"),
-                                    Text = reader.GetString("message"),
-                                    SentAt = reader.GetDateTime("sent_at"),
-                                    IsRead = reader.GetBoolean("is_read"),
-                                    IsOwn = reader.GetInt32("sender_id") == MainWindow.LoggedInUserId
-                                });
+                                bool isOwn = r.GetInt32("sender_id") == MainWindow.LoggedInUserId;
+                                string text = r.GetString("message");
+                                string time = r.GetDateTime("sent_at").ToString("HH:mm");
+                                _msgContainer.Children.Add(BuildBubble(text, time, isOwn));
                             }
                         }
                     }
                 }
             }
             catch { }
-            MessagesList.ItemsSource = messages;
+
+            _msgScroll.ScrollToBottom();
         }
 
-        private void SendMessage()
+        private UIElement BuildBubble(string text, string time, bool isOwn)
         {
-            if (selectedPartnerId.HasValue && !string.IsNullOrWhiteSpace(MessageInput.Text))
+            var outer = new Grid { Margin = new Thickness(0, 3, 0, 3) };
+            var bubble = new Border
             {
-                try
+                CornerRadius = new CornerRadius(isOwn ? 14 : 14),
+                Padding = new Thickness(14, 10, 14, 10),
+                MaxWidth = 400,
+                HorizontalAlignment = isOwn ? HorizontalAlignment.Right : HorizontalAlignment.Left
+            };
+
+            if (isOwn)
+                bubble.Background = new LinearGradientBrush(
+                    Color.FromRgb(0xFF, 0x8C, 0x00), Color.FromRgb(0xC8, 0x50, 0x00), 45);
+            else
+                bubble.Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E));
+
+            var stack = new StackPanel();
+            stack.Children.Add(new TextBlock
+            {
+                Text = text,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = Brushes.White,
+                FontSize = 14
+            });
+            stack.Children.Add(new TextBlock
+            {
+                Text = time,
+                Foreground = new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF)),
+                FontSize = 11,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(0, 3, 0, 0)
+            });
+            bubble.Child = stack;
+            outer.Children.Add(bubble);
+            return outer;
+        }
+
+        private void Send()
+        {
+            if (!_partnerId.HasValue || string.IsNullOrWhiteSpace(_msgInput.Text)) return;
+            try
+            {
+                string msgId = _mw.GenerateId(25);
+                using (var conn = _mw.GetConnection())
+                using (var cmd = new MySqlCommand(
+                    "INSERT INTO uzenetek(id,sender_id,receiver_id,message) VALUES(@id,@sid,@rid,@msg)", conn))
                 {
-                    string msgId = _mainWindow.GenerateId(25);
-                    using (var conn = _mainWindow.GetConnection())
-                    using (var cmd = new MySqlCommand(
-                        "INSERT INTO uzenetek (id, sender_id, receiver_id, message) VALUES (@id, @sid, @rid, @msg)",
-                        conn))
-                    {
-                        cmd.Parameters.AddWithValue("@id", msgId);
-                        cmd.Parameters.AddWithValue("@sid", MainWindow.LoggedInUserId);
-                        cmd.Parameters.AddWithValue("@rid", selectedPartnerId.Value);
-                        cmd.Parameters.AddWithValue("@msg", MessageInput.Text);
-                        cmd.ExecuteNonQuery();
-                    }
-                    MessageInput.Clear();
-                    LoadMessages(selectedPartnerId.Value);
-                    LoadPartners();
+                    cmd.Parameters.AddWithValue("@id", msgId);
+                    cmd.Parameters.AddWithValue("@sid", MainWindow.LoggedInUserId);
+                    cmd.Parameters.AddWithValue("@rid", _partnerId.Value);
+                    cmd.Parameters.AddWithValue("@msg", _msgInput.Text);
+                    cmd.ExecuteNonQuery();
                 }
-                catch (MySqlException ex)
-                {
-                    MessageBox.Show("Hiba: " + ex.Message);
-                }
+                _msgInput.Clear();
+                LoadMessages(_partnerId.Value);
+                LoadPartners();
             }
+            catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
         }
     }
 
-    // Vásárlás oldal
+    // ============================================
+    // VÁSÁRLÁS OLDAL
+    // ============================================
     public class PurchasePage : Page
     {
-        private readonly MainWindow _mainWindow;
+        private readonly MainWindow _mw;
         private readonly string _itemId;
         private ItemViewModel _item;
+        private TextBox _nameBox, _emailBox, _phoneBox, _zipBox, _cityBox, _addrBox;
+        private TextBlock _titleLabel, _priceLabel;
 
-        public PurchasePage(MainWindow mainWindow, string itemId)
+        public PurchasePage(MainWindow mw, string itemId)
         {
-            _mainWindow = mainWindow;
+            _mw = mw;
             _itemId = itemId;
-            InitializeUI();
-            LoadItemData();
+            Build();
+            LoadItem();
         }
 
-        private void InitializeUI()
+        private void Build()
         {
             Background = new SolidColorBrush(Color.FromRgb(0x05, 0x05, 0x05));
-            var scroll = new ScrollViewer();
-            var stack = new StackPanel { Margin = new Thickness(40, 40, 40, 40) };
+            var sv = new ScrollViewer();
+            var stack = new StackPanel { Margin = new Thickness(40) };
 
-            var backBtn = new Button
-            {
-                Content = "← Vissza",
-                Background = Brushes.Transparent,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                FontSize = 14,
-                FontWeight = FontWeights.Bold,
-                Padding = new Thickness(16, 10, 16, 10),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(0x4D, 0xFF, 0x8C, 0x00)),
-                BorderThickness = new Thickness(1),
-                Cursor = Cursors.Hand,
-                HorizontalAlignment = HorizontalAlignment.Left
-            };
-            backBtn.Click += (s, e) => _mainWindow.NavigateToMain();
+            var backBtn = MainWindow.MakeGhostButton("← Vissza");
+            backBtn.HorizontalAlignment = HorizontalAlignment.Left;
+            backBtn.Click += (s, e) => _mw.NavigateToMain();
             stack.Children.Add(backBtn);
 
             stack.Children.Add(new TextBlock
@@ -2769,105 +2467,114 @@ namespace cucisstuff
                 Margin = new Thickness(0, 16, 0, 16)
             });
 
-            // Szállítási adatok űrlap
+            // Termék info box
+            var infoBorder = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0x0F, 0x0F, 0x0F)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(12),
+                Padding = new Thickness(20, 16, 20, 16),
+                Margin = new Thickness(0, 0, 0, 24)
+            };
+            var infoStack = new StackPanel();
+            _titleLabel = new TextBlock
+            {
+                Text = "Betöltés...",
+                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
+                FontSize = 18,
+                FontWeight = FontWeights.Bold
+            };
+            _priceLabel = new TextBlock
+            {
+                Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
+                FontSize = 16,
+                Margin = new Thickness(0, 4, 0, 0)
+            };
+            infoStack.Children.Add(_titleLabel);
+            infoStack.Children.Add(_priceLabel);
+            infoBorder.Child = infoStack;
+            stack.Children.Add(infoBorder);
+
+            stack.Children.Add(new TextBlock
+            {
+                Text = "Szállítási adatok",
+                FontSize = 18,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
+                Margin = new Thickness(0, 0, 0, 16)
+            });
+
             var formGrid = new Grid();
             formGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             formGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            formGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            formGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            formGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            formGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            formGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            formGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-            var nameBox = CreateFormField("Teljes név *", 0, 0, true);
-            var emailBox = CreateFormField("Email *", 0, 1);
-            var phoneBox = CreateFormField("Telefonszám *", 1, 1);
-            var zipBox = CreateFormField("Irányítószám *", 0, 2);
-            var cityBox = CreateFormField("Város *", 1, 2);
-            var addressBox = CreateFormField("Cím *", 0, 3, true);
+            _nameBox = AddFormField(formGrid, "Teljes név *", 0, 0, true);
+            _emailBox = AddFormField(formGrid, "Email *", 1, 0, false);
+            _phoneBox = AddFormField(formGrid, "Telefonszám *", 1, 1, false);
+            _zipBox = AddFormField(formGrid, "Irányítószám *", 2, 0, false);
+            _cityBox = AddFormField(formGrid, "Város *", 2, 1, false);
+            _addrBox = AddFormField(formGrid, "Cím *", 3, 0, true);
 
-            var submitBtn = new Button
-            {
-                Content = "Rendelés leadása",
-                FontSize = 15,
-                FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x0A, 0x05, 0x00)),
-                Padding = new Thickness(0, 14, 0, 14),
-                BorderThickness = new Thickness(0),
-                Cursor = Cursors.Hand,
-                Margin = new Thickness(0, 20, 0, 0)
-            };
-            submitBtn.Background = new LinearGradientBrush(
-                Color.FromRgb(0xFF, 0xAB, 0x35),
-                Color.FromRgb(0xB3, 0x55, 0x00), 90);
-            submitBtn.Click += (s, e) => SubmitOrder(
-                ((TextBox)((StackPanel)nameBox).Children[1]).Text,
-                ((TextBox)((StackPanel)emailBox).Children[1]).Text,
-                ((TextBox)((StackPanel)phoneBox).Children[1]).Text,
-                ((TextBox)((StackPanel)zipBox).Children[1]).Text,
-                ((TextBox)((StackPanel)cityBox).Children[1]).Text,
-                ((TextBox)((StackPanel)addressBox).Children[1]).Text);
+            // Submit
+            while (formGrid.RowDefinitions.Count < 5)
+                formGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-            Grid.SetRow(submitBtn, 5);
+            var submitBtn = MainWindow.MakeOrangeButton("Rendelés leadása", 15);
+            submitBtn.Margin = new Thickness(5, 16, 5, 0);
+            Grid.SetRow(submitBtn, 4);
             Grid.SetColumnSpan(submitBtn, 2);
             formGrid.Children.Add(submitBtn);
+            submitBtn.Click += (s, e) => Submit();
 
             stack.Children.Add(formGrid);
-            scroll.Content = stack;
-            Content = scroll;
+            sv.Content = stack;
+            Content = sv;
         }
 
-        private UIElement CreateFormField(string label, int row, int col, bool fullWidth = false)
+        private TextBox AddFormField(Grid grid, string label, int row, int col, bool fullWidth)
         {
+            while (grid.RowDefinitions.Count <= row)
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
             var panel = new StackPanel { Margin = new Thickness(5, 5, 5, 5) };
-            panel.Children.Add(new TextBlock
-            {
-                Text = label,
-                FontSize = 12,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                Margin = new Thickness(0, 0, 0, 6)
-            });
-            panel.Children.Add(new TextBox
-            {
-                Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x24, 0x18)),
-                Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(0x3D, 0x35, 0x28)),
-                BorderThickness = new Thickness(1),
-                FontSize = 14,
-                Padding = new Thickness(14, 12, 14, 12)
-            });
+            panel.Children.Add(MainWindow.MakeLabel(label));
+            var tb = MainWindow.MakeInput();
+            panel.Children.Add(tb);
+
             Grid.SetRow(panel, row);
             Grid.SetColumn(panel, col);
             if (fullWidth) Grid.SetColumnSpan(panel, 2);
-            return panel;
+            grid.Children.Add(panel);
+            return tb;
         }
 
-        private void LoadItemData()
+        private void LoadItem()
         {
             try
             {
-                using (var conn = _mainWindow.GetConnection())
+                using (var conn = _mw.GetConnection())
                 using (var cmd = new MySqlCommand(
-                    @"SELECT i.id, i.title, i.price, i.description, i.sold, u.username AS seller
-                      FROM items i JOIN users u ON i.user_id = u.id
-                      WHERE i.id = @id", conn))
+                    @"SELECT i.id, i.title, i.price, i.sold, i.user_id, u.username
+                      FROM items i JOIN users u ON i.user_id=u.id
+                      WHERE i.id=@id", conn))
                 {
                     cmd.Parameters.AddWithValue("@id", _itemId);
-                    using (var reader = cmd.ExecuteReader())
+                    using (var r = cmd.ExecuteReader())
                     {
-                        if (reader.Read())
+                        if (r.Read())
                         {
                             _item = new ItemViewModel
                             {
-                                Id = reader.GetString("id"),
-                                Title = reader.GetString("title"),
-                                Price = reader.GetDecimal("price"),
-                                Description = reader.GetString("description"),
-                                IsSold = reader.GetBoolean("sold"),
-                                SellerName = reader.GetString("seller")
+                                Id = r.GetString("id"),
+                                Title = r.GetString("title"),
+                                Price = r.GetDecimal("price"),
+                                IsSold = r.GetBoolean("sold"),
+                                SellerId = r.GetInt32("user_id"),
+                                SellerName = r.GetString("username")
                             };
+                            _titleLabel.Text = _item.Title;
+                            _priceLabel.Text = _item.PriceFormatted;
                         }
                     }
                 }
@@ -2875,73 +2582,73 @@ namespace cucisstuff
             catch { }
         }
 
-        private void SubmitOrder(string name, string email, string phone, string zip, string city, string address)
+        private void Submit()
         {
-            if (!_mainWindow.CanPerformWriteOperation())
-            {
-                MessageBox.Show("VIZSGALOCK aktív!", "Hiba", MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
-            }
+            if (!_mw.CanPerformWriteOperation())
+            { MessageBox.Show("VIZSGALOCK aktív!"); return; }
+            if (_item == null)
+            { MessageBox.Show("A termék nem található!"); return; }
+            if (_item.IsSold)
+            { MessageBox.Show("Ez a termék már elkelt!"); return; }
+            if (_item.SellerId == MainWindow.LoggedInUserId)
+            { MessageBox.Show("Nem vásárolhatod meg a saját termékedet!"); return; }
+
+            string name = _nameBox.Text.Trim();
+            string email = _emailBox.Text.Trim();
+            string phone = _phoneBox.Text.Trim();
+            string zip = _zipBox.Text.Trim();
+            string city = _cityBox.Text.Trim();
+            string addr = _addrBox.Text.Trim();
+
             if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(email) ||
                 string.IsNullOrWhiteSpace(phone) || string.IsNullOrWhiteSpace(zip) ||
-                string.IsNullOrWhiteSpace(city) || string.IsNullOrWhiteSpace(address))
-            {
-                MessageBox.Show("Minden mező kitöltése kötelező!");
-                return;
-            }
+                string.IsNullOrWhiteSpace(city) || string.IsNullOrWhiteSpace(addr))
+            { MessageBox.Show("Minden mező kitöltése kötelező!"); return; }
 
             try
             {
-                using (var conn = _mainWindow.GetConnection())
-                using (var transaction = conn.BeginTransaction())
+                using (var conn = _mw.GetConnection())
+                using (var tr = conn.BeginTransaction())
                 {
                     try
                     {
-                        string orderId = _mainWindow.GenerateId();
+                        string orderId = _mw.GenerateId();
                         using (var cmd = new MySqlCommand(
-                            @"INSERT INTO orders (id, buyer_id, seller_id, item_id, status,
-                                shipping_name, shipping_email, shipping_phone,
-                                shipping_zip, shipping_city, shipping_address,
-                                payment_method)
-                              VALUES (@id, @bid, (SELECT user_id FROM items WHERE id = @iid), @iid, 'pending',
-                                @sname, @semail, @sphone, @szip, @scity, @saddr, 'cod')",
-                            conn, transaction))
+                            @"INSERT INTO orders(id,buyer_id,seller_id,item_id,status,
+                                shipping_name,shipping_email,shipping_phone,
+                                shipping_zip,shipping_city,shipping_address,payment_method)
+                              VALUES(@id,@bid,@sid,@iid,'pending',
+                                @sn,@se,@sp,@sz,@sc,@sa,'cod')",
+                            conn, tr))
                         {
                             cmd.Parameters.AddWithValue("@id", orderId);
                             cmd.Parameters.AddWithValue("@bid", MainWindow.LoggedInUserId);
+                            cmd.Parameters.AddWithValue("@sid", _item.SellerId);
                             cmd.Parameters.AddWithValue("@iid", _itemId);
-                            cmd.Parameters.AddWithValue("@sname", name);
-                            cmd.Parameters.AddWithValue("@semail", email);
-                            cmd.Parameters.AddWithValue("@sphone", phone);
-                            cmd.Parameters.AddWithValue("@szip", zip);
-                            cmd.Parameters.AddWithValue("@scity", city);
-                            cmd.Parameters.AddWithValue("@saddr", address);
+                            cmd.Parameters.AddWithValue("@sn", name);
+                            cmd.Parameters.AddWithValue("@se", email);
+                            cmd.Parameters.AddWithValue("@sp", phone);
+                            cmd.Parameters.AddWithValue("@sz", zip);
+                            cmd.Parameters.AddWithValue("@sc", city);
+                            cmd.Parameters.AddWithValue("@sa", addr);
                             cmd.ExecuteNonQuery();
                         }
 
-                        using (var soldCmd = new MySqlCommand(
-                            "UPDATE items SET sold = 1 WHERE id = @iid", conn, transaction))
+                        using (var sc = new MySqlCommand(
+                            "UPDATE items SET sold=1 WHERE id=@id", conn, tr))
                         {
-                            soldCmd.Parameters.AddWithValue("@iid", _itemId);
-                            soldCmd.ExecuteNonQuery();
+                            sc.Parameters.AddWithValue("@id", _itemId);
+                            sc.ExecuteNonQuery();
                         }
 
-                        transaction.Commit();
-                        MessageBox.Show("Rendelés sikeresen rögzítve!", "Siker",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
-                        _mainWindow.NavigateToMain();
+                        tr.Commit();
+                        MessageBox.Show("Rendelés leadva!", "Siker", MessageBoxButton.OK, MessageBoxImage.Information);
+                        _mw.NavigateToMain();
                     }
-                    catch
-                    {
-                        transaction.Rollback();
-                        throw;
-                    }
+                    catch { tr.Rollback(); throw; }
                 }
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Hiba: " + ex.Message);
-            }
+            catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
         }
     }
 }
