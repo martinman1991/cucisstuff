@@ -104,7 +104,8 @@ try {
                     $form_error = 'A VIZSGALOCK aktiválva van. Vásárlás jelenleg nem lehetséges.';
                 }
             }
-        } catch (Exception $e) {}
+        } catch (Exception $e) {
+        }
     }
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_order']) && $item && !$item['sold'] && empty($form_error)) {
         $shippingName    = trim($_POST['shipping_name'] ?? '');
@@ -597,6 +598,7 @@ try {
                 opacity: 0;
                 transform: translateX(-50%) translateY(-20px);
             }
+
             to {
                 opacity: 1;
                 transform: translateX(-50%) translateY(0);
@@ -667,13 +669,16 @@ try {
         ::-webkit-scrollbar {
             width: 6px;
         }
+
         ::-webkit-scrollbar-track {
             background: #0a0a0a;
         }
+
         ::-webkit-scrollbar-thumb {
             background: rgba(255, 140, 0, 0.3);
             border-radius: 3px;
         }
+
         ::-webkit-scrollbar-thumb:hover {
             background: rgba(255, 140, 0, 0.5);
         }
@@ -725,7 +730,9 @@ try {
                             setTimeout(function() {
                                 el.style.opacity = '0';
                                 el.style.transition = 'opacity 0.5s ease';
-                                setTimeout(function() { el.remove(); }, 500);
+                                setTimeout(function() {
+                                    el.remove();
+                                }, 500);
                             }, 5000);
                         });
                     })();

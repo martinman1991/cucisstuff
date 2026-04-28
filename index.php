@@ -81,7 +81,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     $vlConn->close();
                 }
-            } catch (Exception $e) {}
+            } catch (Exception $e) {
+            }
 
             $conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
             if ($conn->connect_error) {

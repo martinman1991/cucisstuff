@@ -180,12 +180,12 @@ try {
 
                 // Frissítjük a termék adatait
                 $conn->prepare("UPDATE items SET title=?, description=?, price=?, sold=? WHERE id=?")
-                     ->execute([$t, $d, (float)$p, $sold, $_POST['item_id']]);
+                    ->execute([$t, $d, (float)$p, $sold, $_POST['item_id']]);
 
                 // Ha a státusz „elkelt”-ről „nem elkelt”-re változott, töröljük a kapcsolódó rendeléseket
                 if ($oldSold === 1 && $sold === 0) {
                     $conn->prepare("DELETE FROM orders WHERE item_id = ?")
-                         ->execute([$_POST['item_id']]);
+                        ->execute([$_POST['item_id']]);
                 }
 
                 $message = "Termék módosítva.";
@@ -205,7 +205,7 @@ try {
 
                 // Normál űrlapos módosítás után átirányítás
                 header("Location: admin.php?view=items&page=$page"
-                      . ($search ? '&search=' . urlencode($search) : ''));
+                    . ($search ? '&search=' . urlencode($search) : ''));
                 exit();
             }
         }
@@ -826,10 +826,13 @@ function pgLink($v, $p, $search = '')
         }
 
         @keyframes vlPulseDanger {
-            0%, 100% {
+
+            0%,
+            100% {
                 box-shadow: 0 0 20px rgba(255, 0, 0, 0.8), 0 0 40px rgba(255, 0, 0, 0.4);
                 text-shadow: 0 0 15px rgba(255, 0, 0, 0.9);
             }
+
             50% {
                 box-shadow: 0 0 35px rgba(255, 0, 0, 1), 0 0 70px rgba(255, 0, 0, 0.6), 0 0 100px rgba(255, 0, 0, 0.4);
                 text-shadow: 0 0 25px rgba(255, 0, 0, 1), 0 0 50px rgba(255, 0, 0, 0.8);
@@ -1059,7 +1062,7 @@ function pgLink($v, $p, $search = '')
         /* ═══════════ VIZSGALOCK PANEL (MINDIG PIROS) ═══════════ */
         .vizsgalock-panel {
             border: 1px solid #ff3333 !important;
-            background: var(--c-panel) !important;
+            background: #1a0505 !important;
             overflow-x: auto;
             margin-bottom: 16px;
             position: relative;
@@ -3039,10 +3042,16 @@ function pgLink($v, $p, $search = '')
                         <div class="vizsgalock-exceptions-title">Kivételek</div>
                         <table class="vizsgalock-exceptions-table">
                             <thead>
-                                <tr><th>FELHASZNÁLÓ</th><th>HOZZÁADVA</th><th></th></tr>
+                                <tr>
+                                    <th>FELHASZNÁLÓ</th>
+                                    <th>HOZZÁADVA</th>
+                                    <th></th>
+                                </tr>
                             </thead>
                             <tbody id="vizsgalockExceptionsBody">
-                                <tr><td colspan="3" class="vizsgalock-empty">[ NINCS KIVÉTEL ]</td></tr>
+                                <tr>
+                                    <td colspan="3" class="vizsgalock-empty">[ NINCS KIVÉTEL ]</td>
+                                </tr>
                             </tbody>
                         </table>
                         <div class="vizsgalock-add-row">
@@ -3932,7 +3941,10 @@ function pgLink($v, $p, $search = '')
             formData.append('ajax', '1');
             formData.append('update_item', '1');
             try {
-                const resp = await fetch('admin.php', { method: 'POST', body: formData });
+                const resp = await fetch('admin.php', {
+                    method: 'POST',
+                    body: formData
+                });
                 const result = await resp.json();
                 if (result.success) {
                     pm.title.textContent = result.title;
@@ -4083,7 +4095,12 @@ function pgLink($v, $p, $search = '')
 
             function escHtml(s) {
                 if (!s) return '';
-                return String(s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+                return String(s).replace(/[&<>"]/g, m => ({
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;'
+                } [m]));
             }
 
             function renderState(locked, exceptions, availableUsers) {
@@ -4143,7 +4160,9 @@ function pgLink($v, $p, $search = '')
             window.doVizsgalockToggle = function() {
                 fetch('admin.php', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
                     body: 'vizsgalock_toggle=1'
                 }).then(r => r.json()).then(d => {
                     if (!d.error) loadStatus();
@@ -4155,7 +4174,9 @@ function pgLink($v, $p, $search = '')
                 if (!uid) return;
                 fetch('admin.php', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
                     body: 'vizsgalock_add_exception=1&user_id=' + encodeURIComponent(uid)
                 }).then(r => r.json()).then(d => {
                     if (!d.error) loadStatus();
@@ -4165,7 +4186,9 @@ function pgLink($v, $p, $search = '')
             window._vlRemove = function(uid) {
                 fetch('admin.php', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
                     body: 'vizsgalock_remove_exception=1&user_id=' + encodeURIComponent(uid)
                 }).then(r => r.json()).then(d => {
                     if (!d.error) loadStatus();

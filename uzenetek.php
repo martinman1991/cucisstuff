@@ -124,7 +124,8 @@ try {
                     exit;
                 }
             }
-        } catch (Exception $e) {}
+        } catch (Exception $e) {
+        }
 
         $success = false;
         $error   = '';
@@ -424,11 +425,13 @@ try {
 }
 
 // Segédfüggvény a dátumok formázásához a beállított időzónában
-function formatTime($datetime) {
+function formatTime($datetime)
+{
     if (!$datetime) return '';
     return (new DateTime($datetime))->format('H:i');
 }
-function formatPartnerTime($datetime) {
+function formatPartnerTime($datetime)
+{
     if (!$datetime) return '';
     $dt = new DateTime($datetime);
     $now = new DateTime();
@@ -3332,4 +3335,5 @@ function formatPartnerTime($datetime) {
         scrollToBottom();
     </script>
 </body>
+
 </html>
