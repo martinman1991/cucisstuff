@@ -739,98 +739,110 @@ body[data-theme="light"] .items-section h2 {
 }
 
 /* ============================================
-   ACCOUNT DROPDOWN - LIGHT MODE (EGYSÉGES DIZÁJN)
+   ACCOUNT DROPDOWN - LIGHT MODE (ÚJRATERVEZETT)
    ============================================ */
 body[data-theme="light"] .account-dropdown-panel {
-    background: rgba(248, 252, 235, 0.98) !important;
-    border: 1px solid rgba(122, 146, 0, 0.25) !important;
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08), 0 0 30px rgba(176, 203, 31, 0.1) !important;
-    backdrop-filter: blur(16px) !important;
+    background: rgba(248, 252, 235, 0.95) !important;
+    border: 1px solid rgba(122, 146, 0, 0.3) !important;
+    border-radius: 18px !important;
+    padding: 0.9rem !important;
+    box-shadow:
+        0 20px 60px rgba(0, 0, 0, 0.1),
+        0 0 40px rgba(176, 203, 31, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.6) !important;
+    backdrop-filter: blur(24px) !important;
 }
 
+body[data-theme="light"] .user-info {
+    padding: 0.5rem 0.8rem !important;
+    font-size: 0.95rem !important;
+    color: #1a1f00 !important;
+}
 body[data-theme="light"] .user-info strong {
-    color: #4a6000 !important;
+    color: #7a9200 !important;
+    font-size: 1rem !important;
+    letter-spacing: 0.02em !important;
 }
 
 body[data-theme="light"] .dropdown-divider {
-    background: linear-gradient(90deg, transparent, rgba(122, 146, 0, 0.3), transparent) !important;
+    height: 1px !important;
+    background: linear-gradient(90deg, transparent, rgba(122, 146, 0, 0.4), transparent) !important;
+    margin: 0.6rem 0.4rem !important;
 }
 
-/* Light mode – dropdown item (Fiókom) és kijelentkezés gomb */
+body[data-theme="light"] .account-link span,
+body[data-theme="light"] .logout-button span,
 body[data-theme="light"] .dropdown-item,
 body[data-theme="light"] .logout-form-btn {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+    padding: 0.7rem 0.9rem !important;
+    border-radius: 10px !important;
     color: #2a3a00 !important;
-    transition: all 0.25s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+    font-size: 0.9rem !important;
+    transition: all 0.2s ease !important;
+    background: transparent !important;
+    margin: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    text-decoration: none !important;
 }
 
-body[data-theme="light"] .dropdown-item:hover,
+body[data-theme="light"] .account-link span:hover,
+body[data-theme="light"] .dropdown-item:hover {
+    background: rgba(176, 203, 31, 0.15) !important;
+    color: #7a9200 !important;
+    transform: translateX(4px) !important;
+    box-shadow: inset 2px 0 0 #B0CB1F !important;
+}
+
+body[data-theme="light"] .logout-button span:hover,
 body[data-theme="light"] .logout-form-btn:hover {
-    background: rgba(176, 203, 31, 0.18) !important;
-    border-color: rgba(122, 146, 0, 0.4) !important;
-    color: #4a6000 !important;
+    background: rgba(255, 80, 80, 0.1) !important;
+    color: #d32f2f !important;
     transform: translateX(4px) !important;
-    padding-left: 1.6rem !important;
-    border-left: 2px solid #B0CB1F !important;
-    box-shadow: 0 4px 12px rgba(176, 203, 31, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
+    box-shadow: inset 2px 0 0 #d32f2f !important;
 }
 
-/* Fiókom link */
-body[data-theme="light"] .account-link span {
-    color: #2a3a00 !important;
-    transition: all 0.25s cubic-bezier(0.2, 0.9, 0.4, 1.1);
-}
-
-body[data-theme="light"] .account-link span:hover {
-    background: rgba(176, 203, 31, 0.18) !important;
-    border-color: rgba(122, 146, 0, 0.4) !important;
-    color: #4a6000 !important;
-    transform: translateX(4px) !important;
-    padding-left: 1.6rem !important;
-    border-left: 2px solid #B0CB1F !important;
-    box-shadow: 0 4px 12px rgba(176, 203, 31, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
-}
-
-/* Kijelentkezés gomb - light mód (egységes zöld hover) */
-body[data-theme="light"] .logout-button span {
-    color: #2a3a00 !important;
-    transition: all 0.25s cubic-bezier(0.2, 0.9, 0.4, 1.1);
-}
-
-body[data-theme="light"] .logout-button span:hover {
-    background: rgba(176, 203, 31, 0.18) !important;
-    border-color: rgba(122, 146, 0, 0.4) !important;
-    color: #4a6000 !important;
-    transform: translateX(4px) !important;
-    padding-left: 1.6rem !important;
-    border-left: 2px solid #B0CB1F !important;
-    box-shadow: 0 4px 12px rgba(176, 203, 31, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
-}
-
-/* Téma kapcsoló sor – itt állítjuk be a "Világos mód" felirat sötét színét */
 body[data-theme="light"] .theme-toggle-row {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 0.5rem 0.9rem !important;
+    border-radius: 10px !important;
+    margin: 0.2rem 0 !important;
     color: #1a1f00 !important;
-}
-
-body[data-theme="light"] .theme-toggle-label {
-    opacity: 1 !important;
+    font-size: 0.85rem !important;
 }
 
 body[data-theme="light"] .theme-toggle-row:hover {
     background: rgba(176, 203, 31, 0.08) !important;
 }
 
-/* Account menu gomb light módban */
+body[data-theme="light"] .theme-toggle-label {
+    opacity: 1 !important;
+    gap: 0.5rem !important;
+    display: flex !important;
+    align-items: center !important;
+}
+
 body[data-theme="light"] .account-menu-btn {
-    background: rgba(240, 252, 200, 0.85) !important;
-    border-color: rgba(122, 146, 0, 0.5) !important;
+    background: rgba(240, 252, 200, 0.8) !important;
+    border: 1px solid rgba(122, 146, 0, 0.5) !important;
     color: #7a9200 !important;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05) !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05) !important;
+    padding: 0.5rem 1.1rem !important;
+    border-radius: 50px !important;
+    transition: all 0.2s ease !important;
 }
 
 body[data-theme="light"] .account-menu-btn:hover {
     background: rgba(210, 240, 100, 0.95) !important;
     border-color: #B0CB1F !important;
     color: #4a6000 !important;
+    box-shadow: 0 0 20px rgba(176, 203, 31, 0.3) !important;
+    transform: translateY(-1px) !important;
 }
 
 /* ============================================
