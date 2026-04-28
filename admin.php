@@ -3908,7 +3908,7 @@ function pgLink($v, $p, $search = '')
         function openPM() {
             pm.modal.classList.add('active');
             document.body.style.overflow = 'hidden';
-            pm.detailView.style.display = '';
+            pm.detailView.style.display = 'flex';   // JAVÍTVA: explicit flex
             pm.editView.style.display = 'none';
             setTimeout(adjustH, 100);
         }
@@ -3921,7 +3921,7 @@ function pgLink($v, $p, $search = '')
 
         function openProductEdit() {
             pm.detailView.style.display = 'none';
-            pm.editView.style.display = '';
+            pm.editView.style.display = 'flex';   // JAVÍTVA: explicit flex
             document.getElementById('edit_product_id').value = prodId;
             document.getElementById('edit_product_title').value = pm.title.textContent;
             document.getElementById('edit_product_description').value = pm.desc.textContent;
@@ -3930,7 +3930,7 @@ function pgLink($v, $p, $search = '')
         }
 
         function cancelProductEdit() {
-            pm.detailView.style.display = '';
+            pm.detailView.style.display = 'flex';   // JAVÍTVA: explicit flex
             pm.editView.style.display = 'none';
         }
 
