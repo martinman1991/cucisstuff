@@ -1686,7 +1686,9 @@ try {
         }
 
         /* ========== ELKELT GOMB – TELJESEN SZÜRKE ========== */
-        .product-buy-btn.sold {
+        .product-buy-btn.sold,
+        body[data-theme="dark"] .product-buy-btn.sold,
+        body[data-theme="light"] .product-buy-btn.sold {
             background: #666 !important;
             color: #ddd !important;
             cursor: not-allowed !important;
