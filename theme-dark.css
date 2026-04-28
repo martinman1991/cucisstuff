@@ -731,74 +731,104 @@ body[data-theme="dark"] .items-section h2 {
 }
 
 /* ============================================
-   ACCOUNT DROPDOWN - DARK MODE
+   ACCOUNT DROPDOWN - DARK MODE (ÚJRATERVEZETT)
    ============================================ */
 body[data-theme="dark"] .account-dropdown-panel {
-    background: rgba(8, 8, 8, 0.95) !important;
-    border: 1px solid rgba(255, 140, 0, 0.18) !important;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 140, 0, 0.2) !important;
-    backdrop-filter: blur(16px) !important;
+    background: rgba(12, 12, 14, 0.92) !important;
+    border: 1px solid rgba(255, 140, 0, 0.25) !important;
+    border-radius: 18px !important;
+    padding: 0.9rem !important;
+    box-shadow:
+        0 20px 60px rgba(0, 0, 0, 0.9),
+        0 0 40px rgba(255, 140, 0, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+    backdrop-filter: blur(24px) !important;
 }
 
+body[data-theme="dark"] .user-info {
+    padding: 0.5rem 0.8rem !important;
+    font-size: 0.95rem !important;
+    color: #fff !important;
+}
 body[data-theme="dark"] .user-info strong {
-    color: #ff8c00 !important;
+    color: #ff9a1f !important;
+    font-size: 1rem !important;
+    letter-spacing: 0.02em !important;
 }
 
 body[data-theme="dark"] .dropdown-divider {
-    background: linear-gradient(90deg, transparent, #ff8c00, transparent) !important;
+    height: 1px !important;
+    background: linear-gradient(90deg, transparent, rgba(255, 140, 0, 0.3), transparent) !important;
+    margin: 0.6rem 0.4rem !important;
 }
 
-body[data-theme="dark"] .dropdown-item,
-body[data-theme="dark"] .logout-form-btn {
-    color: #f5f0e8 !important;
-}
-
-body[data-theme="dark"] .dropdown-item:hover,
-body[data-theme="dark"] .logout-form-btn:hover {
-    background: rgba(255, 140, 0, 0.15) !important;
-    color: #ff8c00 !important;
-}
-
-body[data-theme="dark"] .account-link span {
-    color: #f5f0e8 !important;
-}
-
-body[data-theme="dark"] .account-link span:hover {
-    background: rgba(255, 140, 0, 0.15) !important;
-    color: #ff8c00 !important;
-}
-
+body[data-theme="dark"] .account-link span,
 body[data-theme="dark"] .logout-button span {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+    padding: 0.7rem 0.9rem !important;
+    border-radius: 10px !important;
     color: #f5f0e8 !important;
+    font-size: 0.9rem !important;
+    transition: all 0.2s ease !important;
+    background: transparent !important;
+    margin: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+body[data-theme="dark"] .account-link span:hover,
+body[data-theme="dark"] .logout-button span:hover {
+    background: rgba(255, 140, 0, 0.12) !important;
+    color: #ff9a1f !important;
+    transform: translateX(4px) !important;
+    box-shadow: inset 2px 0 0 #ff9a1f !important;
 }
 
 body[data-theme="dark"] .logout-button span:hover {
-    background: rgba(255, 140, 0, 0.15) !important;
-    color: #ff8c00 !important;
+    background: rgba(255, 70, 70, 0.15) !important;
+    color: #ff6b6b !important;
+    box-shadow: inset 2px 0 0 #ff5555 !important;
 }
 
 body[data-theme="dark"] .theme-toggle-row {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 0.5rem 0.9rem !important;
+    border-radius: 10px !important;
+    margin: 0.2rem 0 !important;
     color: #f5f0e8 !important;
-}
-
-body[data-theme="dark"] .theme-toggle-label {
-    opacity: 0.8;
+    font-size: 0.85rem !important;
 }
 
 body[data-theme="dark"] .theme-toggle-row:hover {
     background: rgba(255, 140, 0, 0.05) !important;
 }
 
+body[data-theme="dark"] .theme-toggle-label {
+    opacity: 0.9 !important;
+    gap: 0.5rem !important;
+    display: flex !important;
+    align-items: center !important;
+}
+
 body[data-theme="dark"] .account-menu-btn {
-    background: rgba(0, 0, 0, 0.5) !important;
-    border-color: rgba(255, 140, 0, 0.55) !important;
-    color: #ff8c00 !important;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3) !important;
+    background: rgba(0, 0, 0, 0.6) !important;
+    border: 1px solid rgba(255, 140, 0, 0.5) !important;
+    color: #ff9a1f !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4) !important;
+    padding: 0.5rem 1.1rem !important;
+    border-radius: 50px !important;
+    transition: all 0.2s ease !important;
 }
 
 body[data-theme="dark"] .account-menu-btn:hover {
-    background: rgba(255, 140, 0, 0.1) !important;
-    border-color: #ff8c00 !important;
+    background: rgba(255, 140, 0, 0.15) !important;
+    border-color: #ff9a1f !important;
+    box-shadow: 0 0 20px rgba(255, 140, 0, 0.5) !important;
+    transform: translateY(-1px) !important;
 }
 
 /* ============================================
