@@ -2155,38 +2155,6 @@ function pgLink($v, $p, $search = '')
             font-family: var(--font-mono);
         }
 
-        .product-buy-btn {
-            background: rgba(0, 180, 60, 0.12);
-            border: 1px solid #00aa3a;
-            color: #00ff66;
-            font-family: var(--font-mono);
-            font-size: 0.85rem;
-            letter-spacing: 3px;
-            text-transform: uppercase;
-            padding: 14px;
-            cursor: pointer;
-            transition: all 0.2s;
-            margin-top: auto;
-        }
-
-        .product-buy-btn:hover {
-            background: rgba(0, 180, 60, 0.2);
-            box-shadow: 0 0 20px rgba(0, 180, 60, 0.3);
-        }
-
-        /* ELKELT GOMB – MINDIG SZÜRKE GLOW */
-        .product-buy-btn.sold,
-        .product-buy-btn.sold:hover,
-        html.light-mode .product-buy-btn.sold,
-        html.light-mode .product-buy-btn.sold:hover {
-            background: #555 !important;
-            border-color: #777 !important;
-            color: #aaa !important;
-            cursor: not-allowed;
-            box-shadow: 0 0 12px rgba(128, 128, 128, 0.5) !important;
-            transform: none !important;
-        }
-
         .product-edit-view .edit-form-group {
             margin-bottom: 1.2rem;
         }
@@ -3555,7 +3523,6 @@ function pgLink($v, $p, $search = '')
                 <div class="product-seller" id="productSeller"></div>
                 <div class="product-date" id="productDate"></div>
                 <div class="product-description" id="productDescription"></div>
-                <button class="product-buy-btn" id="productBuyBtn">[ VÁSÁRLÁS ]</button>
             </div>
             <!-- Szerkesztő nézet -->
             <div class="product-edit-view" id="productEditView">
@@ -3867,7 +3834,6 @@ function pgLink($v, $p, $search = '')
             reportBtn: document.getElementById('productReportBtn'),
             editBtn: document.getElementById('productEditBtn'),
             delBtn: document.getElementById('productDeleteBtn'),
-            buyBtn: document.getElementById('productBuyBtn'),
             detailView: document.getElementById('productDetailView'),
             editView: document.getElementById('productEditView'),
         };
@@ -3908,7 +3874,7 @@ function pgLink($v, $p, $search = '')
         function openPM() {
             pm.modal.classList.add('active');
             document.body.style.overflow = 'hidden';
-            pm.detailView.style.display = 'flex';   // JAVÍTVA: explicit flex
+            pm.detailView.style.display = 'flex';
             pm.editView.style.display = 'none';
             setTimeout(adjustH, 100);
         }
@@ -3921,7 +3887,7 @@ function pgLink($v, $p, $search = '')
 
         function openProductEdit() {
             pm.detailView.style.display = 'none';
-            pm.editView.style.display = 'flex';   // JAVÍTVA: explicit flex
+            pm.editView.style.display = 'flex';
             document.getElementById('edit_product_id').value = prodId;
             document.getElementById('edit_product_title').value = pm.title.textContent;
             document.getElementById('edit_product_description').value = pm.desc.textContent;
@@ -3930,7 +3896,7 @@ function pgLink($v, $p, $search = '')
         }
 
         function cancelProductEdit() {
-            pm.detailView.style.display = 'flex';   // JAVÍTVA: explicit flex
+            pm.detailView.style.display = 'flex';
             pm.editView.style.display = 'none';
         }
 
@@ -3951,15 +3917,6 @@ function pgLink($v, $p, $search = '')
                     pm.desc.textContent = result.description;
                     pm.price.textContent = result.price;
                     prodSold = result.sold;
-                    if (result.sold) {
-                        pm.buyBtn.textContent = '[ ELKELT ]';
-                        pm.buyBtn.classList.add('sold');
-                        pm.buyBtn.disabled = true;
-                    } else {
-                        pm.buyBtn.textContent = '[ VÁSÁRLÁS ]';
-                        pm.buyBtn.classList.remove('sold');
-                        pm.buyBtn.disabled = false;
-                    }
                     cancelProductEdit();
                 } else {
                     alert('Hiba a mentés során!');
@@ -4003,16 +3960,6 @@ function pgLink($v, $p, $search = '')
                     } else setImg(-1);
                     pm.prev.classList.toggle('hidden', imgs.length < 2);
                     pm.next.classList.toggle('hidden', imgs.length < 2);
-
-                    if (d.sold) {
-                        pm.buyBtn.textContent = '[ ELKELT ]';
-                        pm.buyBtn.classList.add('sold');
-                        pm.buyBtn.disabled = true;
-                    } else {
-                        pm.buyBtn.textContent = '[ VÁSÁRLÁS ]';
-                        pm.buyBtn.classList.remove('sold');
-                        pm.buyBtn.disabled = false;
-                    }
 
                     // Menu
                     <?php if (isset($_SESSION['user_id'])): ?>
@@ -4076,11 +4023,6 @@ function pgLink($v, $p, $search = '')
         });
         window.addEventListener('resize', () => {
             if (pm.modal.classList.contains('active')) adjustH();
-        });
-        pm.buyBtn.addEventListener('click', () => {
-            if (!pm.buyBtn.classList.contains('sold')) {
-                alert('Vásárlás funkció admin felületről nem elérhető.');
-            }
         });
 
         // ========== VIZSGALOCK ==========
