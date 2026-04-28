@@ -52,7 +52,7 @@ try {
     // Sold oszlop hozzáadása az items táblához, ha még nincs
     $colCheck = $conn->query("SHOW COLUMNS FROM items LIKE 'sold'");
     if ($colCheck->rowCount() === 0) {
-        $conn->exec("ALTER TABLE items ADD COLUMN sold BOOLEAN DEFAULT FALSE");
+        $conn->exec("ALTER TABLE items ADD COLUMN sold BOOLEAN DEFAULT 0");
     }
 
     // updated_at oszlop hozzáadása az items táblához, ha még nincs
@@ -79,9 +79,10 @@ try {
 
         if (!$item) {
             $error = 'A termék nem található.';
-        } elseif ($item['sold'] && !isset($_GET['success'])) {
+        } elseif ((int)$item['sold'] === 1 && !isset($_GET['success'])) {
+            // Szigorúan egész számként ellenőrizzük a sold mezőt
             $error = 'Ezt a terméket már megvásárolták.';
-        } elseif ($item['user_id'] == $userId) {
+        } elseif ((int)$item['user_id'] === $userId) {
             $error = 'A saját termékedet nem vásárolhatod meg.';
         }
     } else {
@@ -162,7 +163,7 @@ try {
                 ]);
 
                 // Termék eladottnak jelölése
-                $conn->prepare("UPDATE items SET sold = TRUE WHERE id = ?")->execute([$itemId]);
+                $conn->prepare("UPDATE items SET sold = 1 WHERE id = ?")->execute([$itemId]);
 
                 $conn->commit();
 
@@ -204,9 +205,7 @@ try {
     <link rel="icon" type="image/png" href="logo.png">
     <style>
         /* ========== ALAP STÍLUSOK ========== */
-        *,
-        *::before,
-        *::after {
+        *, *::before, *::after {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
@@ -252,7 +251,6 @@ try {
             transition: background 0.4s, color 0.4s;
         }
 
-        /* Háttér díszítés */
         body::before {
             content: '';
             position: fixed;
@@ -463,12 +461,10 @@ try {
             color: rgba(255, 255, 255, 0.2);
         }
 
-        /* Textarea nem átméretezhető */
         textarea {
             resize: none;
         }
 
-        /* Readonly mezők halványabb háttérrel */
         input[readonly] {
             background: rgba(255, 255, 255, 0.03);
             border-color: rgba(255, 255, 255, 0.08);
@@ -519,7 +515,7 @@ try {
             font-size: 1.8rem;
         }
 
-        .payment-option input:checked+label {
+        .payment-option input:checked + label {
             border-color: var(--orange-bright);
             background: var(--orange-subtle);
             color: var(--orange-bright);
@@ -579,7 +575,6 @@ try {
             color: #5dffa0;
         }
 
-        /* Lebegő hibaüzenet */
         .message-banner.error.floating {
             position: fixed;
             top: 80px;
@@ -598,7 +593,6 @@ try {
                 opacity: 0;
                 transform: translateX(-50%) translateY(-20px);
             }
-
             to {
                 opacity: 1;
                 transform: translateX(-50%) translateY(0);
@@ -669,16 +663,13 @@ try {
         ::-webkit-scrollbar {
             width: 6px;
         }
-
         ::-webkit-scrollbar-track {
             background: #0a0a0a;
         }
-
         ::-webkit-scrollbar-thumb {
             background: rgba(255, 140, 0, 0.3);
             border-radius: 3px;
         }
-
         ::-webkit-scrollbar-thumb:hover {
             background: rgba(255, 140, 0, 0.5);
         }
@@ -687,7 +678,6 @@ try {
 
 <body data-theme="dark">
 
-    <!-- ========== FELSŐ SÁV ========== -->
     <div class="top-bar">
         <div class="top-bar-left">
             <a href="main.php" class="back-btn unselectable">← Vissza a főoldalra</a>
@@ -695,18 +685,15 @@ try {
         </div>
     </div>
 
-    <!-- ========== FŐ TARTALOM ========== -->
     <div class="main-container">
 
         <?php if (!empty($error)): ?>
-            <!-- Termék szintű hibák (pl. nem található, már eladott, saját termék) -->
             <div class="message-banner error unselectable"><?= $error ?></div>
             <div style="text-align:center;margin-top:1rem;">
                 <a href="main.php" class="back-btn unselectable" style="display:inline-block;">← Vissza a főoldalra</a>
             </div>
 
         <?php elseif ($success): ?>
-            <!-- Sikeres rendelés oldal -->
             <div class="form-card">
                 <div class="success-container">
                     <div class="success-icon">✅</div>
@@ -720,7 +707,6 @@ try {
             </div>
 
         <?php elseif ($item): ?>
-            <!-- Űrlap validációs hibák lebegő üzenetben -->
             <?php if (!empty($form_error)): ?>
                 <div class="message-banner error floating unselectable"><?= $form_error ?></div>
                 <script>
@@ -730,16 +716,13 @@ try {
                             setTimeout(function() {
                                 el.style.opacity = '0';
                                 el.style.transition = 'opacity 0.5s ease';
-                                setTimeout(function() {
-                                    el.remove();
-                                }, 500);
+                                setTimeout(function() { el.remove(); }, 500);
                             }, 5000);
                         });
                     })();
                 </script>
             <?php endif; ?>
 
-            <!-- Termék összefoglaló -->
             <div class="product-summary">
                 <?php
                 $imgStmt = $conn->prepare("SELECT image_path FROM item_images WHERE item_id = ? AND is_primary = 1 LIMIT 1");
@@ -758,7 +741,6 @@ try {
                 </div>
             </div>
 
-            <!-- Szállítási adatok űrlap -->
             <div class="form-card">
                 <h3 class="unselectable">📦 Szállítási adatok</h3>
                 <form method="post" id="orderForm" novalidate>
@@ -845,7 +827,6 @@ try {
 
     </div>
 
-    <!-- ========== TÉMA KEZELÉS ========== -->
     <script>
         (function() {
             const themeLink = document.getElementById('themeStylesheet');
