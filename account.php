@@ -2615,8 +2615,8 @@ try {
         </div>
     </div>
 
-    <!-- Report Modal (termék bejelentés) -->
-    <div class="modal-overlay" id="reportItemModal">
+    <!-- Report Modal (termék bejelentés) - JAVÍTVA: z-index és textarea resize -->
+    <div class="modal-overlay" id="reportItemModal" style="z-index: 7000;">
         <div class="modal-card" style="max-width: 500px;">
             <button class="modal-close unselectable" onclick="closeReportModal()">✕</button>
             <h3 class="modal-title unselectable">⚠️ Termék bejelentése</h3>
@@ -2625,7 +2625,7 @@ try {
                 <input type="hidden" name="report_item" value="1">
                 <div class="form-group">
                     <label>Indoklás</label>
-                    <textarea name="report_reason" rows="4" required placeholder="Kérjük, részletezd a problémát..."></textarea>
+                    <textarea name="report_reason" rows="4" required placeholder="Kérjük, részletezd a problémát..." style="resize: none;"></textarea>
                 </div>
                 <button type="submit" class="submit-btn">Bejelentés küldése</button>
             </form>
