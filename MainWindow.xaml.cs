@@ -988,15 +988,15 @@ namespace cucisstuff
                 {
                     _allItems.Add(new ItemViewModel
                     {
-                        Id = row["id"]?.ToString(),
-                        Title = row["title"]?.ToString(),
-                        Price = Convert.ToDecimal(row["price"]),
-                        Description = row["description"]?.ToString() ?? "",
-                        CreatedAt = Convert.ToDateTime(row["created_at"]),
-                        IsSold = Convert.ToBoolean(row["sold"]),
-                        SellerId = Convert.ToInt32(row["user_id"]),
-                        SellerName = row["seller_name"]?.ToString(),
-                        FirstImagePath = row["first_image"]?.ToString()
+                        Id = row["id"].ToString(),
+                        Title = row["title"].ToString(),
+                        Price = decimal.Parse(row["price"].ToString(), System.Globalization.CultureInfo.InvariantCulture),
+                        Description = row["description"].ValueKind == JsonValueKind.Null ? "" : row["description"].ToString(),
+                        CreatedAt = DateTime.Parse(row["created_at"].ToString()),
+                        IsSold = row["sold"].ToString() == "1",
+                        SellerId = int.Parse(row["user_id"].ToString()),
+                        SellerName = row["seller_name"].ValueKind == JsonValueKind.Null ? "" : row["seller_name"].ToString(),
+                        FirstImagePath = row["first_image"].ValueKind == JsonValueKind.Null ? null : row["first_image"].ToString()
                     });
                 }
             }
@@ -1162,7 +1162,7 @@ namespace cucisstuff
                     "SELECT image_path FROM item_images WHERE item_id = @p0 ORDER BY sort_order",
                     new object[] { _item.Id }
                 );
-                _item.AllImagePaths = images.Select(i => i["image_path"]?.ToString()).ToList();
+                _item.AllImagePaths = images.Select(i => i["image_path"].ToString()).ToList();
                 UpdateImg();
                 BuildThumbs();
             }
@@ -1543,10 +1543,10 @@ namespace cucisstuff
 
                 foreach (var r in items)
                 {
-                    string iid = r["id"]?.ToString();
-                    string ititle = r["title"]?.ToString();
-                    decimal iprice = Convert.ToDecimal(r["price"]);
-                    bool isold = Convert.ToBoolean(r["sold"]);
+                    string iid = r["id"].ToString();
+                    string ititle = r["title"].ToString();
+                    decimal iprice = decimal.Parse(r["price"].ToString(), System.Globalization.CultureInfo.InvariantCulture);
+                    bool isold = r["sold"].ToString() == "1";
 
                     var row = new Border
                     {
@@ -1644,8 +1644,8 @@ namespace cucisstuff
                 );
                 if (users.Count > 0)
                 {
-                    _unameBox.Text = users[0]["username"]?.ToString();
-                    _emailBox.Text = users[0]["email"]?.ToString();
+                    _unameBox.Text = users[0]["username"].ToString();
+                    _emailBox.Text = users[0]["email"].ToString();
                 }
             }
             catch (Exception ex) { MessageBox.Show("Adatbázis hiba: " + ex.Message); }
@@ -2253,10 +2253,10 @@ namespace cucisstuff
                 {
                     _partners.Add(new PartnerViewModel
                     {
-                        Id = Convert.ToInt32(r["id"]),
-                        Username = r["username"]?.ToString(),
-                        UnreadCount = r["unread"].ValueKind == JsonValueKind.Null ? 0 : r["unread"].GetInt32(),
-                        LastMessageAt = r["last_msg"].ValueKind == JsonValueKind.Null ? DateTime.MinValue : DateTime.Parse(r["last_msg"].GetString()),
+                        Id = int.Parse(r["id"].ToString()),
+                        Username = r["username"].ToString(),
+                        UnreadCount = r["unread"].ValueKind == JsonValueKind.Null ? 0 : int.Parse(r["unread"].ToString()),
+                        LastMessageAt = r["last_msg"].ValueKind == JsonValueKind.Null ? DateTime.MinValue : DateTime.Parse(r["last_msg"].ToString()),
                     });
                 }
             }
@@ -2334,9 +2334,9 @@ namespace cucisstuff
 
                 foreach (var r in messages)
                 {
-                    bool isOwn = Convert.ToInt32(r["sender_id"]) == MainWindow.LoggedInUserId;
-                    string text = r["message"]?.ToString();
-                    string time = Convert.ToDateTime(r["sent_at"]).ToString("HH:mm");
+                    bool isOwn = int.Parse(r["sender_id"].ToString()) == MainWindow.LoggedInUserId;
+                    string text = r["message"].ToString();
+                    string time = DateTime.Parse(r["sent_at"].ToString()).ToString("HH:mm");
                     _msgContainer.Children.Add(BuildBubble(text, time, isOwn));
                 }
             }
@@ -2537,12 +2537,12 @@ namespace cucisstuff
                     var r = items[0];
                     _item = new ItemViewModel
                     {
-                        Id = r["id"]?.ToString(),
-                        Title = r["title"]?.ToString(),
-                        Price = r["price"].GetDecimal(),
-                        IsSold = r["sold"].GetInt32() == 1,
-                        SellerId = r["user_id"].GetInt32(),
-                        SellerName = r["username"]?.ToString()
+                        Id = r["id"].ToString(),
+                        Title = r["title"].ToString(),
+                        Price = decimal.Parse(r["price"].ToString(), System.Globalization.CultureInfo.InvariantCulture),
+                        IsSold = r["sold"].ToString() == "1",
+                        SellerId = int.Parse(r["user_id"].ToString()),
+                        SellerName = r["username"].ToString()
                     };
                     _titleLabel.Text = _item.Title;
                     _priceLabel.Text = _item.PriceFormatted;
