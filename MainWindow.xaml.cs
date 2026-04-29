@@ -1,35 +1,29 @@
-﻿using MySqlConnector;
-using Microsoft.Win32;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Runtime.CompilerServices;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Microsoft.Win32;
 
 namespace cucisstuff
 {
     public partial class MainWindow : Window
     {
-        // ============================================================
-        // FONTOS: Ide írd be a MySQL szerver valódi IP-jét vagy hostname-jét!
-        // Ha ugyanazon a gépen fut a MySQL mint a WPF app: "localhost" vagy "127.0.0.1"
-        // Ha remote szerveren van: a szerver publikus IP-je, pl. "192.168.1.10"
-        // ============================================================
-        private const string DB_HOST = "localhost";
-        private const string DB_USER = "cuci_ady_pepa_hu_usr";
-        private const string DB_PASS = "utQTkTN2Q5WD7zal8IBFmQ";
-        private const string DB_NAME = "cuci_ady_pepa_hu";
+        private const string API_URL = "http://cuci.local.pepa.hu/api.php";
+        private const string API_TOKEN = "AzEnTitkosTokenem2024_CucisStuff!XyZ";
 
-        private string ConnectionString =>
-            $"Server={DB_HOST};Port=3306;Database={DB_NAME};Uid={DB_USER};Pwd={DB_PASS};Charset=utf8mb4;" +
-            "AllowPublicKeyRetrieval=True;SslMode=None;ConnectionTimeout=10;";
+        private static readonly HttpClient _httpClient = new HttpClient();
 
         public static int? LoggedInUserId { get; set; }
         public static string LoggedInUsername { get; set; }
@@ -37,6 +31,9 @@ namespace cucisstuff
 
         public MainWindow()
         {
+            System.Net.ServicePointManager.SecurityProtocol =
+                System.Net.SecurityProtocolType.Tls12;
+
             InitializeComponent();
             MainFrame.Navigate(new LoginPage(this));
         }
@@ -52,9 +49,6 @@ namespace cucisstuff
             Application.Current.Shutdown();
         }
 
-        // ============================================
-        // NAVIGÁCIÓ
-        // ============================================
         public void NavigateToLogin()
         {
             LoggedInUserId = null;
@@ -93,27 +87,113 @@ namespace cucisstuff
             MainFrame.Navigate(new PurchasePage(this, itemId));
         }
 
-        // ============================================
-        // ADATBÁZIS
-        // ============================================
-        public MySqlConnection GetConnection()
+        // ============================================================
+        // API SEGÉDFÜGGVÉNYEK
+        // ============================================================
+        public async Task<JsonElement> ApiCallAsync(string query, object[] parameters = null, string type = "select")
         {
-            var conn = new MySqlConnection(ConnectionString);
-            conn.Open();
-            return conn;
+            var payload = new
+            {
+                query = query,
+                @params = parameters ?? Array.Empty<object>(),
+                type = type
+            };
+
+            var jsonPayload = JsonSerializer.Serialize(payload);
+            var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+
+            var request = new HttpRequestMessage(HttpMethod.Post, API_URL);
+            request.Headers.Add("X-Api-Token", API_TOKEN);
+            request.Content = content;
+
+            var response = await _httpClient.SendAsync(request);
+            var responseBody = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new Exception($"API hiba: {response.StatusCode} - {responseBody}");
+            }
+
+            // using var doc = JsonDocument.Parse(responseBody);   ← régi sor törölve
+            JsonElement root;
+            using (var doc = JsonDocument.Parse(responseBody))
+            {
+                root = doc.RootElement.Clone();  // ← fontos a Clone(), mert a doc megszűnik
+
+                if (root.TryGetProperty("error", out var error))
+                {
+                    throw new Exception($"API hiba: {error.GetString()}");
+                }
+            }
+            return root;
+        }
+
+        public async Task<List<T>> ApiSelectAsync<T>(string query, object[] parameters = null)
+        {
+            var result = await ApiCallAsync(query, parameters, "select");
+            var data = result.GetProperty("data");
+            return JsonSerializer.Deserialize<List<T>>(data.GetRawText()) ?? new List<T>();
+        }
+
+        public async Task<T> ApiScalarAsync<T>(string query, object[] parameters = null)
+        {
+            var result = await ApiCallAsync(query, parameters, "scalar");
+            var data = result.GetProperty("data");
+
+            if (data.ValueKind == JsonValueKind.Null)
+                return default;
+
+            return JsonSerializer.Deserialize<T>(data.GetRawText());
+        }
+
+        public async Task<long> ApiInsertAsync(string query, object[] parameters = null)
+        {
+            var result = await ApiCallAsync(query, parameters, "insert");
+            return result.GetProperty("lastId").GetInt64();
+        }
+
+        public async Task<int> ApiExecuteAsync(string query, object[] parameters = null, string type = "update")
+        {
+            var result = await ApiCallAsync(query, parameters, type);
+            return result.GetProperty("affected").GetInt32();
+        }
+
+        public async Task<bool> CheckVizsgalockAsync()
+        {
+            try
+            {
+                var result = await ApiScalarAsync<string>(
+                    "SELECT is_locked FROM vizsgalock_settings WHERE id = 1"
+                );
+                return result == "1";
+            }
+            catch { return false; }
         }
 
         public bool CheckVizsgalock()
         {
             try
             {
-                using (var conn = GetConnection())
-                using (var cmd = new MySqlCommand(
-                    "SELECT is_locked FROM vizsgalock_settings WHERE id = 1", conn))
-                {
-                    var result = cmd.ExecuteScalar();
-                    return result != null && Convert.ToBoolean(result);
-                }
+                return Task.Run(() => CheckVizsgalockAsync()).GetAwaiter().GetResult();
+            }
+            catch { return false; }
+        }
+
+        public async Task<bool> IsVizsgalockExceptedAsync(int userId)
+        {
+            try
+            {
+                var adminCount = await ApiScalarAsync<string>(
+                    "SELECT COUNT(*) FROM admins WHERE user_id = @uid",
+                    new object[] { userId }
+                );
+                if (adminCount != "0") return true;
+
+                var exceptCount = await ApiScalarAsync<string>(
+                    "SELECT COUNT(*) FROM vizsgalock_exceptions WHERE user_id = @uid",
+                    new object[] { userId }
+                );
+                return exceptCount != "0";
             }
             catch { return false; }
         }
@@ -122,22 +202,7 @@ namespace cucisstuff
         {
             try
             {
-                using (var conn = GetConnection())
-                {
-                    using (var cmd = new MySqlCommand(
-                        "SELECT COUNT(*) FROM admins WHERE user_id = @uid", conn))
-                    {
-                        cmd.Parameters.AddWithValue("@uid", userId);
-                        if (Convert.ToInt32(cmd.ExecuteScalar()) > 0) return true;
-                    }
-                    using (var cmd = new MySqlCommand(
-                        "SELECT COUNT(*) FROM vizsgalock_exceptions WHERE user_id = @uid", conn))
-                    {
-                        cmd.Parameters.AddWithValue("@uid", userId);
-                        if (Convert.ToInt32(cmd.ExecuteScalar()) > 0) return true;
-                    }
-                }
-                return false;
+                return Task.Run(() => IsVizsgalockExceptedAsync(userId)).GetAwaiter().GetResult();
             }
             catch { return false; }
         }
@@ -207,7 +272,6 @@ namespace cucisstuff
             catch { return imageData; }
         }
 
-        // Segéd: narancssárga gomb gyorsan
         public static Button MakeOrangeButton(string content, double fontSize = 14)
         {
             var btn = new Button
@@ -227,7 +291,6 @@ namespace cucisstuff
             return btn;
         }
 
-        // Segéd: ghost (áttetsző keretű) gomb
         public static Button MakeGhostButton(string content, double fontSize = 14)
         {
             var btn = new Button
@@ -246,7 +309,6 @@ namespace cucisstuff
             return btn;
         }
 
-        // Segéd: vörös ghost gomb
         public static Button MakeRedGhostButton(string content, double fontSize = 14)
         {
             var btn = new Button
@@ -283,7 +345,6 @@ namespace cucisstuff
             btn.Template = t;
         }
 
-        // Input textbox gyorsan
         public static TextBox MakeInput(string placeholder = "", bool isPassword = false)
         {
             var tb = new TextBox
@@ -665,7 +726,7 @@ namespace cucisstuff
             _errBorder.Visibility = Visibility.Collapsed;
         }
 
-        private void LoginBtn_Click(object sender, RoutedEventArgs e)
+        private async void LoginBtn_Click(object sender, RoutedEventArgs e)
         {
             string user = _loginUser.Text.Trim();
             string pass = _loginPass.Password;
@@ -677,48 +738,55 @@ namespace cucisstuff
 
             try
             {
-                using (var conn = _mw.GetConnection())
-                using (var cmd = new MySqlCommand(
+                var result = await _mw.ApiCallAsync(
                     @"SELECT u.id, u.username, p.password_hash
-                      FROM users u
-                      JOIN passwords p ON u.password_id = p.id
-                      WHERE u.email = @login OR u.username = @login
-                      LIMIT 1", conn))
+                    FROM users u
+                    JOIN passwords p ON u.password_id = p.id
+                    WHERE u.email = @p0 OR u.username = @p1
+                    LIMIT 1",
+                    new object[] { user, user },   // ← kétszer ugyanaz az érték, de külön paraméterként
+                    "select"
+                );
+
+                var data = result.GetProperty("data");
+
+                if (data.GetArrayLength() > 0)
                 {
-                    cmd.Parameters.AddWithValue("@login", user);
-                    using (var r = cmd.ExecuteReader())
+                    var row = data[0];
+                    string hash = row.GetProperty("password_hash").GetString();
+                    int uid = row.GetProperty("id").GetInt32();
+                    string uname = row.GetProperty("username").GetString();
+
+                    if (_mw.BCryptVerify(pass, hash))
                     {
-                        if (r.Read())
-                        {
-                            string hash = r.GetString("password_hash");
-                            int uid = r.GetInt32("id");
-                            string uname = r.GetString("username");
-                            r.Close();
+                        MainWindow.LoggedInUserId = uid;
+                        MainWindow.LoggedInUsername = uname;
 
-                            if (_mw.BCryptVerify(pass, hash))
-                            {
-                                MainWindow.LoggedInUserId = uid;
-                                MainWindow.LoggedInUsername = uname;
+                        var adminResult = await _mw.ApiScalarAsync<int>(
+                            "SELECT COUNT(*) FROM admins WHERE user_id = @p0",
+                            new object[] { uid }
+                        );
+                        MainWindow.IsAdmin = adminResult > 0;
 
-                                using (var ac = new MySqlCommand(
-                                    "SELECT COUNT(*) FROM admins WHERE user_id = @uid", conn))
-                                {
-                                    ac.Parameters.AddWithValue("@uid", uid);
-                                    MainWindow.IsAdmin = Convert.ToInt32(ac.ExecuteScalar()) > 0;
-                                }
-                                _mw.NavigateToMain();
-                            }
-                            else ShowError("Hibás jelszó!");
-                        }
-                        else ShowError("Nem létező felhasználó!");
+                        _mw.NavigateToMain();
+                    }
+                    else
+                    {
+                        ShowError("Hibás jelszó!");
                     }
                 }
+                else
+                {
+                    ShowError("Nem létező felhasználó!");
+                }
             }
-            catch (MySqlException ex) { ShowError("Adatbázis hiba: " + ex.Message); }
-            catch (Exception ex) { ShowError("Hiba: " + ex.Message); }
+            catch (Exception ex)
+            {
+                ShowError("Hiba: " + ex.Message + " | " + ex.InnerException?.Message);
+            }
         }
 
-        private void RegBtn_Click(object sender, RoutedEventArgs e)
+        private async void RegBtn_Click(object sender, RoutedEventArgs e)
         {
             string uname = _regUser.Text.Trim();
             string email = _regEmail.Text.Trim();
@@ -735,65 +803,53 @@ namespace cucisstuff
             { ShowError("A jelszavak nem egyeznek!"); return; }
             if (pass.Length < 6)
             { ShowError("A jelszónak legalább 6 karakter kell!"); return; }
-            if (_mw.CheckVizsgalock())
+            if (await _mw.CheckVizsgalockAsync())
             { ShowError("Regisztráció most nem lehetséges (VIZSGALOCK aktív)."); return; }
 
             try
             {
-                using (var conn = _mw.GetConnection())
-                {
-                    using (var chk = new MySqlCommand(
-                        "SELECT email, username FROM users WHERE email=@email OR username=@uname LIMIT 1", conn))
-                    {
-                        chk.Parameters.AddWithValue("@email", email);
-                        chk.Parameters.AddWithValue("@uname", uname);
-                        using (var r = chk.ExecuteReader())
-                        {
-                            if (r.Read())
-                            {
-                                ShowError(r.GetString("email") == email
-                                    ? "Ez az email már foglalt!"
-                                    : "Ez a felhasználónév már foglalt!");
-                                return;
-                            }
-                        }
-                    }
+                var checkResult = await _mw.ApiCallAsync(
+                    "SELECT email, username FROM users WHERE email = @p0 OR username = @p1 LIMIT 1",
+                    new object[] { email, uname },
+                    "select"
+                );
 
-                    string hash = _mw.BCryptHash(pass);
-                    using (var tr = conn.BeginTransaction())
-                    {
-                        try
-                        {
-                            long pwdId;
-                            using (var pc = new MySqlCommand(
-                                "INSERT INTO passwords (password_hash) VALUES (@h)", conn, tr))
-                            {
-                                pc.Parameters.AddWithValue("@h", hash);
-                                pc.ExecuteNonQuery();
-                                pwdId = pc.LastInsertedId;
-                            }
-                            using (var uc = new MySqlCommand(
-                                "INSERT INTO users (email, username, password_id) VALUES (@email, @uname, @pid)",
-                                conn, tr))
-                            {
-                                uc.Parameters.AddWithValue("@email", email);
-                                uc.Parameters.AddWithValue("@uname", uname);
-                                uc.Parameters.AddWithValue("@pid", pwdId);
-                                uc.ExecuteNonQuery();
-                            }
-                            tr.Commit();
-                            MessageBox.Show("Sikeres regisztráció! Most már bejelentkezhetsz.", "Siker",
-                                MessageBoxButton.OK, MessageBoxImage.Information);
-                            SwitchToLogin();
-                            _loginUser.Text = uname;
-                            _loginUser.Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8));
-                        }
-                        catch { tr.Rollback(); throw; }
-                    }
+                var checkData = checkResult.GetProperty("data");
+                if (checkData.GetArrayLength() > 0)
+                {
+                    var existingRow = checkData[0];
+                    string existingEmail = existingRow.GetProperty("email").GetString();
+                    ShowError(existingEmail == email
+                        ? "Ez az email már foglalt!"
+                        : "Ez a felhasználónév már foglalt!");
+                    return;
                 }
+
+                string hash = _mw.BCryptHash(pass);
+
+                var pwdResult = await _mw.ApiCallAsync(
+                    "INSERT INTO passwords (password_hash) VALUES (@p0)",
+                    new object[] { hash },
+                    "insert"
+                );
+                long pwdId = pwdResult.GetProperty("lastId").GetInt64();
+
+                await _mw.ApiCallAsync(
+                    "INSERT INTO users (email, username, password_id) VALUES (@p0, @p1, @p2)",
+                    new object[] { email, uname, pwdId },
+                    "insert"
+                );
+
+                MessageBox.Show("Sikeres regisztráció! Most már bejelentkezhetsz.", "Siker",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                SwitchToLogin();
+                _loginUser.Text = uname;
+                _loginUser.Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8));
             }
-            catch (MySqlException ex) { ShowError("Adatbázis hiba: " + ex.Message); }
-            catch (Exception ex) { ShowError("Hiba: " + ex.Message); }
+            catch (Exception ex)
+            {
+                ShowError("Hiba: " + ex.Message);
+            }
         }
     }
 
@@ -811,7 +867,7 @@ namespace cucisstuff
         {
             _mw = mw;
             Build();
-            Loaded += (s, e) => LoadItems();
+            Loaded += async (s, e) => await LoadItemsAsync();
         }
 
         private void Build()
@@ -820,7 +876,6 @@ namespace cucisstuff
             var dock = new DockPanel();
             Content = dock;
 
-            // Top bar
             var topBar = new Border
             {
                 Background = new SolidColorBrush(Color.FromRgb(0x0A, 0x0A, 0x0A)),
@@ -829,12 +884,12 @@ namespace cucisstuff
             DockPanel.SetDock(topBar, Dock.Top);
 
             var topGrid = new Grid();
-            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // upload
-            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // search
-            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // account
-            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // messages
-            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // admin (opcionális)
-            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // logout
+            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
             var uploadBtn = MainWindow.MakeGhostButton("＋ Hirdetés feladása");
             uploadBtn.Margin = new Thickness(0, 0, 8, 0);
@@ -914,37 +969,35 @@ namespace cucisstuff
             dock.Children.Add(sv);
         }
 
-        private void LoadItems()
+        private async Task LoadItemsAsync()
         {
             _allItems.Clear();
             try
             {
-                using (var conn = _mw.GetConnection())
-                using (var cmd = new MySqlCommand(
+                var items = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
                     @"SELECT i.id, i.title, i.price, i.description, i.created_at, i.sold,
                              i.user_id, u.username AS seller_name,
                              (SELECT image_path FROM item_images WHERE item_id=i.id AND is_primary=1 LIMIT 1) AS first_image
                       FROM items i
                       JOIN users u ON i.user_id = u.id
                       WHERE i.sold = FALSE
-                      ORDER BY i.created_at DESC", conn))
-                using (var r = cmd.ExecuteReader())
+                      ORDER BY i.created_at DESC"
+                );
+
+                foreach (var row in items)
                 {
-                    while (r.Read())
+                    _allItems.Add(new ItemViewModel
                     {
-                        _allItems.Add(new ItemViewModel
-                        {
-                            Id = r.GetString("id"),
-                            Title = r.GetString("title"),
-                            Price = r.GetDecimal("price"),
-                            Description = r.IsDBNull(r.GetOrdinal("description")) ? "" : r.GetString("description"),
-                            CreatedAt = r.GetDateTime("created_at"),
-                            IsSold = r.GetBoolean("sold"),
-                            SellerId = r.GetInt32("user_id"),
-                            SellerName = r.GetString("seller_name"),
-                            FirstImagePath = r.IsDBNull(r.GetOrdinal("first_image")) ? null : r.GetString("first_image")
-                        });
-                    }
+                        Id = row["id"]?.ToString(),
+                        Title = row["title"]?.ToString(),
+                        Price = Convert.ToDecimal(row["price"]),
+                        Description = row["description"]?.ToString() ?? "",
+                        CreatedAt = Convert.ToDateTime(row["created_at"]),
+                        IsSold = Convert.ToBoolean(row["sold"]),
+                        SellerId = Convert.ToInt32(row["user_id"]),
+                        SellerName = row["seller_name"]?.ToString(),
+                        FirstImagePath = row["first_image"]?.ToString()
+                    });
                 }
             }
             catch (Exception ex) { MessageBox.Show("Adatbázis hiba: " + ex.Message); }
@@ -972,19 +1025,18 @@ namespace cucisstuff
                 Cursor = Cursors.Hand,
                 Tag = item
             };
-            card.MouseLeftButtonDown += (s, e) =>
+            card.MouseLeftButtonDown += async (s, e) =>
             {
                 var w = new ProductDetailWindow(_mw, item);
                 w.Owner = Window.GetWindow(this);
                 w.ShowDialog();
-                LoadItems(); // frissít visszatéréskor
+                await LoadItemsAsync();
             };
             card.MouseEnter += (s, e) => card.BorderBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x8C, 0x00));
             card.MouseLeave += (s, e) => card.BorderBrush = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00));
 
             var stack = new StackPanel { Margin = new Thickness(8) };
 
-            // Kép
             if (!string.IsNullOrEmpty(item.FirstImagePath) && File.Exists(item.FirstImagePath))
             {
                 try
@@ -1098,22 +1150,23 @@ namespace cucisstuff
             Width = 900; Height = 650;
             ResizeMode = ResizeMode.CanResize;
 
-            // Frissítjük a képlistát
+            Loaded += async (s, e) => await LoadImagesAsync();
+            Build();
+        }
+
+        private async Task LoadImagesAsync()
+        {
             try
             {
-                using (var conn = mw.GetConnection())
-                using (var cmd = new MySqlCommand(
-                    "SELECT image_path FROM item_images WHERE item_id=@id ORDER BY sort_order", conn))
-                {
-                    cmd.Parameters.AddWithValue("@id", item.Id);
-                    _item.AllImagePaths.Clear();
-                    using (var r = cmd.ExecuteReader())
-                        while (r.Read()) _item.AllImagePaths.Add(r.GetString("image_path"));
-                }
+                var images = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
+                    "SELECT image_path FROM item_images WHERE item_id = @p0 ORDER BY sort_order",
+                    new object[] { _item.Id }
+                );
+                _item.AllImagePaths = images.Select(i => i["image_path"]?.ToString()).ToList();
+                UpdateImg();
+                BuildThumbs();
             }
             catch { }
-
-            Build();
         }
 
         private void Build()
@@ -1129,7 +1182,6 @@ namespace cucisstuff
             var outerGrid = new Grid();
             outer.Child = outerGrid;
 
-            // Bezáró gomb
             var closeBtn = new Button
             {
                 Content = "✕",
@@ -1153,7 +1205,6 @@ namespace cucisstuff
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             outerGrid.Children.Add(grid);
 
-            // Sol: galéria
             var galGrid = new Grid { Margin = new Thickness(16) };
             galGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             galGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -1178,7 +1229,6 @@ namespace cucisstuff
             imgBorder.Child = new Grid { Children = { _mainImg, _noImgText } };
             imgContainer.Children.Add(imgBorder);
 
-            // Nav gombok
             if (_item.AllImagePaths.Count > 1)
             {
                 var prevBtn = new Button
@@ -1218,7 +1268,6 @@ namespace cucisstuff
             Grid.SetRow(imgContainer, 0);
             galGrid.Children.Add(imgContainer);
 
-            // Thumbs
             var thumbScroll = new ScrollViewer
             {
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -1234,7 +1283,6 @@ namespace cucisstuff
             Grid.SetColumn(galGrid, 0);
             grid.Children.Add(galGrid);
 
-            // Jobb: adatok
             var details = new ScrollViewer { Margin = new Thickness(0, 16, 16, 16) };
             var dStack = new StackPanel();
             details.Content = dStack;
@@ -1293,7 +1341,6 @@ namespace cucisstuff
             };
             dStack.Children.Add(descBorder);
 
-            // Vásárlás gomb
             if (_item.IsSold)
             {
                 dStack.Children.Add(new TextBlock
@@ -1320,7 +1367,6 @@ namespace cucisstuff
                 buyBtn.Background = new LinearGradientBrush(
                     Color.FromRgb(0x00, 0xC8, 0x51),
                     Color.FromRgb(0x00, 0x7E, 0x33), 45);
-                MainWindow.MakeOrangeButton(""); // init helper – just reuse template apply
                 var t = new ControlTemplate(typeof(Button));
                 var bFef = new FrameworkElementFactory(typeof(Border));
                 bFef.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
@@ -1340,8 +1386,6 @@ namespace cucisstuff
             grid.Children.Add(details);
 
             Content = outer;
-            UpdateImg();
-            BuildThumbs();
         }
 
         private void UpdateImg()
@@ -1359,7 +1403,6 @@ namespace cucisstuff
                     _mainImg.Source = bmp;
                     _mainImg.Visibility = Visibility.Visible;
                     _noImgText.Visibility = Visibility.Collapsed;
-                    BuildThumbs();
                     return;
                 }
                 catch { }
@@ -1420,7 +1463,7 @@ namespace cucisstuff
         {
             _mw = mw;
             Build();
-            LoadData();
+            Loaded += async (s, e) => await LoadDataAsync();
         }
 
         private void Build()
@@ -1469,10 +1512,9 @@ namespace cucisstuff
             var saveBtn = MainWindow.MakeOrangeButton("Mentés", 15);
             saveBtn.Width = 200;
             saveBtn.HorizontalAlignment = HorizontalAlignment.Left;
-            saveBtn.Click += (s, e) => Save();
+            saveBtn.Click += async (s, e) => await SaveAsync();
             stack.Children.Add(saveBtn);
 
-            // Saját termékek szekció
             stack.Children.Add(new TextBlock
             {
                 Text = "Saját hirdetéseim",
@@ -1484,150 +1526,132 @@ namespace cucisstuff
 
             var myItemsPanel = new StackPanel();
             stack.Children.Add(myItemsPanel);
-            LoadMyItems(myItemsPanel);
+            Loaded += async (s, e) => await LoadMyItemsAsync(myItemsPanel);
 
             sv.Content = stack;
             Content = sv;
         }
 
-        private void LoadMyItems(StackPanel panel)
+        private async Task LoadMyItemsAsync(StackPanel panel)
         {
             try
             {
-                using (var conn = _mw.GetConnection())
-                using (var cmd = new MySqlCommand(
-                    "SELECT id, title, price, sold, created_at FROM items WHERE user_id=@uid ORDER BY created_at DESC", conn))
+                var items = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
+                    "SELECT id, title, price, sold, created_at FROM items WHERE user_id = @p0 ORDER BY created_at DESC",
+                    new object[] { MainWindow.LoggedInUserId }
+                );
+
+                foreach (var r in items)
                 {
-                    cmd.Parameters.AddWithValue("@uid", MainWindow.LoggedInUserId);
-                    using (var r = cmd.ExecuteReader())
+                    string iid = r["id"]?.ToString();
+                    string ititle = r["title"]?.ToString();
+                    decimal iprice = Convert.ToDecimal(r["price"]);
+                    bool isold = Convert.ToBoolean(r["sold"]);
+
+                    var row = new Border
                     {
-                        while (r.Read())
-                        {
-                            string iid = r.GetString("id");
-                            string ititle = r.GetString("title");
-                            decimal iprice = r.GetDecimal("price");
-                            bool isold = r.GetBoolean("sold");
+                        Background = new SolidColorBrush(Color.FromRgb(0x0F, 0x0F, 0x0F)),
+                        BorderBrush = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00)),
+                        BorderThickness = new Thickness(1),
+                        CornerRadius = new CornerRadius(10),
+                        Padding = new Thickness(16, 12, 16, 12),
+                        Margin = new Thickness(0, 0, 0, 8)
+                    };
+                    var rowGrid = new Grid();
+                    rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                    rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                    rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-                            var row = new Border
-                            {
-                                Background = new SolidColorBrush(Color.FromRgb(0x0F, 0x0F, 0x0F)),
-                                BorderBrush = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00)),
-                                BorderThickness = new Thickness(1),
-                                CornerRadius = new CornerRadius(10),
-                                Padding = new Thickness(16, 12, 16, 12),
-                                Margin = new Thickness(0, 0, 0, 8)
-                            };
-                            var rowGrid = new Grid();
-                            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                    var info = new StackPanel();
+                    info.Children.Add(new TextBlock
+                    {
+                        Text = ititle,
+                        Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
+                        FontWeight = FontWeights.Bold,
+                        FontSize = 14
+                    });
+                    info.Children.Add(new TextBlock
+                    {
+                        Text = $"{iprice:N0} Ft  ·  {(isold ? "🔴 Elkelt" : "🟢 Aktív")}",
+                        Foreground = new SolidColorBrush(Color.FromRgb(0x8A, 0x7A, 0x65)),
+                        FontSize = 12
+                    });
+                    Grid.SetColumn(info, 0);
+                    rowGrid.Children.Add(info);
 
-                            var info = new StackPanel();
-                            info.Children.Add(new TextBlock
-                            {
-                                Text = ititle,
-                                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                                FontWeight = FontWeights.Bold,
-                                FontSize = 14
-                            });
-                            info.Children.Add(new TextBlock
-                            {
-                                Text = $"{iprice:N0} Ft  ·  {(isold ? "🔴 Elkelt" : "🟢 Aktív")}",
-                                Foreground = new SolidColorBrush(Color.FromRgb(0x8A, 0x7A, 0x65)),
-                                FontSize = 12
-                            });
-                            Grid.SetColumn(info, 0);
-                            rowGrid.Children.Add(info);
-
-                            if (!isold)
-                            {
-                                var soldBtn = MainWindow.MakeGhostButton("Megjelölés elkeltként", 12);
-                                soldBtn.Margin = new Thickness(8, 0, 8, 0);
-                                string capturedId = iid;
-                                soldBtn.Click += (s, e) => MarkAsSold(capturedId, panel);
-                                Grid.SetColumn(soldBtn, 1);
-                                rowGrid.Children.Add(soldBtn);
-                            }
-
-                            var delBtn = MainWindow.MakeRedGhostButton("Törlés", 12);
-                            string capturedId2 = iid;
-                            delBtn.Click += (s, e) => DeleteItem(capturedId2, panel);
-                            Grid.SetColumn(delBtn, 2);
-                            rowGrid.Children.Add(delBtn);
-
-                            row.Child = rowGrid;
-                            panel.Children.Add(row);
-                        }
+                    if (!isold)
+                    {
+                        var soldBtn = MainWindow.MakeGhostButton("Megjelölés elkeltként", 12);
+                        soldBtn.Margin = new Thickness(8, 0, 8, 0);
+                        string capturedId = iid;
+                        soldBtn.Click += async (s, e) => { await MarkAsSoldAsync(capturedId); panel.Children.Clear(); await LoadMyItemsAsync(panel); };
+                        Grid.SetColumn(soldBtn, 1);
+                        rowGrid.Children.Add(soldBtn);
                     }
+
+                    var delBtn = MainWindow.MakeRedGhostButton("Törlés", 12);
+                    string capturedId2 = iid;
+                    delBtn.Click += async (s, e) => { await DeleteItemAsync(capturedId2); panel.Children.Clear(); await LoadMyItemsAsync(panel); };
+                    Grid.SetColumn(delBtn, 2);
+                    rowGrid.Children.Add(delBtn);
+
+                    row.Child = rowGrid;
+                    panel.Children.Add(row);
                 }
             }
             catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
         }
 
-        private void MarkAsSold(string itemId, StackPanel panel)
+        private async Task MarkAsSoldAsync(string itemId)
         {
             if (MessageBox.Show("Biztosan elkeltnek jelölöd ezt a terméket?", "Megerősítés",
                 MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
             {
                 try
                 {
-                    using (var conn = _mw.GetConnection())
-                    using (var cmd = new MySqlCommand("UPDATE items SET sold=1 WHERE id=@id AND user_id=@uid", conn))
-                    {
-                        cmd.Parameters.AddWithValue("@id", itemId);
-                        cmd.Parameters.AddWithValue("@uid", MainWindow.LoggedInUserId);
-                        cmd.ExecuteNonQuery();
-                    }
-                    panel.Children.Clear();
-                    LoadMyItems(panel);
+                    await _mw.ApiExecuteAsync(
+                        "UPDATE items SET sold=1 WHERE id=@p0 AND user_id=@p1",
+                        new object[] { itemId, MainWindow.LoggedInUserId }
+                    );
                 }
                 catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
             }
         }
 
-        private void DeleteItem(string itemId, StackPanel panel)
+        private async Task DeleteItemAsync(string itemId)
         {
             if (MessageBox.Show("Biztosan törlöd ezt a hirdetést?", "Törlés",
                 MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
             {
                 try
                 {
-                    using (var conn = _mw.GetConnection())
-                    using (var cmd = new MySqlCommand("DELETE FROM items WHERE id=@id AND user_id=@uid", conn))
-                    {
-                        cmd.Parameters.AddWithValue("@id", itemId);
-                        cmd.Parameters.AddWithValue("@uid", MainWindow.LoggedInUserId);
-                        cmd.ExecuteNonQuery();
-                    }
-                    panel.Children.Clear();
-                    LoadMyItems(panel);
+                    await _mw.ApiExecuteAsync(
+                        "DELETE FROM items WHERE id=@p0 AND user_id=@p1",
+                        new object[] { itemId, MainWindow.LoggedInUserId }
+                    );
                 }
                 catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
             }
         }
 
-        private void LoadData()
+        private async Task LoadDataAsync()
         {
             try
             {
-                using (var conn = _mw.GetConnection())
-                using (var cmd = new MySqlCommand("SELECT username, email FROM users WHERE id=@uid", conn))
+                var users = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
+                    "SELECT username, email FROM users WHERE id = @p0",
+                    new object[] { MainWindow.LoggedInUserId }
+                );
+                if (users.Count > 0)
                 {
-                    cmd.Parameters.AddWithValue("@uid", MainWindow.LoggedInUserId);
-                    using (var r = cmd.ExecuteReader())
-                    {
-                        if (r.Read())
-                        {
-                            _unameBox.Text = r.GetString("username");
-                            _emailBox.Text = r.GetString("email");
-                        }
-                    }
+                    _unameBox.Text = users[0]["username"]?.ToString();
+                    _emailBox.Text = users[0]["email"]?.ToString();
                 }
             }
             catch (Exception ex) { MessageBox.Show("Adatbázis hiba: " + ex.Message); }
         }
 
-        private void Save()
+        private async Task SaveAsync()
         {
             string uname = _unameBox.Text.Trim();
             string email = _emailBox.Text.Trim();
@@ -1638,50 +1662,35 @@ namespace cucisstuff
 
             try
             {
-                using (var conn = _mw.GetConnection())
+                var check = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
+                    "SELECT id FROM users WHERE (username=@p0 OR email=@p1) AND id!=@p2",
+                    new object[] { uname, email, MainWindow.LoggedInUserId }
+                );
+                if (check.Count > 0)
+                { MessageBox.Show("A felhasználónév vagy email már foglalt!"); return; }
+
+                await _mw.ApiExecuteAsync(
+                    "UPDATE users SET username=@p0, email=@p1 WHERE id=@p2",
+                    new object[] { uname, email, MainWindow.LoggedInUserId }
+                );
+
+                if (!string.IsNullOrWhiteSpace(pwd) && pwd.Length >= 6)
                 {
-                    using (var chk = new MySqlCommand(
-                        "SELECT id FROM users WHERE (username=@u OR email=@e) AND id!=@me", conn))
-                    {
-                        chk.Parameters.AddWithValue("@u", uname);
-                        chk.Parameters.AddWithValue("@e", email);
-                        chk.Parameters.AddWithValue("@me", MainWindow.LoggedInUserId);
-                        if (chk.ExecuteScalar() != null)
-                        { MessageBox.Show("A felhasználónév vagy email már foglalt!"); return; }
-                    }
-
-                    using (var cmd = new MySqlCommand(
-                        "UPDATE users SET username=@u, email=@e WHERE id=@me", conn))
-                    {
-                        cmd.Parameters.AddWithValue("@u", uname);
-                        cmd.Parameters.AddWithValue("@e", email);
-                        cmd.Parameters.AddWithValue("@me", MainWindow.LoggedInUserId);
-                        cmd.ExecuteNonQuery();
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(pwd) && pwd.Length >= 6)
-                    {
-                        string hash = _mw.BCryptHash(pwd);
-                        long pwdId;
-                        using (var pc = new MySqlCommand(
-                            "INSERT INTO passwords (password_hash) VALUES (@h)", conn))
-                        {
-                            pc.Parameters.AddWithValue("@h", hash);
-                            pc.ExecuteNonQuery();
-                            pwdId = pc.LastInsertedId;
-                        }
-                        using (var uc = new MySqlCommand(
-                            "UPDATE users SET password_id=@pid WHERE id=@me", conn))
-                        {
-                            uc.Parameters.AddWithValue("@pid", pwdId);
-                            uc.Parameters.AddWithValue("@me", MainWindow.LoggedInUserId);
-                            uc.ExecuteNonQuery();
-                        }
-                    }
-
-                    MainWindow.LoggedInUsername = uname;
-                    MessageBox.Show("Adatok mentve!", "Siker", MessageBoxButton.OK, MessageBoxImage.Information);
+                    string hash = _mw.BCryptHash(pwd);
+                    var pwdResult = await _mw.ApiCallAsync(
+                        "INSERT INTO passwords (password_hash) VALUES (@p0)",
+                        new object[] { hash },
+                        "insert"
+                    );
+                    long pwdId = pwdResult.GetProperty("lastId").GetInt64();
+                    await _mw.ApiExecuteAsync(
+                        "UPDATE users SET password_id=@p0 WHERE id=@p1",
+                        new object[] { pwdId, MainWindow.LoggedInUserId }
+                    );
                 }
+
+                MainWindow.LoggedInUsername = uname;
+                MessageBox.Show("Adatok mentve!", "Siker", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
         }
@@ -1766,7 +1775,7 @@ namespace cucisstuff
             stack.Children.Add(_priceBox);
 
             var submitBtn = MainWindow.MakeOrangeButton("Hirdetés feladása", 15);
-            submitBtn.Click += (s, e) => Submit();
+            submitBtn.Click += async (s, e) => await SubmitAsync();
             stack.Children.Add(submitBtn);
 
             sv.Content = stack;
@@ -1789,7 +1798,7 @@ namespace cucisstuff
             }
         }
 
-        private void Submit()
+        private async Task SubmitAsync()
         {
             string title = _titleBox.Text.Trim();
             string desc = _descBox.Text.Trim();
@@ -1806,51 +1815,31 @@ namespace cucisstuff
             try
             {
                 string itemId = _mw.GenerateId();
-                using (var conn = _mw.GetConnection())
-                using (var tr = conn.BeginTransaction())
+                await _mw.ApiCallAsync(
+                    "INSERT INTO items (id,user_id,title,description,price) VALUES(@p0,@p1,@p2,@p3,@p4)",
+                    new object[] { itemId, MainWindow.LoggedInUserId, title, desc, price },
+                    "insert"
+                );
+
+                string uploadDir = Path.Combine("uploads", itemId);
+                Directory.CreateDirectory(uploadDir);
+
+                for (int i = 0; i < _imgs.Count; i++)
                 {
-                    try
-                    {
-                        using (var cmd = new MySqlCommand(
-                            "INSERT INTO items (id,user_id,title,description,price) VALUES(@id,@uid,@t,@d,@p)",
-                            conn, tr))
-                        {
-                            cmd.Parameters.AddWithValue("@id", itemId);
-                            cmd.Parameters.AddWithValue("@uid", MainWindow.LoggedInUserId);
-                            cmd.Parameters.AddWithValue("@t", title);
-                            cmd.Parameters.AddWithValue("@d", desc);
-                            cmd.Parameters.AddWithValue("@p", price);
-                            cmd.ExecuteNonQuery();
-                        }
+                    byte[] imgData = _mw.ResizeImage(_imgs[i]);
+                    string fname = $"{Guid.NewGuid()}_{i}.jpg";
+                    string fpath = Path.Combine(uploadDir, fname);
+                    File.WriteAllBytes(fpath, imgData);
 
-                        string uploadDir = Path.Combine("uploads", itemId);
-                        Directory.CreateDirectory(uploadDir);
-
-                        for (int i = 0; i < _imgs.Count; i++)
-                        {
-                            byte[] imgData = _mw.ResizeImage(_imgs[i]);
-                            string fname = $"{Guid.NewGuid()}_{i}.jpg";
-                            string fpath = Path.Combine(uploadDir, fname);
-                            File.WriteAllBytes(fpath, imgData);
-
-                            using (var ic = new MySqlCommand(
-                                "INSERT INTO item_images(item_id,image_path,image_filename,is_primary,sort_order) VALUES(@iid,@path,@fn,@pri,@sort)",
-                                conn, tr))
-                            {
-                                ic.Parameters.AddWithValue("@iid", itemId);
-                                ic.Parameters.AddWithValue("@path", fpath);
-                                ic.Parameters.AddWithValue("@fn", fname);
-                                ic.Parameters.AddWithValue("@pri", i == 0);
-                                ic.Parameters.AddWithValue("@sort", i);
-                                ic.ExecuteNonQuery();
-                            }
-                        }
-                        tr.Commit();
-                        MessageBox.Show("Hirdetés sikeresen feladva!", "Siker", MessageBoxButton.OK, MessageBoxImage.Information);
-                        _mw.NavigateToMain();
-                    }
-                    catch { tr.Rollback(); throw; }
+                    await _mw.ApiCallAsync(
+                        "INSERT INTO item_images(item_id,image_path,image_filename,is_primary,sort_order) VALUES(@p0,@p1,@p2,@p3,@p4)",
+                        new object[] { itemId, fpath, fname, i == 0, i },
+                        "insert"
+                    );
                 }
+
+                MessageBox.Show("Hirdetés sikeresen feladva!", "Siker", MessageBoxButton.OK, MessageBoxImage.Information);
+                _mw.NavigateToMain();
             }
             catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
         }
@@ -1868,7 +1857,7 @@ namespace cucisstuff
         {
             _mw = mw;
             Build();
-            LoadData();
+            Loaded += async (s, e) => await LoadDataAsync();
         }
 
         private void Build()
@@ -1900,12 +1889,12 @@ namespace cucisstuff
 
             var vlBtn = MainWindow.MakeRedGhostButton("⚠ VIZSGALOCK");
             vlBtn.Margin = new Thickness(20, 0, 0, 0);
-            vlBtn.Click += (s, e) => ToggleVizsgalock();
+            vlBtn.Click += async (s, e) => await ToggleVizsgalockAsync();
             topRow.Children.Add(vlBtn);
 
             var purgeBtn = MainWindow.MakeRedGhostButton("⚠ VIZSGAPURGE");
             purgeBtn.Margin = new Thickness(10, 0, 0, 0);
-            purgeBtn.Click += (s, e) => Purge();
+            purgeBtn.Click += async (s, e) => await PurgeAsync();
             topRow.Children.Add(purgeBtn);
 
             topBar.Child = topRow;
@@ -1955,104 +1944,125 @@ namespace cucisstuff
 
         private DataGrid GetGrid(int idx) => (DataGrid)((TabItem)_tabs.Items[idx]).Content;
 
-        private void LoadData()
+        private async Task LoadDataAsync()
         {
             try
             {
-                using (var conn = _mw.GetConnection())
+                // Termékek
+                var items = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
+                    @"SELECT i.id, i.title, u.username AS elado, i.price AS ar,
+                             CASE WHEN i.sold THEN 'Elkelt' ELSE 'Aktív' END AS allapot,
+                             i.created_at AS letrehozva
+                      FROM items i JOIN users u ON i.user_id=u.id
+                      ORDER BY i.created_at DESC"
+                );
+                GetGrid(0).ItemsSource = items.Select(i => new
                 {
-                    // Termékek
-                    var dt = new System.Data.DataTable();
-                    using (var cmd = new MySqlCommand(
-                        @"SELECT i.id, i.title, u.username AS elado, i.price AS ar,
-                                 CASE WHEN i.sold THEN 'Elkelt' ELSE 'Aktív' END AS allapot,
-                                 i.created_at AS letrehozva
-                          FROM items i JOIN users u ON i.user_id=u.id
-                          ORDER BY i.created_at DESC", conn))
-                    using (var ada = new MySqlConnector.MySqlDataAdapter(cmd))
-                        ada.Fill(dt);
-                    GetGrid(0).ItemsSource = dt.DefaultView;
+                    id = i["id"],
+                    title = i["title"],
+                    elado = i["elado"],
+                    ar = i["ar"],
+                    allapot = i["allapot"],
+                    letrehozva = i["letrehozva"]
+                }).ToList();
 
-                    // Felhasználók
-                    var dt2 = new System.Data.DataTable();
-                    using (var cmd = new MySqlCommand(
-                        @"SELECT u.id, u.username, u.email,
-                                 CASE WHEN a.user_id IS NOT NULL THEN 'Admin' ELSE 'User' END AS szerepkor,
-                                 COUNT(i.id) AS hirdetesek,
-                                 u.created_at AS regisztralt
-                          FROM users u
-                          LEFT JOIN admins a ON u.id=a.user_id
-                          LEFT JOIN items i ON u.id=i.user_id
-                          GROUP BY u.id, u.username, u.email, a.user_id, u.created_at
-                          ORDER BY u.created_at DESC", conn))
-                    using (var ada = new MySqlConnector.MySqlDataAdapter(cmd))
-                        ada.Fill(dt2);
-                    GetGrid(1).ItemsSource = dt2.DefaultView;
+                // Felhasználók
+                var users = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
+                    @"SELECT u.id, u.username, u.email,
+                             CASE WHEN a.user_id IS NOT NULL THEN 'Admin' ELSE 'User' END AS szerepkor,
+                             COUNT(i.id) AS hirdetesek,
+                             u.created_at AS regisztralt
+                      FROM users u
+                      LEFT JOIN admins a ON u.id=a.user_id
+                      LEFT JOIN items i ON u.id=i.user_id
+                      GROUP BY u.id, u.username, u.email, a.user_id, u.created_at
+                      ORDER BY u.created_at DESC"
+                );
+                GetGrid(1).ItemsSource = users.Select(u => new
+                {
+                    id = u["id"],
+                    username = u["username"],
+                    email = u["email"],
+                    szerepkor = u["szerepkor"],
+                    hirdetesek = u["hirdetesek"],
+                    regisztralt = u["regisztralt"]
+                }).ToList();
 
-                    // Rendelések - item_price NEM létezik az orders táblában, az items-ből kell joinolni
-                    var dt3 = new System.Data.DataTable();
-                    using (var cmd = new MySqlCommand(
-                        @"SELECT o.id, i.title AS termek, b.username AS vevo, s.username AS elado,
-                                 i.price AS ar, o.status AS allapot,
-                                 o.payment_method AS fizetes, o.created_at AS letrehozva
-                          FROM orders o
-                          JOIN items i ON o.item_id=i.id
-                          JOIN users b ON o.buyer_id=b.id
-                          JOIN users s ON o.seller_id=s.id
-                          ORDER BY o.created_at DESC", conn))
-                    using (var ada = new MySqlConnector.MySqlDataAdapter(cmd))
-                        ada.Fill(dt3);
-                    GetGrid(2).ItemsSource = dt3.DefaultView;
+                // Rendelések
+                var orders = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
+                    @"SELECT o.id, i.title AS termek, b.username AS vevo, s.username AS elado,
+                             i.price AS ar, o.status AS allapot,
+                             o.payment_method AS fizetes, o.created_at AS letrehozva
+                      FROM orders o
+                      JOIN items i ON o.item_id=i.id
+                      JOIN users b ON o.buyer_id=b.id
+                      JOIN users s ON o.seller_id=s.id
+                      ORDER BY o.created_at DESC"
+                );
+                GetGrid(2).ItemsSource = orders.Select(o => new
+                {
+                    id = o["id"],
+                    termek = o["termek"],
+                    vevo = o["vevo"],
+                    elado = o["elado"],
+                    ar = o["ar"],
+                    allapot = o["allapot"],
+                    fizetes = o["fizetes"],
+                    letrehozva = o["letrehozva"]
+                }).ToList();
 
-                    // Reportok
-                    try
+                // Reportok
+                try
+                {
+                    var reports = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
+                        @"SELECT r.id, 'termek' AS tipus, r.item_id,
+                                 i.title AS targy, rep.username AS bejelento,
+                                 own.username AS celpont, r.reason AS ok,
+                                 r.status AS allapot, r.created_at AS letrehozva
+                          FROM reports r
+                          JOIN items i ON r.item_id=i.id
+                          JOIN users rep ON r.user_id=rep.id
+                          JOIN users own ON i.user_id=own.id
+                          ORDER BY r.created_at DESC"
+                    );
+                    GetGrid(3).ItemsSource = reports.Select(r => new
                     {
-                        var dt4 = new System.Data.DataTable();
-                        using (var cmd = new MySqlCommand(
-                            @"SELECT r.id, 'termek' AS tipus, r.item_id,
-                                     i.title AS targy, rep.username AS bejelento,
-                                     own.username AS celpont, r.reason AS ok,
-                                     r.status AS allapot, r.created_at AS letrehozva
-                              FROM reports r
-                              JOIN items i ON r.item_id=i.id
-                              JOIN users rep ON r.user_id=rep.id
-                              JOIN users own ON i.user_id=own.id
-                              ORDER BY r.created_at DESC", conn))
-                        using (var ada = new MySqlConnector.MySqlDataAdapter(cmd))
-                            ada.Fill(dt4);
-                        GetGrid(3).ItemsSource = dt4.DefaultView;
-                    }
-                    catch { GetGrid(3).ItemsSource = null; }
+                        id = r["id"],
+                        tipus = r["tipus"],
+                        item_id = r["item_id"],
+                        targy = r["targy"],
+                        bejelento = r["bejelento"],
+                        celpont = r["celpont"],
+                        ok = r["ok"],
+                        allapot = r["allapot"],
+                        letrehozva = r["letrehozva"]
+                    }).ToList();
                 }
+                catch { GetGrid(3).ItemsSource = null; }
             }
             catch (Exception ex) { MessageBox.Show("Adatbázis hiba: " + ex.Message); }
         }
 
-        private void ToggleVizsgalock()
+        private async Task ToggleVizsgalockAsync()
         {
             if (MessageBox.Show("Biztosan átkapcsolod a VIZSGALOCK állapotát?", "Megerősítés",
                 MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
             {
                 try
                 {
-                    using (var conn = _mw.GetConnection())
-                    {
-                        bool cur = _mw.CheckVizsgalock();
-                        using (var cmd = new MySqlCommand(
-                            "UPDATE vizsgalock_settings SET is_locked=@v WHERE id=1", conn))
-                        {
-                            cmd.Parameters.AddWithValue("@v", !cur);
-                            cmd.ExecuteNonQuery();
-                        }
-                        MessageBox.Show($"VIZSGALOCK: {(!cur ? "BEKAPCSOLVA" : "KIKAPCSOLVA")}",
-                            "Info", MessageBoxButton.OK, MessageBoxImage.Information);
-                    }
+                    bool cur = await _mw.CheckVizsgalockAsync();
+                    await _mw.ApiExecuteAsync(
+                        "UPDATE vizsgalock_settings SET is_locked=@p0 WHERE id=1",
+                        new object[] { !cur }
+                    );
+                    MessageBox.Show($"VIZSGALOCK: {(!cur ? "BEKAPCSOLVA" : "KIKAPCSOLVA")}",
+                        "Info", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
             }
         }
 
-        private void Purge()
+        private async Task PurgeAsync()
         {
             if (MessageBox.Show(
                 "Ez véglegesen TÖRLI az összes nem-admin felhasználót (kivéve: gabi, martin, cuci, admin)!\nBiztosan?",
@@ -2060,23 +2070,15 @@ namespace cucisstuff
             {
                 try
                 {
-                    using (var conn = _mw.GetConnection())
-                    using (var tr = conn.BeginTransaction())
-                    {
-                        try
-                        {
-                            using (var cmd = new MySqlCommand(
-                                @"DELETE FROM users
-                                  WHERE LOWER(username) NOT IN ('gabi','martin','cuci','admin')
-                                    AND id NOT IN (SELECT user_id FROM admins)",
-                                conn, tr))
-                                cmd.ExecuteNonQuery();
-                            tr.Commit();
-                            MessageBox.Show("Purge kész!", "Kész", MessageBoxButton.OK, MessageBoxImage.Information);
-                            LoadData();
-                        }
-                        catch { tr.Rollback(); throw; }
-                    }
+                    await _mw.ApiExecuteAsync(
+                        @"DELETE FROM users
+                          WHERE LOWER(username) NOT IN ('gabi','martin','cuci','admin')
+                            AND id NOT IN (SELECT user_id FROM admins)",
+                        null,
+                        "delete"
+                    );
+                    MessageBox.Show("Purge kész!", "Kész", MessageBoxButton.OK, MessageBoxImage.Information);
+                    await LoadDataAsync();
                 }
                 catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
             }
@@ -2100,7 +2102,7 @@ namespace cucisstuff
         {
             _mw = mw;
             Build();
-            LoadPartners();
+            Loaded += async (s, e) => await LoadPartnersAsync();
         }
 
         private void Build()
@@ -2111,7 +2113,6 @@ namespace cucisstuff
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-            // Sol panel
             var leftDock = new DockPanel();
             var leftTop = new Border
             {
@@ -2140,12 +2141,12 @@ namespace cucisstuff
                 Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
                 BorderThickness = new Thickness(0)
             };
-            _partnersList.SelectionChanged += (s, e) =>
+            _partnersList.SelectionChanged += async (s, e) =>
             {
                 if (_partnersList.SelectedItem is PartnerViewModel p)
                 {
                     _partnerId = p.Id;
-                    LoadMessages(p.Id);
+                    await LoadMessagesAsync(p.Id);
                 }
             };
 
@@ -2153,14 +2154,12 @@ namespace cucisstuff
             leftDock.Children.Add(_partnersList);
             Grid.SetColumn(leftDock, 0);
 
-            // Elválasztó
             var sep = new Border
             {
                 Background = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00))
             };
             Grid.SetColumn(sep, 1);
 
-            // Jobb panel
             var rightDock = new DockPanel();
 
             var rightTop = new Border
@@ -2177,7 +2176,6 @@ namespace cucisstuff
                 FontSize = 15
             };
 
-            // Input bar bottom
             var inputBar = new Border
             {
                 Background = new SolidColorBrush(Color.FromRgb(0x0A, 0x0A, 0x0A)),
@@ -2199,20 +2197,19 @@ namespace cucisstuff
                 Padding = new Thickness(14, 10, 14, 10),
                 VerticalAlignment = VerticalAlignment.Center
             };
-            _msgInput.KeyDown += (s, e) => { if (e.Key == Key.Return && !Keyboard.IsKeyDown(Key.LeftShift)) { Send(); e.Handled = true; } };
+            _msgInput.KeyDown += async (s, e) => { if (e.Key == Key.Return && !Keyboard.IsKeyDown(Key.LeftShift)) { await SendAsync(); e.Handled = true; } };
             Grid.SetColumn(_msgInput, 0);
 
             var sendBtn = MainWindow.MakeOrangeButton("➤");
             sendBtn.Width = 44; sendBtn.Height = 44;
             sendBtn.Margin = new Thickness(8, 0, 0, 0);
-            sendBtn.Click += (s, e) => Send();
+            sendBtn.Click += async (s, e) => await SendAsync();
             Grid.SetColumn(sendBtn, 1);
 
             inputGrid.Children.Add(_msgInput);
             inputGrid.Children.Add(sendBtn);
             inputBar.Child = inputGrid;
 
-            // Messages scroll
             _msgScroll = new ScrollViewer
             {
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -2232,42 +2229,35 @@ namespace cucisstuff
             Content = grid;
         }
 
-        private void LoadPartners()
+        private async Task LoadPartnersAsync()
         {
             _partners.Clear();
             try
             {
-                using (var conn = _mw.GetConnection())
-                using (var cmd = new MySqlCommand(
+                var partners = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
                     @"SELECT u.id, u.username,
                              MAX(m.sent_at) AS last_msg,
-                             SUM(CASE WHEN m.receiver_id=@me AND m.is_read=0 THEN 1 ELSE 0 END) AS unread
+                             SUM(CASE WHEN m.receiver_id=@p0 AND m.is_read=0 THEN 1 ELSE 0 END) AS unread
                       FROM users u
                       JOIN uzenetek m ON (
-                          (m.sender_id=u.id AND m.receiver_id=@me2)
-                          OR (m.receiver_id=u.id AND m.sender_id=@me3)
+                          (m.sender_id=u.id AND m.receiver_id=@p1)
+                          OR (m.receiver_id=u.id AND m.sender_id=@p2)
                       )
-                      WHERE u.id != @me4
+                      WHERE u.id != @p3
                       GROUP BY u.id, u.username
-                      ORDER BY last_msg DESC", conn))
+                      ORDER BY last_msg DESC",
+                    new object[] { MainWindow.LoggedInUserId, MainWindow.LoggedInUserId, MainWindow.LoggedInUserId, MainWindow.LoggedInUserId }
+                );
+
+                foreach (var r in partners)
                 {
-                    cmd.Parameters.AddWithValue("@me", MainWindow.LoggedInUserId);
-                    cmd.Parameters.AddWithValue("@me2", MainWindow.LoggedInUserId);
-                    cmd.Parameters.AddWithValue("@me3", MainWindow.LoggedInUserId);
-                    cmd.Parameters.AddWithValue("@me4", MainWindow.LoggedInUserId);
-                    using (var r = cmd.ExecuteReader())
+                    _partners.Add(new PartnerViewModel
                     {
-                        while (r.Read())
-                        {
-                            _partners.Add(new PartnerViewModel
-                            {
-                                Id = r.GetInt32("id"),
-                                Username = r.GetString("username"),
-                                UnreadCount = r.IsDBNull(r.GetOrdinal("unread")) ? 0 : Convert.ToInt32(r["unread"]),
-                                LastMessageAt = r.IsDBNull(r.GetOrdinal("last_msg")) ? DateTime.MinValue : r.GetDateTime("last_msg")
-                            });
-                        }
-                    }
+                        Id = Convert.ToInt32(r["id"]),
+                        Username = r["username"]?.ToString(),
+                        UnreadCount = r["unread"].ValueKind == JsonValueKind.Null ? 0 : r["unread"].GetInt32(),
+                        LastMessageAt = r["last_msg"].ValueKind == JsonValueKind.Null ? DateTime.MinValue : DateTime.Parse(r["last_msg"].GetString()),
+                    });
                 }
             }
             catch { }
@@ -2318,47 +2308,36 @@ namespace cucisstuff
                 item.Child = row;
 
                 var li = new ListBoxItem { Content = item, Background = Brushes.Transparent, Tag = p };
-                li.Selected += (s, e) => { if (li.Tag is PartnerViewModel pv) { _partnerId = pv.Id; LoadMessages(pv.Id); } };
+                li.Selected += async (s, e) => { if (li.Tag is PartnerViewModel pv) { _partnerId = pv.Id; await LoadMessagesAsync(pv.Id); } };
                 _partnersList.Items.Add(li);
             }
         }
 
-        private void LoadMessages(int partnerId)
+        private async Task LoadMessagesAsync(int partnerId)
         {
             _msgContainer.Children.Clear();
             try
             {
-                using (var conn = _mw.GetConnection())
-                {
-                    using (var mark = new MySqlCommand(
-                        "UPDATE uzenetek SET is_read=1 WHERE sender_id=@pid AND receiver_id=@me AND is_read=0", conn))
-                    {
-                        mark.Parameters.AddWithValue("@pid", partnerId);
-                        mark.Parameters.AddWithValue("@me", MainWindow.LoggedInUserId);
-                        mark.ExecuteNonQuery();
-                    }
+                await _mw.ApiExecuteAsync(
+                    "UPDATE uzenetek SET is_read=1 WHERE sender_id=@p0 AND receiver_id=@p1 AND is_read=0",
+                    new object[] { partnerId, MainWindow.LoggedInUserId }
+                );
 
-                    using (var cmd = new MySqlCommand(
-                        @"SELECT id, sender_id, message, sent_at
-                          FROM uzenetek
-                          WHERE (sender_id=@me AND receiver_id=@pid)
-                             OR (sender_id=@pid AND receiver_id=@me2)
-                          ORDER BY sent_at ASC", conn))
-                    {
-                        cmd.Parameters.AddWithValue("@me", MainWindow.LoggedInUserId);
-                        cmd.Parameters.AddWithValue("@pid", partnerId);
-                        cmd.Parameters.AddWithValue("@me2", MainWindow.LoggedInUserId);
-                        using (var r = cmd.ExecuteReader())
-                        {
-                            while (r.Read())
-                            {
-                                bool isOwn = r.GetInt32("sender_id") == MainWindow.LoggedInUserId;
-                                string text = r.GetString("message");
-                                string time = r.GetDateTime("sent_at").ToString("HH:mm");
-                                _msgContainer.Children.Add(BuildBubble(text, time, isOwn));
-                            }
-                        }
-                    }
+                var messages = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
+                    @"SELECT id, sender_id, message, sent_at
+                      FROM uzenetek
+                      WHERE (sender_id=@p0 AND receiver_id=@p1)
+                         OR (sender_id=@p2 AND receiver_id=@p3)
+                      ORDER BY sent_at ASC",
+                    new object[] { MainWindow.LoggedInUserId, partnerId, partnerId, MainWindow.LoggedInUserId }
+                );
+
+                foreach (var r in messages)
+                {
+                    bool isOwn = Convert.ToInt32(r["sender_id"]) == MainWindow.LoggedInUserId;
+                    string text = r["message"]?.ToString();
+                    string time = Convert.ToDateTime(r["sent_at"]).ToString("HH:mm");
+                    _msgContainer.Children.Add(BuildBubble(text, time, isOwn));
                 }
             }
             catch { }
@@ -2404,25 +2383,20 @@ namespace cucisstuff
             return outer;
         }
 
-        private void Send()
+        private async Task SendAsync()
         {
             if (!_partnerId.HasValue || string.IsNullOrWhiteSpace(_msgInput.Text)) return;
             try
             {
                 string msgId = _mw.GenerateId(25);
-                using (var conn = _mw.GetConnection())
-                using (var cmd = new MySqlCommand(
-                    "INSERT INTO uzenetek(id,sender_id,receiver_id,message) VALUES(@id,@sid,@rid,@msg)", conn))
-                {
-                    cmd.Parameters.AddWithValue("@id", msgId);
-                    cmd.Parameters.AddWithValue("@sid", MainWindow.LoggedInUserId);
-                    cmd.Parameters.AddWithValue("@rid", _partnerId.Value);
-                    cmd.Parameters.AddWithValue("@msg", _msgInput.Text);
-                    cmd.ExecuteNonQuery();
-                }
+                await _mw.ApiCallAsync(
+                    "INSERT INTO uzenetek(id,sender_id,receiver_id,message) VALUES(@p0,@p1,@p2,@p3)",
+                    new object[] { msgId, MainWindow.LoggedInUserId, _partnerId.Value, _msgInput.Text },
+                    "insert"
+                );
                 _msgInput.Clear();
-                LoadMessages(_partnerId.Value);
-                LoadPartners();
+                await LoadMessagesAsync(_partnerId.Value);
+                await LoadPartnersAsync();
             }
             catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
         }
@@ -2444,7 +2418,7 @@ namespace cucisstuff
             _mw = mw;
             _itemId = itemId;
             Build();
-            LoadItem();
+            Loaded += async (s, e) => await LoadItemAsync();
         }
 
         private void Build()
@@ -2467,7 +2441,6 @@ namespace cucisstuff
                 Margin = new Thickness(0, 16, 0, 16)
             });
 
-            // Termék info box
             var infoBorder = new Border
             {
                 Background = new SolidColorBrush(Color.FromRgb(0x0F, 0x0F, 0x0F)),
@@ -2516,7 +2489,6 @@ namespace cucisstuff
             _cityBox = AddFormField(formGrid, "Város *", 2, 1, false);
             _addrBox = AddFormField(formGrid, "Cím *", 3, 0, true);
 
-            // Submit
             while (formGrid.RowDefinitions.Count < 5)
                 formGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
@@ -2525,7 +2497,7 @@ namespace cucisstuff
             Grid.SetRow(submitBtn, 4);
             Grid.SetColumnSpan(submitBtn, 2);
             formGrid.Children.Add(submitBtn);
-            submitBtn.Click += (s, e) => Submit();
+            submitBtn.Click += async (s, e) => await SubmitAsync();
 
             stack.Children.Add(formGrid);
             sv.Content = stack;
@@ -2549,40 +2521,37 @@ namespace cucisstuff
             return tb;
         }
 
-        private void LoadItem()
+        private async Task LoadItemAsync()
         {
             try
             {
-                using (var conn = _mw.GetConnection())
-                using (var cmd = new MySqlCommand(
+                var items = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
                     @"SELECT i.id, i.title, i.price, i.sold, i.user_id, u.username
                       FROM items i JOIN users u ON i.user_id=u.id
-                      WHERE i.id=@id", conn))
+                      WHERE i.id=@p0",
+                    new object[] { _itemId }
+                );
+
+                if (items.Count > 0)
                 {
-                    cmd.Parameters.AddWithValue("@id", _itemId);
-                    using (var r = cmd.ExecuteReader())
+                    var r = items[0];
+                    _item = new ItemViewModel
                     {
-                        if (r.Read())
-                        {
-                            _item = new ItemViewModel
-                            {
-                                Id = r.GetString("id"),
-                                Title = r.GetString("title"),
-                                Price = r.GetDecimal("price"),
-                                IsSold = r.GetBoolean("sold"),
-                                SellerId = r.GetInt32("user_id"),
-                                SellerName = r.GetString("username")
-                            };
-                            _titleLabel.Text = _item.Title;
-                            _priceLabel.Text = _item.PriceFormatted;
-                        }
-                    }
+                        Id = r["id"]?.ToString(),
+                        Title = r["title"]?.ToString(),
+                        Price = r["price"].GetDecimal(),
+                        IsSold = r["sold"].GetInt32() == 1,
+                        SellerId = r["user_id"].GetInt32(),
+                        SellerName = r["username"]?.ToString()
+                    };
+                    _titleLabel.Text = _item.Title;
+                    _priceLabel.Text = _item.PriceFormatted;
                 }
             }
             catch { }
         }
 
-        private void Submit()
+        private async Task SubmitAsync()
         {
             if (!_mw.CanPerformWriteOperation())
             { MessageBox.Show("VIZSGALOCK aktív!"); return; }
@@ -2607,46 +2576,24 @@ namespace cucisstuff
 
             try
             {
-                using (var conn = _mw.GetConnection())
-                using (var tr = conn.BeginTransaction())
-                {
-                    try
-                    {
-                        string orderId = _mw.GenerateId();
-                        using (var cmd = new MySqlCommand(
-                            @"INSERT INTO orders(id,buyer_id,seller_id,item_id,status,
-                                shipping_name,shipping_email,shipping_phone,
-                                shipping_zip,shipping_city,shipping_address,payment_method)
-                              VALUES(@id,@bid,@sid,@iid,'pending',
-                                @sn,@se,@sp,@sz,@sc,@sa,'cod')",
-                            conn, tr))
-                        {
-                            cmd.Parameters.AddWithValue("@id", orderId);
-                            cmd.Parameters.AddWithValue("@bid", MainWindow.LoggedInUserId);
-                            cmd.Parameters.AddWithValue("@sid", _item.SellerId);
-                            cmd.Parameters.AddWithValue("@iid", _itemId);
-                            cmd.Parameters.AddWithValue("@sn", name);
-                            cmd.Parameters.AddWithValue("@se", email);
-                            cmd.Parameters.AddWithValue("@sp", phone);
-                            cmd.Parameters.AddWithValue("@sz", zip);
-                            cmd.Parameters.AddWithValue("@sc", city);
-                            cmd.Parameters.AddWithValue("@sa", addr);
-                            cmd.ExecuteNonQuery();
-                        }
+                string orderId = _mw.GenerateId();
+                await _mw.ApiCallAsync(
+                    @"INSERT INTO orders(id,buyer_id,seller_id,item_id,status,
+                        shipping_name,shipping_email,shipping_phone,
+                        shipping_zip,shipping_city,shipping_address,payment_method)
+                      VALUES(@p0,@p1,@p2,@p3,'pending',
+                        @p4,@p5,@p6,@p7,@p8,@p9,'cod')",
+                    new object[] { orderId, MainWindow.LoggedInUserId, _item.SellerId, _itemId, name, email, phone, zip, city, addr },
+                    "insert"
+                );
 
-                        using (var sc = new MySqlCommand(
-                            "UPDATE items SET sold=1 WHERE id=@id", conn, tr))
-                        {
-                            sc.Parameters.AddWithValue("@id", _itemId);
-                            sc.ExecuteNonQuery();
-                        }
+                await _mw.ApiExecuteAsync(
+                    "UPDATE items SET sold=1 WHERE id=@p0",
+                    new object[] { _itemId }
+                );
 
-                        tr.Commit();
-                        MessageBox.Show("Rendelés leadva!", "Siker", MessageBoxButton.OK, MessageBoxImage.Information);
-                        _mw.NavigateToMain();
-                    }
-                    catch { tr.Rollback(); throw; }
-                }
+                MessageBox.Show("Rendelés leadva!", "Siker", MessageBoxButton.OK, MessageBoxImage.Information);
+                _mw.NavigateToMain();
             }
             catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
         }
