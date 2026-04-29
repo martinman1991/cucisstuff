@@ -1173,29 +1173,57 @@ namespace cucisstuff
                 BorderThickness = new Thickness(2),
                 CornerRadius = new CornerRadius(16)
             };
+            outer.MouseLeftButtonDown += (s, e) =>
+            {
+                if (e.GetPosition(outer).Y <= 40)
+                    DragMove();
+            };
 
             var outerGrid = new Grid();
+            outerGrid.Background = Brushes.Transparent;
             outer.Child = outerGrid;
+
+            // Cím sáv: bal oldalon cím szöveg, jobb oldalon ✕ gomb — így nem fedi a scrollbart
+            var titleBar = new Grid
+            {
+                Height = 44,
+                VerticalAlignment = VerticalAlignment.Top
+            };
+            titleBar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            titleBar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var windowTitle = new TextBlock
+            {
+                Text = "Termék részletei",
+                Foreground = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)),
+                FontSize = 13,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(16, 0, 0, 0)
+            };
+            Grid.SetColumn(windowTitle, 0);
+            titleBar.Children.Add(windowTitle);
 
             var closeBtn = new Button
             {
                 Content = "✕",
                 Background = Brushes.Transparent,
                 Foreground = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)),
-                FontSize = 18,
+                FontSize = 16,
                 Width = 36,
                 Height = 36,
                 BorderThickness = new Thickness(0),
                 Cursor = Cursors.Hand,
-                HorizontalAlignment = HorizontalAlignment.Right,
-                VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(0, 8, 8, 0)
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 6, 0)
             };
             closeBtn.Click += (s, e) => Close();
-            Panel.SetZIndex(closeBtn, 20);
-            outerGrid.Children.Add(closeBtn);
+            Grid.SetColumn(closeBtn, 1);
+            titleBar.Children.Add(closeBtn);
 
-            var grid = new Grid();
+            Panel.SetZIndex(titleBar, 100);
+            outerGrid.Children.Add(titleBar);
+
+            var grid = new Grid { Margin = new Thickness(0, 44, 0, 0) };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.5, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             outerGrid.Children.Add(grid);
