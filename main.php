@@ -31,10 +31,10 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     exit();
 }
 
-// Database connection
+// Adatbázis kapcsolat
 require_once 'config.php';
 
-// === ÚJ: KÉP ÁTMÉRETEZŐ FÜGGVÉNY ===
+// === KÉP ÁTMÉRETEZŐ FÜGGVÉNY ===
 /**
  * Átméretezi a képet, ha bármelyik oldala nagyobb a megadott maximumnál.
  * A nagyobbik oldal a maxDim lesz, a másik arányosan változik.
@@ -155,7 +155,7 @@ try {
     $conn = new PDO("mysql:host=" . DB_HOST . ";dbname=" . DB_NAME, DB_USER, DB_PASS);
     $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-    // Check if current user is admin
+    // Ellenőrizzük, hogy a jelenlegi felhasználó admin-e
     $isAdmin = false;
     if (isset($_SESSION['user_id'])) {
         $adminCheck = $conn->prepare("SELECT COUNT(*) FROM admins WHERE user_id = ?");
@@ -164,7 +164,7 @@ try {
     }
 
     // =============================================
-    // GET UNREAD MESSAGES COUNT (JSON output) - REALTIME BADGE FRISSÍTÉSHEZ
+    // OLVASATLAN ÜZENETEK SZÁMA (JSON kimenet) - VALÓS IDEJŰ JELVÉNY FRISSÍTÉSHEZ
     // =============================================
     if (isset($_GET['get_unread_count'])) {
         header('Content-Type: application/json');
@@ -206,7 +206,7 @@ try {
     }
 
     // =============================================
-    // SEARCH HANDLER (JSON output)
+    // KERESÉS KEZELŐ (JSON kimenet)
     // =============================================
     if (isset($_GET['search_query']) && strlen($_GET['search_query']) >= 2) {
         header('Content-Type: application/json');
@@ -232,14 +232,14 @@ try {
     }
 
     // =============================================
-    // GET ITEM DETAILS (JSON output)
+    // TERMÉK RÉSZLETEK LEKÉRÉSE (JSON kimenet)
     // =============================================
     if (isset($_GET['get_item']) && !empty($_GET['get_item'])) {
         header('Content-Type: application/json');
         try {
             $itemId = $_GET['get_item'];
 
-            // Fetch item details
+            // Termék adatainak lekérése
             $stmt = $conn->prepare("
                 SELECT i.id, i.title, i.description, i.price, i.created_at, u.username as seller_name, i.user_id, i.sold
                 FROM items i
@@ -254,7 +254,7 @@ try {
                 exit;
             }
 
-            // Fetch all images for the item
+            // Az adott termék összes képének lekérése
             $imgStmt = $conn->prepare("SELECT image_path FROM item_images WHERE item_id = ? ORDER BY sort_order");
             $imgStmt->execute([$itemId]);
             $images = $imgStmt->fetchAll(PDO::FETCH_COLUMN);
@@ -268,14 +268,14 @@ try {
     }
 
     // =============================================
-    // GET SELLER PROFILE (JSON output)
+    // ELADÓ PROFIL LEKÉRÉSE (JSON kimenet)
     // =============================================
     if (isset($_GET['get_seller']) && !empty($_GET['get_seller'])) {
         header('Content-Type: application/json');
         try {
             $sellerId = (int)$_GET['get_seller'];
 
-            // --- MÓDOSÍTÁS: profile_picture lekérése ---
+            // Eladó profiljának és termékszámának lekérése (profilkép hozzáadva)
             $sellerStmt = $conn->prepare("
                 SELECT u.id, u.username, u.created_at, u.profile_picture,
                        COUNT(DISTINCT i.id) AS item_count,
@@ -293,7 +293,7 @@ try {
                 exit;
             }
 
-            // Latest items
+            // Legutóbbi termékek
             $latestStmt = $conn->prepare("
                 SELECT i.id, i.title, i.price,
                        (SELECT image_path FROM item_images WHERE item_id = i.id AND is_primary = 1 LIMIT 1) as thumb
@@ -340,7 +340,7 @@ try {
         $description = trim($_POST['item_description'] ?? '');
         $price       = trim($_POST['item_price'] ?? '');
 
-        // Check for uploaded files
+        // Feltöltött fájlok ellenőrzése
         if (!isset($_FILES['item_images']) || empty($_FILES['item_images']['name'][0]) || $_FILES['item_images']['error'][0] === UPLOAD_ERR_NO_FILE) {
             $_SESSION['upload_error'] = 'Legalább egy képet fel kell tölteni!';
             $_SESSION['form_data'] = compact('title', 'description', 'price');
@@ -357,7 +357,7 @@ try {
             header("Location: main.php");
             exit();
         } else {
-            // Validate images
+            // Képek validálása
             $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
             $maxFileSize = 5 * 1024 * 1024; // 5MB
             $files = $_FILES['item_images'];
@@ -374,7 +374,7 @@ try {
                 UPLOAD_ERR_EXTENSION  => 'Egy PHP kiterjesztés leállította a feltöltést.',
             ];
 
-            // Check each file
+            // Minden fájl ellenőrzése
             for ($i = 0; $i < count($files['name']); $i++) {
                 if ($files['error'][$i] !== UPLOAD_ERR_OK) {
                     $errCode = $files['error'][$i];
@@ -398,17 +398,17 @@ try {
                 }
             }
 
-            // Generate unique 12-char ID for the item
+            // Egyedi 12 karakteres azonosító generálása a termékhez
             do {
                 $newId = substr(str_shuffle('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'), 0, 12);
                 $check = $conn->prepare("SELECT COUNT(*) FROM items WHERE id = ?");
                 $check->execute([$newId]);
             } while ($check->fetchColumn() > 0);
 
-            // Start transaction
+            // Tranzakció indítása
             $conn->beginTransaction();
             try {
-                // Insert item
+                // Termék beszúrása
                 $insert = $conn->prepare("
                     INSERT INTO items (id, user_id, title, description, price)
                     VALUES (:id, :user_id, :title, :description, :price)
@@ -421,7 +421,7 @@ try {
                     ':price'       => floatval($price),
                 ]);
 
-                // Create directory for images if it doesn't exist
+                // Képkönyvtár létrehozása, ha még nem létezik
                 $uploadDir = 'uploads/' . $newId . '/';
                 if (!file_exists($uploadDir)) {
                     if (!mkdir($uploadDir, 0777, true) && !is_dir($uploadDir)) {
@@ -429,15 +429,15 @@ try {
                     }
                 }
 
-                // Upload each image
+                // Minden kép feltöltése
                 $sortOrder = 0;
                 for ($i = 0; $i < count($files['name']); $i++) {
-                    // Generate unique filename to avoid conflicts
+                    // Egyedi fájlnév generálása az ütközések elkerülésére
                     $extension = pathinfo($files['name'][$i], PATHINFO_EXTENSION);
                     $filename = uniqid() . '_' . $i . '.' . $extension;
                     $filepath = $uploadDir . $filename;
 
-                    // === MÓDOSÍTÁS: Átméretezés a feltöltött képen ===
+                    // A feltöltött kép átméretezése
                     if (!resizeImage($files['tmp_name'][$i], $filepath, 1024)) {
                         $lastError = error_get_last();
                         throw new Exception(
@@ -447,7 +447,7 @@ try {
                         );
                     }
 
-                    // Save to database
+                    // Adatbázisba mentés
                     $imageInsert = $conn->prepare("
                         INSERT INTO item_images (item_id, image_path, image_filename, is_primary, sort_order)
                         VALUES (:item_id, :image_path, :image_filename, :is_primary, :sort_order)
@@ -477,14 +477,14 @@ try {
         }
     }
 
-    // Handle item update
+    // Hirdetés módosításának kezelése
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_item'])) {
         $itemId  = $_POST['item_id'] ?? '';
         $title   = trim($_POST['edit_title'] ?? '');
         $desc    = trim($_POST['edit_description'] ?? '');
         $price   = trim($_POST['edit_price'] ?? '');
 
-        // Verify ownership or admin
+        // Tulajdonjog vagy admin jogosultság ellenőrzése
         $ownerCheck = $conn->prepare("SELECT user_id FROM items WHERE id = ?");
         $ownerCheck->execute([$itemId]);
         $ownerRow = $ownerCheck->fetch(PDO::FETCH_ASSOC);
@@ -505,11 +505,11 @@ try {
         }
     }
 
-    // Handle item deletion
+    // Hirdetés törlésének kezelése
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_item'])) {
         $itemId = $_POST['item_id'] ?? '';
 
-        // Check ownership
+        // Tulajdonjog ellenőrzése
         $ownerCheck2 = $conn->prepare("SELECT user_id FROM items WHERE id = ?");
         $ownerCheck2->execute([$itemId]);
         $ownerRow2 = $ownerCheck2->fetch(PDO::FETCH_ASSOC);
@@ -517,29 +517,29 @@ try {
 
         if ($canDelete) {
             try {
-                // Get all images for this item to delete files
+                // A törlendő termék összes képének lekérése a fájlok törléséhez
                 $imageStmt = $conn->prepare("SELECT image_path FROM item_images WHERE item_id = ?");
                 $imageStmt->execute([$itemId]);
                 $images = $imageStmt->fetchAll(PDO::FETCH_ASSOC);
 
-                // Delete image files
+                // Képfájlok törlése
                 foreach ($images as $image) {
                     if (file_exists($image['image_path'])) {
                         unlink($image['image_path']);
                     }
                 }
 
-                // Delete the item's directory
+                // A termék könyvtárának törlése
                 $itemDir = 'uploads/' . $itemId . '/';
                 if (is_dir($itemDir)) {
                     rmdir($itemDir);
                 }
 
-                // Delete from database
+                // Adatbázisból törlés
                 $deleteStmt = $conn->prepare("DELETE FROM items WHERE id = ?");
                 $deleteStmt->execute([$itemId]);
 
-                // Redirect to refresh the page
+                // Átirányítás az oldal frissítéséhez
                 if ($isAdmin) {
                     header("Location: main.php");
                 } else {
@@ -552,7 +552,7 @@ try {
         }
     }
 
-    // Handle item report
+    // Hirdetés jelentésének kezelése
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['report_item'])) {
         $itemId = $_POST['item_id'] ?? '';
         $reason = trim($_POST['report_reason'] ?? '');
@@ -570,17 +570,17 @@ try {
         }
     }
 
-    // Pagination settings
+    // Lapozás beállításai
     $itemsPerPage = 24;
     $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
     $offset = ($page - 1) * $itemsPerPage;
 
-    // Get total items count (csak nem elkelt termékek)
+    // Összes termék számának lekérése (csak nem elkelt termékek)
     $totalStmt = $conn->query("SELECT COUNT(*) FROM items WHERE sold = FALSE");
     $totalItems = $totalStmt->fetchColumn();
     $totalPages = ceil($totalItems / $itemsPerPage);
 
-    // Új seed generálása ha:
+    // Új seed generálása, ha:
     // 1. Még nincs seed (első látogatás)
     // 2. Oldalfrissítés történt (nincs ?page= a GET-ben, és a referer nem main.php lapozás)
     // 3. Másik oldalról jött vissza (referer nem main.php)
@@ -591,7 +591,7 @@ try {
     }
     $seed = $_SESSION['items_seed'];
 
-    // Fetch items for current page with session-based RAND seed (csak nem elkelt termékek)
+    // Termékek lekérése az aktuális oldalhoz session-alapú RAND seed-del (csak nem elkelt termékek)
     $stmt = $conn->prepare("
         SELECT i.*, u.username as seller_name
         FROM items i
@@ -612,7 +612,7 @@ try {
     $page = 1;
 }
 
-// Függvény a readmore-hoz
+// Segédfüggvény az üzenetek formázásához (readmore funkció)
 function formatMessage($msg)
 {
     $msg = htmlspecialchars($msg);
@@ -621,7 +621,7 @@ function formatMessage($msg)
     return $msg;
 }
 
-// Unread messages count
+// Olvasatlan üzenetek száma
 $unreadMsgCount = 0;
 try {
     $unreadStmt = $conn->prepare("SELECT COUNT(*) FROM uzenetek WHERE receiver_id = ? AND is_read = 0");
@@ -643,7 +643,7 @@ try {
     <link rel="icon" type="image/png" href="logo.png">
     <style>
         /* ═══════════════════════════════════════════════════════════════════
-        MAIN STYLES (dark mode default)
+        FŐ STÍLUSOK (sötét mód alapértelmezett)
         ═══════════════════════════════════════════════════════════════════ */
         * {
             box-sizing: border-box;
@@ -793,7 +793,7 @@ try {
             }
         }
 
-        /* Top bar - KÖZÉPRE IGAZÍTOTT VERZIÓ */
+        /* Felső sáv - KÖZÉPRE IGAZÍTOTT VERZIÓ */
         .top-bar {
             position: fixed;
             top: 0;
@@ -991,7 +991,7 @@ try {
             opacity: 0.6;
         }
 
-        /* LIGHT MODE OVERRIDES FOR SEARCH */
+        /* VILÁGOS MÓD FELÜLBÍRÁLÁSOK A KERESŐHÖZ */
         body[data-theme="light"] .search-input {
             background: rgba(245, 252, 215, 0.9);
             border-color: rgba(140, 170, 10, 0.4);
@@ -1034,7 +1034,7 @@ try {
             border-color: rgba(140, 170, 10, 0.3);
         }
 
-        /* Account menu */
+        /* Fiók menü */
         .account-menu {
             position: relative;
             display: inline-block;
@@ -1219,7 +1219,7 @@ try {
         }
 
         /* =====================
-        MAIN CONTENT & GRID
+        FŐ TARTALOM ÉS RÁCS
         ===================== */
         .main-content {
             width: 100%;
@@ -1408,7 +1408,7 @@ try {
             opacity: 0.5;
         }
 
-        /* Card Menu Styles */
+        /* Kártya menü stílusai */
         .card-menu {
             position: absolute;
             top: 10px;
@@ -1485,7 +1485,7 @@ try {
             color: #ff0000;
         }
 
-        /* ===================== EDIT MODAL (REDESIGNED) ===================== */
+        /* ===================== SZERKESZTŐ MODÁL (ÚJRATERVEZETT) ===================== */
         .edit-modal {
             position: fixed;
             top: 0;
@@ -1593,7 +1593,7 @@ try {
             outline: none;
         }
 
-        /* Fix textarea: no resize, fixed height, scrollable */
+        /* Javítás: textarea ne legyen átméretezhető, fix magasság, görgethető */
         .edit-form-textarea {
             resize: none;
             height: 120px;
@@ -1631,7 +1631,7 @@ try {
             margin-top: 0.5rem;
         }
 
-        /* Report Modal Styles */
+        /* Bejelentés modál stílusai */
         .report-modal {
             position: fixed;
             top: 0;
@@ -1716,7 +1716,7 @@ try {
             transform: translateY(-2px);
         }
 
-        /* Floating Pagination */
+        /* Lebegő lapozó */
         .floating-pagination {
             position: fixed;
             bottom: 20px;
@@ -1778,7 +1778,7 @@ try {
         }
 
         /* =====================
-        UPLOAD MODAL
+        FELTÖLTÉS MODÁL
         ===================== */
         .modal-overlay {
             position: fixed;
@@ -2089,7 +2089,7 @@ try {
         }
 
         /* =====================
-        DELETE CONFIRM MODAL
+        TÖRLÉS MEGERŐSÍTŐ MODÁL
         ===================== */
         .delete-confirm-modal {
             position: fixed;
@@ -2205,7 +2205,7 @@ try {
             box-shadow: 0 4px 15px rgba(255, 0, 0, 0.4);
         }
 
-        /* Light mode overrides for delete confirm modal */
+        /* Világos mód felülbírálások a törlés megerősítő modálhoz */
         body[data-theme="light"] .delete-confirm-modal {
             background: rgba(220, 230, 180, 0.85) !important;
         }
@@ -2255,7 +2255,7 @@ try {
         }
 
         /* =====================
-        PRODUCT MODAL
+        TERMÉKMODÁL
         ===================== */
         .product-modal-overlay {
             position: fixed;
@@ -2604,7 +2604,7 @@ try {
             box-shadow: 0 10px 30px rgba(0, 200, 0, 0.4);
         }
 
-        /* ========== ELKELT GOMB STÍLUSA (témafüggetlen) ========== */
+        /* ELKELT GOMB STÍLUSA (témafüggetlen) */
         .product-buy-btn.sold {
             background: #555 !important;
             color: #aaa !important;
@@ -2682,7 +2682,7 @@ try {
         }
 
         /* =====================
-        RESPONSIVE
+        RESZPONZÍV
         ===================== */
         @media (max-width: 1200px) {
             .product-modal-card {
@@ -2787,7 +2787,7 @@ try {
         }
 
         /* =====================
-        FLOATING MESSAGES BTN - VÉGLEGES KÉK VERZIÓ
+        LEBEGŐ ÜZENET GOMB - VÉGLEGES KÉK VERZIÓ
         ===================== */
         .floating-messages-btn {
             position: fixed;
@@ -2834,7 +2834,7 @@ try {
         }
 
         /* =====================
-        SELLER PROFILE POPUP — FULLSCREEN
+        ELADÓ PROFIL FELUGÓ ABLAK — TELJES KÉPERNYŐS
         ===================== */
         .seller-popup-overlay {
             position: fixed;
@@ -2873,7 +2873,7 @@ try {
             transform: scale(1);
         }
 
-        /* Fullscreen header bar */
+        /* Teljes képernyős fejléc sáv */
         .seller-popup-topbar {
             position: sticky;
             top: 0;
@@ -2915,7 +2915,7 @@ try {
             flex: 1;
         }
 
-        /* Inner content area */
+        /* Belső tartalom terület */
         .seller-popup-body {
             flex: 1;
             max-width: 560px;
@@ -3090,7 +3090,7 @@ try {
         }
 
         /* =====================
-        MOBIL TOP BAR RENDEZÉS
+        MOBIL FELSŐ SÁV ELRENDEZÉS
         ===================== */
         @media (max-width: 600px) {
             .top-bar {
@@ -3140,7 +3140,7 @@ try {
             }
         }
 
-        /* Admin badge sötétebb light módban – a theme-light.css-ben is felülírjuk */
+        /* Admin jelvény sötétebb light módban – a theme-light.css-ben is felülírjuk */
         .admin-badge {
             font-size: 0.7rem;
             background: rgba(255, 215, 0, 0.2);
@@ -3158,7 +3158,7 @@ try {
     <div class="orb-1"></div>
     <div class="orb-2"></div>
 
-    <!-- Top bar -->
+    <!-- Felső sáv -->
     <div class="top-bar">
         <div class="top-bar-left">
             <?php if ($isAdmin): ?>
@@ -3212,7 +3212,7 @@ try {
         </div>
     </div>
 
-    <!-- Upload Modal -->
+    <!-- Feltöltés modál -->
     <div class="modal-overlay" id="uploadModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
         <div class="modal-card">
             <button class="modal-close unselectable" id="closeModalBtn" type="button" aria-label="Bezárás">✕</button>
@@ -3279,7 +3279,7 @@ try {
         </div>
     </div>
 
-    <!-- ===================== EDIT MODAL (REDESIGNED) ===================== -->
+    <!-- ===================== SZERKESZTŐ MODÁL (ÚJRATERVEZETT) ===================== -->
     <div class="edit-modal" id="editModal">
         <div class="edit-modal-content">
             <div class="edit-modal-header">
@@ -3314,7 +3314,7 @@ try {
         </div>
     </div>
 
-    <!-- Report Modal -->
+    <!-- Bejelentés modál -->
     <div class="report-modal" id="reportModal">
         <div class="report-modal-content">
             <div class="report-modal-header">
@@ -3337,7 +3337,7 @@ try {
         </div>
     </div>
 
-    <!-- Delete Confirm Modal -->
+    <!-- Törlés megerősítő modál -->
     <div class="delete-confirm-modal" id="deleteConfirmModal">
         <div class="delete-confirm-modal-content">
             <div class="delete-confirm-modal-header">
@@ -3356,7 +3356,7 @@ try {
         </div>
     </div>
 
-    <!-- Product Detail Modal -->
+    <!-- Termék részletek modál -->
     <div class="product-modal-overlay" id="productModal">
         <div class="product-modal-card">
             <div class="product-modal-header">
@@ -3404,7 +3404,7 @@ try {
         </div>
     </div>
 
-    <!-- Floating Messages Button -->
+    <!-- Lebegő üzenet gomb -->
     <a href="uzenetek.php" class="floating-messages-btn unselectable" title="Üzenetek">
         💬
         <?php if ($unreadMsgCount > 0): ?>
@@ -3414,7 +3414,7 @@ try {
         <?php endif; ?>
     </a>
 
-    <!-- Seller Profile Popup Overlay -->
+    <!-- Eladó profil felugró ablak -->
     <div class="seller-popup-overlay" id="sellerPopupOverlay">
         <div class="seller-popup-card" id="sellerPopupCard">
             <div class="seller-popup-topbar">
@@ -3520,14 +3520,14 @@ try {
     </div>
 
     <script>
-        // Current product data
+        // Aktuális termék adatai
         let currentProductImages = [];
         let currentImageIndex = 0;
         let currentProductId = null;
         let currentProductUserId = null;
         let currentProductSold = false;
 
-        // Upload modal functionality
+        // Feltöltés modál funkciók
         const modal = document.getElementById('uploadModal');
         const openBtn = document.getElementById('openModalBtn');
         const closeBtn = document.getElementById('closeModalBtn');
@@ -3553,7 +3553,7 @@ try {
             if (e.key === 'Escape' && modal.classList.contains('active')) closeModal();
         });
 
-        // Image preview functionality
+        // Kép előnézet funkciók
         const imageInput = document.getElementById('item_images');
         const previewContainer = document.getElementById('imagePreview');
         const imagesError = document.getElementById('images-error');
@@ -3587,7 +3587,7 @@ try {
                 previewItem.setAttribute('data-index', index);
                 reader.onload = function(e) {
                     previewItem.innerHTML = `
-                        <img src="${e.target.result}" alt="Preview">
+                        <img src="${e.target.result}" alt="Előnézet">
                         <div class="image-preview-remove" data-index="${index}">×</div>
                         ${index === 0 ? '<div class="primary-badge unselectable">Főkép</div>' : ''}
                     `;
@@ -3670,7 +3670,7 @@ try {
             openModal();
         <?php endif; ?>
 
-        // Card menu functionality
+        // Kártya menü funkciók
         function toggleMenu(button) {
             const menu = button.nextElementSibling;
             menu.classList.toggle('show');
@@ -3687,7 +3687,7 @@ try {
             }
         });
 
-        // Report modal functionality
+        // Bejelentés modál funkciók
         const reportModal = document.getElementById('reportModal');
         const reportItemId = document.getElementById('reportItemId');
 
@@ -3710,7 +3710,7 @@ try {
             if (e.key === 'Escape' && reportModal.classList.contains('show')) closeReportModal();
         });
 
-        // Delete confirm modal functionality
+        // Törlés megerősítő modál funkciók
         let pendingDeleteItemId = null;
         const deleteConfirmModal = document.getElementById('deleteConfirmModal');
         const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
@@ -3752,7 +3752,7 @@ try {
             }
         });
 
-        // Product modal functionality
+        // Termék modál funkciók
         const productModal = document.getElementById('productModal');
         const closeProductModalBtn = document.getElementById('closeProductModalBtn');
         const productMainImage = document.getElementById('productMainImage');
@@ -3856,7 +3856,7 @@ try {
                     images.forEach((img, index) => {
                         const thumbnail = document.createElement('div');
                         thumbnail.className = `product-thumbnail ${index === 0 ? 'active' : ''}`;
-                        thumbnail.innerHTML = `<img src="${img}" alt="Thumbnail ${index + 1}">`;
+                        thumbnail.innerHTML = `<img src="${img}" alt="Bélyegkép ${index + 1}">`;
                         thumbnail.addEventListener('click', (e) => {
                             e.stopPropagation();
                             setMainImage(index);
@@ -3881,10 +3881,10 @@ try {
                     const deleteBtn = document.getElementById('productDeleteBtn');
                     const editBtn = document.getElementById('productEditBtn');
 
-                    // Always show menu
+                    // Menü mindig látszik
                     menuContainer.style.display = 'block';
 
-                    // Report: visible for non-owners (or admins can report too)
+                    // Bejelentés: nem tulajdonosoknak (vagy adminoknak is)
                     if (!isOwner || isAdmin) {
                         reportBtn.style.display = 'block';
                         reportBtn.onclick = () => {
@@ -3894,7 +3894,7 @@ try {
                         reportBtn.style.display = 'none';
                     }
 
-                    // Edit: visible for owner or admin
+                    // Szerkesztés: tulajdonosnak vagy adminnak
                     if (isOwner || isAdmin) {
                         editBtn.style.display = 'block';
                         editBtn.onclick = () => {
@@ -3909,7 +3909,7 @@ try {
                         editBtn.style.display = 'none';
                     }
 
-                    // Delete: visible for owner or admin
+                    // Törlés: tulajdonosnak vagy adminnak
                     if (isOwner || isAdmin) {
                         deleteBtn.style.display = 'block';
                         deleteBtn.onclick = () => {
@@ -4089,7 +4089,7 @@ try {
                         });
                     });
                 })
-                .catch(err => console.error('Search error:', err));
+                .catch(err => console.error('Keresési hiba:', err));
         }
 
         searchInput.addEventListener('input', () => {
@@ -4132,7 +4132,7 @@ try {
                         item.images.forEach((img, index) => {
                             const thumbnail = document.createElement('div');
                             thumbnail.className = `product-thumbnail ${index === 0 ? 'active' : ''}`;
-                            thumbnail.innerHTML = `<img src="${img}" alt="Thumbnail ${index+1}">`;
+                            thumbnail.innerHTML = `<img src="${img}" alt="Bélyegkép ${index+1}">`;
                             thumbnail.addEventListener('click', (e) => {
                                 e.stopPropagation();
                                 setMainImage(index);
@@ -4186,11 +4186,11 @@ try {
 
                     openProductModal();
                 })
-                .catch(err => console.error('Error fetching item details:', err));
+                .catch(err => console.error('Hiba a termék részleteinek lekérésekor:', err));
         }
 
         // =====================
-        // EDIT MODAL
+        // SZERKESZTŐ MODÁL
         // =====================
         const editModal = document.getElementById('editModal');
 
@@ -4227,7 +4227,7 @@ try {
         }
 
         // =============================================
-        // SELLER PROFILE POPUP
+        // ELADÓ PROFIL FELUGÓ ABLAK
         // =============================================
         const sellerOverlay = document.getElementById('sellerPopupOverlay');
         const sellerContent = document.getElementById('sellerPopupContent');
@@ -4253,7 +4253,7 @@ try {
                     const adminBadge = parseInt(data.is_admin) ? ' <span class="admin-badge unselectable">Admin</span>' : '';
                     const initial = data.username ? data.username.charAt(0).toUpperCase() : '?';
 
-                    // Update topbar title
+                    // Fejléc címének frissítése
                     document.querySelector('.seller-popup-topbar-title').textContent = '👤 ' + data.username;
 
                     // Avatar: profilkép vagy kezdőbetű
@@ -4325,7 +4325,7 @@ try {
             if (e.key === 'Escape' && sellerOverlay.classList.contains('active')) closeSellerPopup();
         });
 
-        // Make productSeller in product modal clickable
+        // Az eladó nevére kattintva a termékmodálban is megnyílik a profil
         document.getElementById('productSeller').addEventListener('click', function() {
             const sid = this.getAttribute('data-seller-id');
             if (sid) openSellerPopup(sid);
@@ -4353,7 +4353,7 @@ try {
         }
 
         // =====================
-        // UNREAD MESSAGES POLLING (realtime badge frissítés)
+        // OLVASATLAN ÜZENETEK POLLOZÁSA (valós idejű jelvény frissítés)
         // =====================
         let lastUnreadCount = <?php echo $unreadMsgCount; ?>;
         const msgBadge = document.getElementById('floatingMessagesBadge');
@@ -4409,13 +4409,13 @@ try {
                 const data = await response.json();
 
                 if (data.error) {
-                    console.error('Unread count error:', data.error);
+                    console.error('Olvasatlan üzenetek számlálási hiba:', data.error);
                     return;
                 }
 
                 const newCount = data.unread_count;
 
-                // Badge frissítése
+                // Jelvény frissítése
                 if (msgBadge) {
                     if (newCount > 0) {
                         msgBadge.textContent = newCount > 9 ? '9+' : newCount;
@@ -4432,14 +4432,14 @@ try {
 
                 lastUnreadCount = newCount;
             } catch (err) {
-                console.error('Polling hiba:', err);
+                console.error('Pollozási hiba:', err);
             }
         }
 
-        // Polling indítása (15 másodpercenként, hogy ne terhelje túl a szervert)
+        // Pollozás indítása (15 másodpercenként, hogy ne terhelje túl a szervert)
         let unreadPollInterval = setInterval(checkUnreadMessages, 15000);
 
-        // Ha az oldal inaktívvá válik, lassíthatjuk a pollingot
+        // Ha az oldal inaktívvá válik, lassíthatjuk a pollozást
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 clearInterval(unreadPollInterval);

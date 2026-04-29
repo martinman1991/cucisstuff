@@ -14,22 +14,28 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
     exit();
 }
 
+// Adatbázis kapcsolat betöltése
 require_once 'config.php';
 
+// POST kérések feldolgozása
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Beállítjuk a módot az alapján, hogy melyik gombot nyomták meg
     if (isset($_POST['login'])) {
         $mode = 'login';
     } elseif (isset($_POST['register'])) {
         $mode = 'register';
     }
 
+    // =============================================
     // BEJELENTKEZÉS KEZELÉSE
+    // =============================================
     if (isset($_POST['login'])) {
         if (!empty($_POST['felhasznalonev']) && !empty($_POST['jelszo'])) {
             $conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
             if ($conn->connect_error) {
                 $status = "Adatbázis hiba";
             } else {
+                // Felhasználó keresése email vagy felhasználónév alapján
                 $stmt = $conn->prepare("SELECT users.id, users.username, passwords.password_hash 
                                        FROM users 
                                        JOIN passwords ON users.password_id = passwords.id 
@@ -40,7 +46,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 if ($result->num_rows === 1) {
                     $row = $result->fetch_assoc();
+                    // Jelszó ellenőrzése
                     if (password_verify($_POST['jelszo'], $row['password_hash'])) {
+                        // Sikeres bejelentkezés – session adatok beállítása
                         $_SESSION['user_id'] = $row['id'];
                         $_SESSION['username'] = $row['username'];
                         $_SESSION['logged_in'] = true;
@@ -60,8 +68,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // =============================================
     // REGISZTRÁCIÓ KEZELÉSE
+    // =============================================
     if (isset($_POST['register'])) {
+        // Alapvető ellenőrzések
         if (empty($_POST['felhasznalonev']) || empty($_POST['email']) || empty($_POST['jelszo']) || empty($_POST['jelszo2'])) {
             $status = "Minden mező kitöltése kötelező";
         } elseif ($_POST['jelszo'] !== $_POST['jelszo2']) {
@@ -69,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (strpos($_POST['email'], '@') === false) {
             $status = "Érvénytelen email cím";
         } else {
-            // VIZSGALOCK ellenőrzés
+            // VIZSGALOCK ellenőrzés – ha aktív, csak adminok és kivételezettek regisztrálhatnak
             try {
                 $vlConn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
                 if (!$vlConn->connect_error) {
@@ -88,6 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($conn->connect_error) {
                 $status = "Adatbázis hiba";
             } else {
+                // Ellenőrizzük, hogy foglalt-e már az email vagy a felhasználónév
                 $stmt = $conn->prepare("SELECT email, username FROM users WHERE email = ? OR username = ? LIMIT 1");
                 $stmt->bind_param("ss", $_POST['email'], $_POST['felhasznalonev']);
                 $stmt->execute();
@@ -101,18 +113,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $status = "Felhasználónév már foglalt";
                     }
                 } else {
+                    // Jelszó hash-elése és felhasználó létrehozása
                     $hash = password_hash($_POST['jelszo'], PASSWORD_DEFAULT);
 
+                    // Jelszó tárolása a passwords táblában
                     $stmt = $conn->prepare("INSERT INTO passwords (password_hash) VALUES (?)");
                     $stmt->bind_param("s", $hash);
                     $stmt->execute();
                     $password_id = $stmt->insert_id;
 
+                    // Felhasználó létrehozása
                     $stmt = $conn->prepare("INSERT INTO users (email, username, password_id) VALUES (?, ?, ?)");
                     $stmt->bind_param("ssi", $_POST['email'], $_POST['felhasznalonev'], $password_id);
 
                     if ($stmt->execute()) {
-                        $mode = 'login';
+                        $mode = 'login';       // Visszaváltunk bejelentkező nézetre
                         $status = "Sikeres regisztráció";
                     } else {
                         $status = "Regisztrációs hiba";
@@ -132,6 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <title>Cuci's Stuff - Bejelentkezés</title>
+    <!-- Google Fonts betöltése -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -139,7 +155,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <style>
         /* ══════════════════════════════════════════
-           DARK THEME VARIABLES (alapértelmezett)
+           SÖTÉT TÉMA VÁLTOZÓI (alapértelmezett)
            ══════════════════════════════════════════ */
         :root,
         [data-theme="dark"] {
@@ -202,7 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         /* ══════════════════════════════════════════
-           LIGHT THEME VARIABLES
+           VILÁGOS TÉMA VÁLTOZÓI
            ══════════════════════════════════════════ */
         [data-theme="light"] {
             --orange-bright: #7a9200;
@@ -264,7 +280,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         /* ══════════════════════════════════════════
-           BASE RESET & LAYOUT
+           ALAPSTÍLUSOK ÉS OLDALELRENDEZÉS
            ══════════════════════════════════════════ */
         *,
         *::before,
@@ -313,7 +329,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             z-index: 0;
         }
 
-        /* ── NOISE GRAIN ── */
+        /* ── ZAJ TEXTÚRA ── */
         .noise {
             position: fixed;
             inset: -50%;
@@ -326,7 +342,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             mix-blend-mode: overlay;
         }
 
-        /* ── FLOATING ORBS ── */
+        /* ── LEBEGŐ GÖMBÖK ── */
         .orb-1 {
             position: fixed;
             top: -80px;
@@ -360,14 +376,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 transform: scale(1) translate(0, 0);
                 opacity: 0.8;
             }
-
             to {
                 transform: scale(1.15) translate(20px, 15px);
                 opacity: 1;
             }
         }
 
-        /* ── THEME TOGGLE BUTTON ── */
+        /* ── TÉMAVÁLTÓ GOMB ── */
         #themeToggle {
             position: fixed;
             top: 14px;
@@ -403,7 +418,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             display: none;
         }
 
-        /* Sun icon: visible in dark mode, hidden in light */
+        /* Nap ikon: sötét módban látható, világos módban rejtett */
         [data-theme="dark"] .icon-sun {
             display: inline;
         }
@@ -420,7 +435,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             display: inline;
         }
 
-        /* fallback (before JS runs, :root = dark) */
+        /* Alapértelmezett (JS előtt, :root = sötét) */
         .icon-sun {
             display: inline;
         }
@@ -429,7 +444,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             display: none;
         }
 
-        /* ── TOP STATUS BAR ── */
+        /* ── FELSŐ ÁLLAPOTSÁV ── */
         .login-status {
             position: fixed;
             top: 0;
@@ -450,7 +465,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             transition: background 0.4s ease;
         }
 
-        /* ── HEADING ── */
+        /* ── FŐCÍM ── */
         h1 {
             font-size: 2.6rem;
             font-weight: 300;
@@ -476,14 +491,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 opacity: 0;
                 transform: translateY(-12px);
             }
-
             to {
                 opacity: 1;
                 transform: translateY(0);
             }
         }
 
-        /* ── GLASSMORPHIC CARD ── */
+        /* ── ÜVEGHATÁSÚ KÁRTYA (ŰRLAP) ── */
         form {
             position: relative;
             z-index: 2;
@@ -509,7 +523,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 opacity: 0;
                 transform: translateY(24px) scale(0.97);
             }
-
             to {
                 opacity: 1;
                 transform: translateY(0) scale(1);
@@ -539,7 +552,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             transition: background 0.4s ease;
         }
 
-        /* ── INPUTS ── */
+        /* ── BEMENETI MEZŐK ── */
         input {
             padding: 14px 20px;
             border-radius: 50px;
@@ -568,7 +581,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             color: var(--input-focus-color);
         }
 
-        /* ── BUTTONS ── */
+        /* ── GOMBOK ── */
         button {
             padding: 15px;
             border-radius: 50px;
@@ -633,7 +646,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             text-shadow: var(--btn-ghost-hover-text-shadow);
         }
 
-        /* ── OR SEPARATOR ── */
+        /* ── VAGY ELVÁLASZTÓ ── */
         .or-separator {
             display: flex;
             align-items: center;
@@ -662,7 +675,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             z-index: 1;
         }
 
-        /* ── SCROLLBAR ── */
+        /* ── GÖRDŐSÁV ── */
         ::-webkit-scrollbar {
             width: 6px;
         }
@@ -680,31 +693,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             background: var(--scrollbar-thumb-hover);
         }
 
-        /* ── SELECTION ── */
+        /* ── KIJELÖLÉS ── */
         ::selection {
             background: var(--orange-glow);
             color: #fff;
         }
 
-        /* ── UNSELECTABLE ── */
+        /* ── KIJELÖLHETETLEN SZÖVEG ── */
         .unselectable {
             user-select: none;
             -webkit-user-select: none;
         }
 
-        /* ── RESPONSIVE ── */
+        /* ── RESZPONZÍV MÉRETEZÉS ── */
         @media (max-width: 1200px) {
             body {
                 padding: 24px;
                 padding-top: 80px;
             }
-
             h1 {
                 font-size: 3.2rem;
                 margin-bottom: 40px;
                 letter-spacing: 8px;
             }
-
             form {
                 max-width: 680px;
                 width: 100%;
@@ -712,28 +723,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 gap: 28px;
                 border-radius: 36px;
             }
-
             input {
                 padding: 22px 28px;
                 font-size: 1.3rem;
                 border-radius: 70px;
             }
-
             input::placeholder {
                 font-size: 1.2rem;
             }
-
             button {
                 padding: 24px;
                 font-size: 1.3rem;
                 letter-spacing: 4px;
                 border-radius: 70px;
             }
-
             .or-separator {
                 margin: 18px 0 12px;
             }
-
             .or-separator span {
                 font-size: 0.9rem;
                 padding: 0 24px;
@@ -744,21 +750,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             body {
                 padding-top: 70px;
             }
-
             form {
                 max-width: 520px;
                 padding: 48px 50px 44px;
             }
-
             h1 {
                 font-size: 2.8rem;
             }
-
             input {
                 padding: 18px 24px;
                 font-size: 1.1rem;
             }
-
             button {
                 padding: 18px;
                 font-size: 1.1rem;
@@ -770,16 +772,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 max-width: 480px;
                 padding: 42px 48px 38px;
             }
-
             h1 {
                 font-size: 2.6rem;
             }
-
             input {
                 padding: 14px 20px;
                 font-size: 0.95rem;
             }
-
             button {
                 padding: 15px;
                 font-size: 0.9rem;
@@ -791,25 +790,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 padding: 16px;
                 padding-top: 70px;
             }
-
             h1 {
                 font-size: 2.4rem;
                 margin-bottom: 30px;
                 letter-spacing: 5px;
             }
-
             form {
                 max-width: 100%;
                 padding: 36px 24px 32px;
                 gap: 20px;
                 border-radius: 28px;
             }
-
             input {
                 padding: 18px 22px;
                 font-size: 1.1rem;
             }
-
             button {
                 padding: 20px;
                 font-size: 1.1rem;
@@ -817,7 +812,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     </style>
 
-    <!-- FOUC megelőzése: téma alkalmazása a DOM renderelés előtt -->
+    <!-- FOUC (tartalom villanás) megelőzése: téma alkalmazása a DOM renderelés előtt -->
     <script>
         (function() {
             var saved = localStorage.getItem('theme') || 'dark';
@@ -844,6 +839,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <h1>Cuci's <span>Stuff</span></h1>
 
     <?php if ($mode === 'login'): ?>
+        <!-- BEJELENTKEZÉSI ŰRLAP -->
         <form action="" method="post" id="loginForm">
             <input type="text" name="felhasznalonev" placeholder="Felhasználónév vagy email"
                 value="<?php echo isset($_POST['felhasznalonev']) ? htmlspecialchars($_POST['felhasznalonev']) : ''; ?>">
@@ -853,6 +849,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <button type="button" onclick="register()">Regisztráció</button>
         </form>
     <?php elseif ($mode === 'register'): ?>
+        <!-- REGISZTRÁCIÓS ŰRLAP -->
         <form action="" method="post" id="registerForm">
             <input type="text" name="felhasznalonev" placeholder="Felhasználónév"
                 value="<?php echo isset($_POST['felhasznalonev']) ? htmlspecialchars($_POST['felhasznalonev']) : ''; ?>">
@@ -866,25 +863,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <?php endif; ?>
 
     <script>
-        // ── TÉMA KEZELÉS ──
+        // ── TÉMA KEZELÉSE ──
 
+        /**
+         * Téma alkalmazása az oldalra
+         * @param {string} theme - 'dark' vagy 'light'
+         */
         function applyTheme(theme) {
             document.documentElement.setAttribute('data-theme', theme);
             document.body.setAttribute('data-theme', theme);
             localStorage.setItem('theme', theme);
         }
 
+        // Oldal betöltésekor a mentett vagy alapértelmezett téma beállítása
         (function initTheme() {
             var saved = localStorage.getItem('theme') || 'dark';
             applyTheme(saved);
         })();
 
+        // Témaváltó gomb eseménykezelője
         document.getElementById('themeToggle').addEventListener('click', function() {
             var current = localStorage.getItem('theme') || 'dark';
             applyTheme(current === 'dark' ? 'light' : 'dark');
         });
 
-        // ── STATUS ÜZENET ──
+        // ── ÁLLAPOT ÜZENET ──
+        // 3 másodperc után elhalványodik és eltűnik
 
         var statusEl = document.getElementById("statusMessage");
         if (statusEl) {
@@ -897,8 +901,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }, 3000);
         }
 
-        // ── REGISZTRÁCIÓS ŰRLAP ──
+        // ── REGISZTRÁCIÓS ŰRLAP DINAMIKUS MEGJELENÍTÉSE ──
 
+        /**
+         * Bejelentkezési űrlap lecserélése regisztrációs űrlapra
+         */
         function register() {
             var loginForm = document.getElementById("loginForm");
             if (loginForm) loginForm.remove();
@@ -918,6 +925,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             document.querySelector('h1').insertAdjacentElement('afterend', registerForm);
         }
 
+        /**
+         * Visszaváltás a bejelentkezési űrlapra
+         */
         function loginBack() {
             var registerForm = document.getElementById("registerForm");
             if (registerForm) registerForm.remove();
