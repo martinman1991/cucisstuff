@@ -1,6 +1,6 @@
-﻿using System;
+﻿using Microsoft.Win32;
+using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
@@ -11,10 +11,10 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using Microsoft.Win32;
 
 namespace cucisstuff
 {
@@ -114,11 +114,10 @@ namespace cucisstuff
                 throw new Exception($"API hiba: {response.StatusCode} - {responseBody}");
             }
 
-            // using var doc = JsonDocument.Parse(responseBody);   ← régi sor törölve
             JsonElement root;
             using (var doc = JsonDocument.Parse(responseBody))
             {
-                root = doc.RootElement.Clone();  // ← fontos a Clone(), mert a doc megszűnik
+                root = doc.RootElement.Clone();
 
                 if (root.TryGetProperty("error", out var error))
                 {
@@ -345,9 +344,9 @@ namespace cucisstuff
             btn.Template = t;
         }
 
-        public static TextBox MakeInput(string placeholder = "", bool isPassword = false)
+        public static TextBox MakeInput(string placeholder = "")
         {
-            var tb = new TextBox
+            return new TextBox
             {
                 Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x24, 0x18)),
                 Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
@@ -357,7 +356,6 @@ namespace cucisstuff
                 Padding = new Thickness(14, 12, 14, 12),
                 CaretBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F))
             };
-            return tb;
         }
 
         public static TextBlock MakeLabel(string text)
@@ -370,6 +368,89 @@ namespace cucisstuff
                 Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
                 Margin = new Thickness(0, 0, 0, 6)
             };
+        }
+
+        // ============================================
+        // EGYSZERŰ INPUT DIALOG
+        // ============================================
+        public static string ShowInputDialog(string prompt, string title, string defaultValue = "")
+        {
+            var dialog = new Window
+            {
+                Title = title,
+                Width = 400,
+                Height = 180,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                WindowStyle = WindowStyle.ToolWindow,
+                ResizeMode = ResizeMode.NoResize,
+                Owner = Application.Current.MainWindow
+            };
+
+            var grid = new Grid { Margin = new Thickness(10) };
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            var label = new TextBlock
+            {
+                Text = prompt,
+                Margin = new Thickness(0, 5, 0, 8),
+                FontSize = 13,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8))
+            };
+            Grid.SetRow(label, 0);
+            grid.Children.Add(label);
+
+            var textBox = new TextBox
+            {
+                Text = defaultValue,
+                FontSize = 14,
+                Padding = new Thickness(8, 6, 8, 6),
+                Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x24, 0x18)),
+                Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0x3D, 0x35, 0x28)),
+                CaretBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F))
+            };
+            textBox.SelectAll();
+            textBox.Focus();
+            Grid.SetRow(textBox, 1);
+            grid.Children.Add(textBox);
+
+            var btnPanel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(0, 12, 0, 0)
+            };
+            var okBtn = MainWindow.MakeOrangeButton("OK", 13);
+            okBtn.Width = 80;
+            okBtn.Height = 32;
+            okBtn.Click += (s, e) => { dialog.Tag = textBox.Text; dialog.DialogResult = true; dialog.Close(); };
+            var cancelBtn = MainWindow.MakeGhostButton("Mégse", 13);
+            cancelBtn.Width = 80;
+            cancelBtn.Height = 32;
+            cancelBtn.Margin = new Thickness(8, 0, 0, 0);
+            cancelBtn.Click += (s, e) => { dialog.DialogResult = false; dialog.Close(); };
+            btnPanel.Children.Add(cancelBtn);
+            btnPanel.Children.Add(okBtn);
+            Grid.SetRow(btnPanel, 2);
+            grid.Children.Add(btnPanel);
+
+            dialog.Content = grid;
+            dialog.Background = new SolidColorBrush(Color.FromRgb(0x0F, 0x0F, 0x0F));
+
+            textBox.KeyDown += (s, e) =>
+            {
+                if (e.Key == Key.Return) { dialog.Tag = textBox.Text; dialog.DialogResult = true; dialog.Close(); }
+                if (e.Key == Key.Escape) { dialog.DialogResult = false; dialog.Close(); }
+            };
+
+            dialog.Loaded += (s, e) => textBox.Focus();
+
+            bool? result = dialog.ShowDialog();
+            if (result == true)
+                return dialog.Tag?.ToString() ?? "";
+            return null;
         }
     }
 
@@ -541,7 +622,6 @@ namespace cucisstuff
             var stack = new StackPanel();
             card.Child = stack;
 
-            // Logo
             stack.Children.Add(new TextBlock
             {
                 Text = "Cuci's Stuff",
@@ -562,7 +642,6 @@ namespace cucisstuff
             };
             stack.Children.Add(_subtitle);
 
-            // Hiba panel
             _errBorder = new Border
             {
                 Background = new SolidColorBrush(Color.FromArgb(0x26, 0xFF, 0x32, 0x32)),
@@ -583,7 +662,6 @@ namespace cucisstuff
             _errBorder.Child = _errText;
             stack.Children.Add(_errBorder);
 
-            // ---------- LOGIN panel ----------
             _loginPanel = new StackPanel();
 
             _loginUser = MakePlaceholderBox("Felhasználónév vagy email");
@@ -607,7 +685,6 @@ namespace cucisstuff
 
             stack.Children.Add(_loginPanel);
 
-            // ---------- REGISTER panel ----------
             _regPanel = new StackPanel { Visibility = Visibility.Collapsed };
 
             _regUser = MakePlaceholderBox("Felhasználónév");
@@ -744,7 +821,7 @@ namespace cucisstuff
                     JOIN passwords p ON u.password_id = p.id
                     WHERE u.email = @p0 OR u.username = @p1
                     LIMIT 1",
-                    new object[] { user, user },   // ← kétszer ugyanaz az érték, de külön paraméterként
+                    new object[] { user, user },
                     "select"
                 );
 
@@ -1122,22 +1199,24 @@ namespace cucisstuff
         }
     }
 
-    // ============================================
-    // TERMÉK RÉSZLETEK ABLAK
-    // ============================================
+    // ============================================================
+    // TERMÉK RÉSZLETEK ABLAK (normál + admin mód)
+    // ============================================================
     public class ProductDetailWindow : Window
     {
         private readonly MainWindow _mw;
         private readonly ItemViewModel _item;
+        private readonly bool _isAdminMode;
         private Image _mainImg;
         private TextBlock _noImgText;
         private WrapPanel _thumbsPanel;
         private int _imgIdx;
 
-        public ProductDetailWindow(MainWindow mw, ItemViewModel item)
+        public ProductDetailWindow(MainWindow mw, ItemViewModel item, bool isAdminMode = false)
         {
             _mw = mw;
             _item = item;
+            _isAdminMode = isAdminMode;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             WindowStyle = WindowStyle.None;
             AllowsTransparency = true;
@@ -1155,8 +1234,7 @@ namespace cucisstuff
             {
                 var images = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
                     "SELECT image_path FROM item_images WHERE item_id = @p0 ORDER BY sort_order",
-                    new object[] { _item.Id }
-                );
+                    new object[] { _item.Id });
                 _item.AllImagePaths = images.Select(i => i["image_path"].ToString()).ToList();
                 UpdateImg();
                 BuildThumbs();
@@ -1180,10 +1258,8 @@ namespace cucisstuff
             };
 
             var outerGrid = new Grid();
-            outerGrid.Background = Brushes.Transparent;
             outer.Child = outerGrid;
 
-            // Cím sáv: bal oldalon cím szöveg, jobb oldalon ✕ gomb — így nem fedi a scrollbart
             var titleBar = new Grid
             {
                 Height = 44,
@@ -1194,7 +1270,7 @@ namespace cucisstuff
 
             var windowTitle = new TextBlock
             {
-                Text = "Termék részletei",
+                Text = "Termék részletei" + (_isAdminMode ? " [ADMIN MÓD]" : ""),
                 Foreground = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)),
                 FontSize = 13,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -1364,7 +1440,45 @@ namespace cucisstuff
             };
             dStack.Children.Add(descBorder);
 
-            if (_item.IsSold)
+            // ---- GOMBOK ----
+            if (_isAdminMode)
+            {
+                var editBtn = MainWindow.MakeOrangeButton("✏️ Szerkesztés", 14);
+                editBtn.Margin = new Thickness(0, 0, 0, 8);
+                editBtn.Click += (s, e) =>
+                {
+                    string newTitle = MainWindow.ShowInputDialog("Cím:", "Szerkesztés", _item.Title);
+                    if (!string.IsNullOrWhiteSpace(newTitle))
+                        _ = EditItemAsync(newTitle);
+                };
+                dStack.Children.Add(editBtn);
+
+                string soldText = _item.IsSold ? "🔄 Megjelölés aktívként" : "🔴 Megjelölés elkeltként";
+                var soldBtnLocal = _item.IsSold
+                    ? MainWindow.MakeGhostButton(soldText, 14)
+                    : MainWindow.MakeRedGhostButton(soldText, 14);
+                soldBtnLocal.Margin = new Thickness(0, 0, 0, 8);
+                soldBtnLocal.Click += async (s2, e2) =>
+                {
+                    await _mw.ApiExecuteAsync("UPDATE items SET sold=@p0 WHERE id=@p1",
+                        new object[] { _item.IsSold ? 0 : 1, _item.Id });
+                    Close();
+                };
+                dStack.Children.Add(soldBtnLocal);
+
+                var delBtn = MainWindow.MakeRedGhostButton("🗑️ Törlés", 14);
+                delBtn.Click += async (s3, e3) =>
+                {
+                    if (MessageBox.Show("Biztosan törlöd ezt a terméket?", "Törlés",
+                        MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+                    {
+                        await _mw.ApiExecuteAsync("DELETE FROM items WHERE id=@p0", new object[] { _item.Id });
+                        Close();
+                    }
+                };
+                dStack.Children.Add(delBtn);
+            }
+            else if (_item.IsSold)
             {
                 dStack.Children.Add(new TextBlock
                 {
@@ -1401,7 +1515,7 @@ namespace cucisstuff
                 bFef.AppendChild(cpFef);
                 t.VisualTree = bFef;
                 buyBtn.Template = t;
-                buyBtn.Click += (s, e) => { Close(); _mw.NavigateToPurchase(_item.Id); };
+                buyBtn.Click += (s4, e4) => { Close(); _mw.NavigateToPurchase(_item.Id); };
                 dStack.Children.Add(buyBtn);
             }
 
@@ -1409,6 +1523,27 @@ namespace cucisstuff
             grid.Children.Add(details);
 
             Content = outer;
+        }
+
+        private async Task EditItemAsync(string newTitle)
+        {
+            try
+            {
+                string newDesc = MainWindow.ShowInputDialog("Leírás:", "Szerkesztés", _item.Description ?? "");
+                string newPriceStr = MainWindow.ShowInputDialog("Ár:", "Szerkesztés", _item.Price.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+                if (decimal.TryParse(newPriceStr, out decimal newPrice) && newPrice >= 0)
+                {
+                    await _mw.ApiExecuteAsync(
+                        "UPDATE items SET title=@p0, description=@p1, price=@p2 WHERE id=@p3",
+                        new object[] { newTitle, newDesc ?? "", newPrice, _item.Id });
+                    _item.Title = newTitle;
+                    _item.Description = newDesc;
+                    _item.Price = newPrice;
+                    MessageBox.Show("Módosítások mentve!", "Siker", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
         }
 
         private void UpdateImg()
@@ -1470,6 +1605,998 @@ namespace cucisstuff
                 tb.MouseLeftButtonDown += (s, e) => { _imgIdx = idx; UpdateImg(); };
                 _thumbsPanel.Children.Add(tb);
             }
+        }
+    }
+
+    // ============================================================
+    // ADMIN OLDAL
+    // ============================================================
+    public class AdminPage : Page
+    {
+        private readonly MainWindow _mw;
+
+        private TabControl _tabs;
+        private TabItem _dashboardTab, _itemsTab, _usersTab, _ordersTab, _reportsTab, _conversationsTab, _vizsgalockTab;
+
+        private TextBox _itemsSearchBox;
+        private ListView _itemsListView;
+        private int _itemsPage = 1, _itemsTotalPages = 1;
+        private string _itemsSearch = "";
+
+        private TextBox _usersSearchBox;
+        private ListView _usersListView;
+        private int _usersPage = 1, _usersTotalPages = 1;
+        private string _usersSearch = "";
+
+        private TextBox _ordersSearchBox;
+        private ListView _ordersListView;
+        private int _ordersPage = 1, _ordersTotalPages = 1;
+        private string _ordersSearch = "";
+
+        private ListView _reportsListView;
+
+        private ListBox _convPartnersList;
+        private StackPanel _convMessagesPanel;
+        private ScrollViewer _convMsgScroll;
+        private int? _convSelectedUser1, _convSelectedUser2;
+        private string _convUser1Name, _convUser2Name;
+
+        private Button _vlToggleBtn;
+        private ListView _vlExceptionsList;
+        private ComboBox _vlUserCombo;
+        private bool _vlLocked;
+
+        private TextBlock _dashUsers, _dashItems, _dashOrders, _dashReports;
+
+        private const int PER_PAGE = 25;
+
+        public AdminPage(MainWindow mw)
+        {
+            _mw = mw;
+            Build();
+            Loaded += async (s, e) =>
+            {
+                await LoadDashboardAsync();
+                await LoadVizsgalockStatusAsync();
+            };
+        }
+
+        private void Build()
+        {
+            Background = new SolidColorBrush(Color.FromRgb(0x05, 0x05, 0x05));
+            var dock = new DockPanel();
+
+            var topBar = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0x0A, 0x0A, 0x0A)),
+                Padding = new Thickness(10)
+            };
+            DockPanel.SetDock(topBar, Dock.Top);
+
+            var topRow = new StackPanel { Orientation = Orientation.Horizontal };
+            var backBtn = MainWindow.MakeGhostButton("← Vissza");
+            backBtn.Click += (s, e) => _mw.NavigateToMain();
+            topRow.Children.Add(backBtn);
+
+            topRow.Children.Add(new TextBlock
+            {
+                Text = "ADMIN TERMINAL",
+                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
+                FontWeight = FontWeights.Bold,
+                FontSize = 18,
+                Margin = new Thickness(20, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            });
+
+            _vlToggleBtn = MainWindow.MakeRedGhostButton("⚠ VIZSGALOCK");
+            _vlToggleBtn.Margin = new Thickness(20, 0, 0, 0);
+            _vlToggleBtn.Click += async (s2, e2) => await ToggleVizsgalockAsync();
+            topRow.Children.Add(_vlToggleBtn);
+
+            var purgeBtn = MainWindow.MakeRedGhostButton("⚠ VIZSGAPURGE");
+            purgeBtn.Margin = new Thickness(10, 0, 0, 0);
+            purgeBtn.Click += async (s3, e3) => await PurgeAsync();
+            topRow.Children.Add(purgeBtn);
+
+            topBar.Child = topRow;
+            dock.Children.Add(topBar);
+
+            _tabs = new TabControl
+            {
+                Margin = new Thickness(10),
+                Background = new SolidColorBrush(Color.FromRgb(0x05, 0x05, 0x05)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00))
+            };
+
+            _tabs.Items.Add(_dashboardTab = CreateTab("■ FŐOLDAL", BuildDashboardTab()));
+            _tabs.Items.Add(_itemsTab = CreateTab("◧ TERMÉKEK", BuildItemsTab()));
+            _tabs.Items.Add(_usersTab = CreateTab("◈ FELHASZNÁLÓK", BuildUsersTab()));
+            _tabs.Items.Add(_ordersTab = CreateTab("📦 RENDELÉSEK", BuildOrdersTab()));
+            _tabs.Items.Add(_reportsTab = CreateTab("⚠ REPORTOK", BuildReportsTab()));
+            _tabs.Items.Add(_conversationsTab = CreateTab("💬 BESZÉLGETÉSEK", BuildConversationsTab()));
+            _tabs.Items.Add(_vizsgalockTab = CreateTab("🔒 VIZSGALOCK", BuildVizsgalockTab()));
+
+            _tabs.SelectionChanged += async (s4, e4) =>
+            {
+                if (_tabs.SelectedItem == _itemsTab && _itemsListView.Items.Count == 0) await LoadItemsAsync();
+                if (_tabs.SelectedItem == _usersTab && _usersListView.Items.Count == 0) await LoadUsersAsync();
+                if (_tabs.SelectedItem == _ordersTab && _ordersListView.Items.Count == 0) await LoadOrdersAsync();
+                if (_tabs.SelectedItem == _reportsTab && _reportsListView.Items.Count == 0) await LoadReportsAsync();
+                if (_tabs.SelectedItem == _conversationsTab) await LoadConversationsAsync();
+                if (_tabs.SelectedItem == _vizsgalockTab) await LoadVizsgalockStatusAsync();
+            };
+
+            dock.Children.Add(_tabs);
+            Content = dock;
+        }
+
+        private TabItem CreateTab(string header, UIElement content)
+        {
+            return new TabItem
+            {
+                Header = header,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
+                Background = new SolidColorBrush(Color.FromRgb(0x0F, 0x0F, 0x0F)),
+                FontWeight = FontWeights.Bold,
+                Content = content
+            };
+        }
+
+        private Brush CardBg = new SolidColorBrush(Color.FromRgb(0x0F, 0x0F, 0x0F));
+        private Brush Border1 = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00));
+        private Brush Accent = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F));
+        private Brush TextFg = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8));
+        private Brush Muted = new SolidColorBrush(Color.FromRgb(0x8A, 0x7A, 0x65));
+
+        // ==================== DASHBOARD ====================
+        private UIElement BuildDashboardTab()
+        {
+            var sv = new ScrollViewer();
+            var grid = new Grid { Margin = new Thickness(20) };
+            grid.ColumnDefinitions.Add(new ColumnDefinition());
+            grid.ColumnDefinitions.Add(new ColumnDefinition());
+            grid.ColumnDefinitions.Add(new ColumnDefinition());
+            grid.ColumnDefinitions.Add(new ColumnDefinition());
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+
+            _dashUsers = AddDashCard(grid, "◈ FELHASZNÁLÓK", "Regisztrált fiókok", 0);
+            _dashItems = AddDashCard(grid, "◧ TERMÉKEK", "Aktív hirdetések", 1);
+            _dashOrders = AddDashCard(grid, "📦 RENDELÉSEK", "Megrendelések", 2);
+            _dashReports = AddDashCard(grid, "⚠ REPORTOK", "Bejelentett elemek", 3);
+
+            var info = new Border
+            {
+                Background = CardBg,
+                BorderBrush = Border1,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(16),
+                Margin = new Thickness(0, 16, 0, 0)
+            };
+            Grid.SetRow(info, 1); Grid.SetColumnSpan(info, 4);
+            var infoStack = new StackPanel();
+            infoStack.Children.Add(new TextBlock { Text = "SYSTEM STATUS: ONLINE", Foreground = Accent, FontSize = 13, FontFamily = new FontFamily("Consolas") });
+            infoStack.Children.Add(new TextBlock { Text = $"DATABASE: CUCIDB  //  ADMIN: {MainWindow.LoggedInUsername}", Foreground = Muted, FontSize = 12, FontFamily = new FontFamily("Consolas") });
+            info.Child = infoStack;
+            grid.Children.Add(info);
+            sv.Content = grid;
+            return sv;
+        }
+
+        private TextBlock AddDashCard(Grid grid, string label, string sub, int col)
+        {
+            var card = new Border
+            {
+                Background = CardBg,
+                BorderBrush = Border1,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(12),
+                Padding = new Thickness(20),
+                Margin = new Thickness(8)
+            };
+            var stack = new StackPanel();
+            stack.Children.Add(new TextBlock { Text = "■ " + label, Foreground = Muted, FontSize = 11, Margin = new Thickness(0, 0, 0, 8) });
+            var num = new TextBlock { Text = "—", Foreground = Accent, FontSize = 42, FontWeight = FontWeights.Bold };
+            stack.Children.Add(num);
+            stack.Children.Add(new TextBlock { Text = sub, Foreground = Muted, FontSize = 11, Margin = new Thickness(0, 6, 0, 0) });
+            card.Child = stack;
+            Grid.SetColumn(card, col);
+            grid.Children.Add(card);
+            return num;
+        }
+
+        private async Task LoadDashboardAsync()
+        {
+            try
+            {
+                var users = await _mw.ApiScalarAsync<int>("SELECT COUNT(*) FROM users");
+                var items = await _mw.ApiScalarAsync<int>("SELECT COUNT(*) FROM items");
+                var orders = await _mw.ApiScalarAsync<int>("SELECT COUNT(*) FROM orders");
+                var reports = await _mw.ApiScalarAsync<int>("SELECT COUNT(*) FROM reports");
+                var msgRep = await _mw.ApiScalarAsync<int>("SELECT COUNT(*) FROM message_reports");
+                _dashUsers.Text = users.ToString("N0");
+                _dashItems.Text = items.ToString("N0");
+                _dashOrders.Text = orders.ToString("N0");
+                _dashReports.Text = (reports + msgRep).ToString("N0");
+            }
+            catch { }
+        }
+
+        // ==================== TERMÉKEK ====================
+        private UIElement BuildItemsTab()
+        {
+            var dock = new DockPanel();
+            var topPanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(10) };
+            _itemsSearchBox = new TextBox
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x24, 0x18)),
+                Foreground = TextFg,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0x3D, 0x35, 0x28)),
+                BorderThickness = new Thickness(1),
+                FontSize = 13,
+                Padding = new Thickness(10, 8, 10, 8),
+                Width = 300
+            };
+            _itemsSearchBox.KeyDown += (s, e) => { if (e.Key == Key.Return) { _itemsPage = 1; _ = LoadItemsAsync(); } };
+            var searchBtn = MainWindow.MakeGhostButton("KERESÉS", 12);
+            searchBtn.Click += (s, e) => { _itemsPage = 1; _ = LoadItemsAsync(); };
+            topPanel.Children.Add(_itemsSearchBox);
+            topPanel.Children.Add(searchBtn);
+            DockPanel.SetDock(topPanel, Dock.Top);
+            dock.Children.Add(topPanel);
+
+            _itemsListView = new ListView
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0x05, 0x05, 0x05)),
+                Foreground = TextFg,
+                BorderThickness = new Thickness(0)
+            };
+            var gridView = new GridView();
+            gridView.Columns.Add(new GridViewColumn { Header = "ID", Width = 100, DisplayMemberBinding = new Binding("Id") });
+            gridView.Columns.Add(new GridViewColumn { Header = "Cím", Width = 200, DisplayMemberBinding = new Binding("Title") });
+            gridView.Columns.Add(new GridViewColumn { Header = "Eladó", Width = 120, DisplayMemberBinding = new Binding("SellerName") });
+            gridView.Columns.Add(new GridViewColumn { Header = "Ár", Width = 100, DisplayMemberBinding = new Binding("PriceFormatted") });
+            gridView.Columns.Add(new GridViewColumn { Header = "Státusz", Width = 80, DisplayMemberBinding = new Binding("StatusText") });
+            _itemsListView.View = gridView;
+            _itemsListView.MouseDoubleClick += ItemsList_DoubleClick;
+            dock.Children.Add(_itemsListView);
+
+            var pagePanel = BuildPaginationPanel(() => { _ = LoadItemsAsync(); }, () => _itemsPage, v => _itemsPage = v, () => _itemsTotalPages);
+            DockPanel.SetDock(pagePanel, Dock.Bottom);
+            dock.Children.Add(pagePanel);
+            return dock;
+        }
+
+        private async Task LoadItemsAsync()
+        {
+            _itemsSearch = _itemsSearchBox?.Text.Trim() ?? "";
+            try
+            {
+                string where = "";
+                var pars = new List<object>();
+                if (!string.IsNullOrEmpty(_itemsSearch))
+                {
+                    where = " AND (i.title LIKE @p0 OR i.description LIKE @p1)";
+                    pars.Add("%" + _itemsSearch + "%");
+                    pars.Add("%" + _itemsSearch + "%");
+                }
+                int total = await _mw.ApiScalarAsync<int>(
+                    $"SELECT COUNT(*) FROM items i WHERE 1=1{where}", pars.ToArray());
+                _itemsTotalPages = Math.Max(1, (int)Math.Ceiling(total / (double)PER_PAGE));
+                int offset = (_itemsPage - 1) * PER_PAGE;
+
+                var itemsPars = new List<object>(pars) { offset, PER_PAGE };
+                var items = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
+                    $"SELECT i.id, i.title, i.price, i.sold, u.username AS seller_name FROM items i JOIN users u ON i.user_id=u.id WHERE 1=1{where} ORDER BY i.created_at DESC LIMIT @p{pars.Count},@p{pars.Count + 1}",
+                    itemsPars.ToArray());
+
+                _itemsListView.Items.Clear();
+                foreach (var r in items)
+                {
+                    _itemsListView.Items.Add(new ItemViewModel
+                    {
+                        Id = r["id"].ToString(),
+                        Title = r["title"].ToString(),
+                        Price = decimal.Parse(r["price"].ToString(), System.Globalization.CultureInfo.InvariantCulture),
+                        IsSold = r["sold"].ToString() == "1",
+                        SellerName = r["seller_name"].ToString()
+                    });
+                }
+            }
+            catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
+        }
+
+        private async void ItemsList_DoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (_itemsListView.SelectedItem is ItemViewModel item)
+            {
+                try
+                {
+                    var details = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
+                        "SELECT i.*, u.username AS seller_name FROM items i JOIN users u ON i.user_id=u.id WHERE i.id=@p0",
+                        new object[] { item.Id });
+                    if (details.Count > 0)
+                    {
+                        var d = details[0];
+                        var fullItem = new ItemViewModel
+                        {
+                            Id = d["id"].ToString(),
+                            Title = d["title"].ToString(),
+                            Price = decimal.Parse(d["price"].ToString(), System.Globalization.CultureInfo.InvariantCulture),
+                            Description = d["description"].ValueKind == JsonValueKind.Null ? "" : d["description"].ToString(),
+                            CreatedAt = DateTime.Parse(d["created_at"].ToString()),
+                            IsSold = d["sold"].ToString() == "1",
+                            SellerId = int.Parse(d["user_id"].ToString()),
+                            SellerName = d["seller_name"].ToString()
+                        };
+                        var w = new ProductDetailWindow(_mw, fullItem, isAdminMode: true);
+                        w.Owner = Window.GetWindow(this);
+                        w.ShowDialog();
+                        await LoadItemsAsync();
+                        await LoadDashboardAsync();
+                    }
+                }
+                catch { }
+            }
+        }
+
+        // ==================== FELHASZNÁLÓK ====================
+        private UIElement BuildUsersTab()
+        {
+            var dock = new DockPanel();
+            var topPanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(10) };
+            _usersSearchBox = new TextBox
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x24, 0x18)),
+                Foreground = TextFg,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0x3D, 0x35, 0x28)),
+                BorderThickness = new Thickness(1),
+                FontSize = 13,
+                Padding = new Thickness(10, 8, 10, 8),
+                Width = 300
+            };
+            _usersSearchBox.KeyDown += (s, e) => { if (e.Key == Key.Return) { _usersPage = 1; _ = LoadUsersAsync(); } };
+            var searchBtn = MainWindow.MakeGhostButton("KERESÉS", 12);
+            searchBtn.Click += (s, e) => { _usersPage = 1; _ = LoadUsersAsync(); };
+            topPanel.Children.Add(_usersSearchBox);
+            topPanel.Children.Add(searchBtn);
+            DockPanel.SetDock(topPanel, Dock.Top);
+            dock.Children.Add(topPanel);
+
+            _usersListView = new ListView
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0x05, 0x05, 0x05)),
+                Foreground = TextFg,
+                BorderThickness = new Thickness(0)
+            };
+            var gv = new GridView();
+            gv.Columns.Add(new GridViewColumn { Header = "ID", Width = 60, DisplayMemberBinding = new Binding("Id") });
+            gv.Columns.Add(new GridViewColumn { Header = "Felhasználónév", Width = 150, DisplayMemberBinding = new Binding("Username") });
+            gv.Columns.Add(new GridViewColumn { Header = "Email", Width = 200, DisplayMemberBinding = new Binding("Email") });
+            gv.Columns.Add(new GridViewColumn { Header = "Szerepkör", Width = 80, DisplayMemberBinding = new Binding("RoleText") });
+            gv.Columns.Add(new GridViewColumn { Header = "Hirdetések", Width = 80, DisplayMemberBinding = new Binding("ItemCount") });
+            gv.Columns.Add(new GridViewColumn { Header = "Regisztrált", Width = 100, DisplayMemberBinding = new Binding("CreatedAtFormatted") });
+            _usersListView.View = gv;
+            _usersListView.MouseDoubleClick += UsersList_DoubleClick;
+            dock.Children.Add(_usersListView);
+
+            var pagePanel = BuildPaginationPanel(() => { _ = LoadUsersAsync(); }, () => _usersPage, v => _usersPage = v, () => _usersTotalPages);
+            DockPanel.SetDock(pagePanel, Dock.Bottom);
+            dock.Children.Add(pagePanel);
+            return dock;
+        }
+
+        private async Task LoadUsersAsync()
+        {
+            _usersSearch = _usersSearchBox?.Text.Trim() ?? "";
+            try
+            {
+                string where = "";
+                var pars = new List<object>();
+                if (!string.IsNullOrEmpty(_usersSearch))
+                {
+                    where = " AND (u.username LIKE @p0 OR u.email LIKE @p1)";
+                    pars.Add("%" + _usersSearch + "%");
+                    pars.Add("%" + _usersSearch + "%");
+                }
+                int total = await _mw.ApiScalarAsync<int>($"SELECT COUNT(*) FROM users u WHERE 1=1{where}", pars.ToArray());
+                _usersTotalPages = Math.Max(1, (int)Math.Ceiling(total / (double)PER_PAGE));
+                int offset = (_usersPage - 1) * PER_PAGE;
+
+                var itemsPars = new List<object>(pars) { offset, PER_PAGE };
+                var users = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
+                    $"SELECT u.id, u.username, u.email, (SELECT COUNT(*) FROM admins WHERE user_id=u.id) AS is_admin, (SELECT COUNT(*) FROM items WHERE user_id=u.id) AS item_count, u.created_at FROM users u WHERE 1=1{where} ORDER BY u.created_at DESC LIMIT @p{pars.Count},@p{pars.Count + 1}",
+                    itemsPars.ToArray());
+
+                _usersListView.Items.Clear();
+                foreach (var r in users)
+                {
+                    _usersListView.Items.Add(new UserViewModel
+                    {
+                        Id = int.Parse(r["id"].ToString()),
+                        Username = r["username"].ToString(),
+                        Email = r["email"].ToString(),
+                        IsAdmin = int.Parse(r["is_admin"].ToString()) > 0,
+                        ItemCount = int.Parse(r["item_count"].ToString()),
+                        CreatedAt = DateTime.Parse(r["created_at"].ToString())
+                    });
+                }
+            }
+            catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
+        }
+
+        private async void UsersList_DoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (_usersListView.SelectedItem is UserViewModel user)
+            {
+                string newName = MainWindow.ShowInputDialog("Felhasználónév:", "Szerkesztés – " + user.Username, user.Username);
+                if (!string.IsNullOrWhiteSpace(newName))
+                {
+                    await _mw.ApiExecuteAsync("UPDATE users SET username=@p0 WHERE id=@p1",
+                        new object[] { newName, user.Id });
+                    await LoadUsersAsync();
+                }
+            }
+        }
+
+        // ==================== RENDELÉSEK ====================
+        private UIElement BuildOrdersTab()
+        {
+            var dock = new DockPanel();
+            var topPanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(10) };
+            _ordersSearchBox = new TextBox
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x24, 0x18)),
+                Foreground = TextFg,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0x3D, 0x35, 0x28)),
+                BorderThickness = new Thickness(1),
+                FontSize = 13,
+                Padding = new Thickness(10, 8, 10, 8),
+                Width = 300
+            };
+            _ordersSearchBox.KeyDown += (s, e) => { if (e.Key == Key.Return) { _ordersPage = 1; _ = LoadOrdersAsync(); } };
+            var searchBtn = MainWindow.MakeGhostButton("KERESÉS", 12);
+            searchBtn.Click += (s, e) => { _ordersPage = 1; _ = LoadOrdersAsync(); };
+            topPanel.Children.Add(_ordersSearchBox);
+            topPanel.Children.Add(searchBtn);
+            DockPanel.SetDock(topPanel, Dock.Top);
+            dock.Children.Add(topPanel);
+
+            _ordersListView = new ListView
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0x05, 0x05, 0x05)),
+                Foreground = TextFg,
+                BorderThickness = new Thickness(0)
+            };
+            var gv = new GridView();
+            gv.Columns.Add(new GridViewColumn { Header = "ID", Width = 100, DisplayMemberBinding = new Binding("Id") });
+            gv.Columns.Add(new GridViewColumn { Header = "Termék", Width = 180, DisplayMemberBinding = new Binding("ItemTitle") });
+            gv.Columns.Add(new GridViewColumn { Header = "Vevő", Width = 120, DisplayMemberBinding = new Binding("BuyerName") });
+            gv.Columns.Add(new GridViewColumn { Header = "Eladó", Width = 120, DisplayMemberBinding = new Binding("SellerName") });
+            gv.Columns.Add(new GridViewColumn { Header = "Összeg", Width = 100, DisplayMemberBinding = new Binding("PriceFormatted") });
+            gv.Columns.Add(new GridViewColumn { Header = "Státusz", Width = 80, DisplayMemberBinding = new Binding("Status") });
+            gv.Columns.Add(new GridViewColumn { Header = "Fizetés", Width = 80, DisplayMemberBinding = new Binding("PaymentMethod") });
+            gv.Columns.Add(new GridViewColumn { Header = "Dátum", Width = 100, DisplayMemberBinding = new Binding("CreatedAtFormatted") });
+            _ordersListView.View = gv;
+            _ordersListView.MouseDoubleClick += async (s5, e5) =>
+            {
+                if (_ordersListView.SelectedItem is OrderViewModel o)
+                {
+                    if (MessageBox.Show($"Törlöd a(z) {o.Id} rendelést?\nA termék újra elérhető lesz.", "Törlés", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+                    {
+                        await _mw.ApiExecuteAsync("UPDATE items SET sold=0 WHERE id=@p0", new object[] { o.ItemId });
+                        await _mw.ApiExecuteAsync("DELETE FROM orders WHERE id=@p0", new object[] { o.Id });
+                        await LoadOrdersAsync();
+                        await LoadDashboardAsync();
+                    }
+                }
+            };
+            dock.Children.Add(_ordersListView);
+
+            var pagePanel = BuildPaginationPanel(() => { _ = LoadOrdersAsync(); }, () => _ordersPage, v => _ordersPage = v, () => _ordersTotalPages);
+            DockPanel.SetDock(pagePanel, Dock.Bottom);
+            dock.Children.Add(pagePanel);
+            return dock;
+        }
+
+        private async Task LoadOrdersAsync()
+        {
+            _ordersSearch = _ordersSearchBox?.Text.Trim() ?? "";
+            try
+            {
+                string where = "";
+                var pars = new List<object>();
+                if (!string.IsNullOrEmpty(_ordersSearch))
+                {
+                    where = " AND (i.title LIKE @p0 OR o.id LIKE @p1 OR buyer.username LIKE @p2 OR seller.username LIKE @p3)";
+                    pars.Add("%" + _ordersSearch + "%"); pars.Add("%" + _ordersSearch + "%");
+                    pars.Add("%" + _ordersSearch + "%"); pars.Add("%" + _ordersSearch + "%");
+                }
+                int total = await _mw.ApiScalarAsync<int>(
+                    $"SELECT COUNT(*) FROM orders o JOIN items i ON o.item_id=i.id JOIN users buyer ON o.buyer_id=buyer.id JOIN users seller ON o.seller_id=seller.id WHERE 1=1{where}", pars.ToArray());
+                _ordersTotalPages = Math.Max(1, (int)Math.Ceiling(total / (double)PER_PAGE));
+                int offset = (_ordersPage - 1) * PER_PAGE;
+
+                var itemsPars = new List<object>(pars) { offset, PER_PAGE };
+                var orders = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
+                    $"SELECT o.*, i.title AS item_title, i.price AS item_price, buyer.username AS buyer_name, seller.username AS seller_name FROM orders o JOIN items i ON o.item_id=i.id JOIN users buyer ON o.buyer_id=buyer.id JOIN users seller ON o.seller_id=seller.id WHERE 1=1{where} ORDER BY o.created_at DESC LIMIT @p{pars.Count},@p{pars.Count + 1}",
+                    itemsPars.ToArray());
+
+                _ordersListView.Items.Clear();
+                foreach (var r in orders)
+                {
+                    _ordersListView.Items.Add(new OrderViewModel
+                    {
+                        Id = r["id"].ToString(),
+                        ItemTitle = r["item_title"].ToString(),
+                        ItemId = r["item_id"].ToString(),
+                        BuyerName = r["buyer_name"].ToString(),
+                        BuyerId = int.Parse(r["buyer_id"].ToString()),
+                        SellerName = r["seller_name"].ToString(),
+                        SellerId = int.Parse(r["seller_id"].ToString()),
+                        ItemPrice = decimal.Parse(r["item_price"].ToString(), System.Globalization.CultureInfo.InvariantCulture),
+                        Status = r["status"].ToString(),
+                        PaymentMethod = r["payment_method"].ToString(),
+                        CreatedAt = DateTime.Parse(r["created_at"].ToString())
+                    });
+                }
+            }
+            catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
+        }
+
+        // ==================== REPORTOK ====================
+        private UIElement BuildReportsTab()
+        {
+            var dock = new DockPanel();
+            _reportsListView = new ListView
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0x05, 0x05, 0x05)),
+                Foreground = TextFg,
+                BorderThickness = new Thickness(0)
+            };
+            var gv = new GridView();
+            gv.Columns.Add(new GridViewColumn { Header = "ID", Width = 60, DisplayMemberBinding = new Binding("Id") });
+            gv.Columns.Add(new GridViewColumn { Header = "Típus", Width = 80, DisplayMemberBinding = new Binding("TypeIcon") });
+            gv.Columns.Add(new GridViewColumn { Header = "Tárgy", Width = 200, DisplayMemberBinding = new Binding("RefTitle") });
+            gv.Columns.Add(new GridViewColumn { Header = "Bejelentő", Width = 120, DisplayMemberBinding = new Binding("ReporterName") });
+            gv.Columns.Add(new GridViewColumn { Header = "Érintett", Width = 120, DisplayMemberBinding = new Binding("TargetName") });
+            gv.Columns.Add(new GridViewColumn { Header = "Indok", Width = 250, DisplayMemberBinding = new Binding("Reason") });
+            gv.Columns.Add(new GridViewColumn { Header = "Dátum", Width = 100, DisplayMemberBinding = new Binding("CreatedAtFormatted") });
+            _reportsListView.View = gv;
+            _reportsListView.MouseDoubleClick += async (s6, e6) =>
+            {
+                if (_reportsListView.SelectedItem is ReportViewModel r)
+                {
+                    if (MessageBox.Show($"Törlöd a(z) {r.Id} reportot?", "Törlés", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+                    {
+                        string tbl = r.ReportType == "item" ? "reports" : "message_reports";
+                        await _mw.ApiExecuteAsync($"DELETE FROM {tbl} WHERE id=@p0", new object[] { r.Id });
+                        await LoadReportsAsync();
+                        await LoadDashboardAsync();
+                    }
+                }
+            };
+            dock.Children.Add(_reportsListView);
+            return dock;
+        }
+
+        private async Task LoadReportsAsync()
+        {
+            try
+            {
+                var reports = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
+                    @"SELECT r.id, 'item' AS report_type, r.item_id AS ref_id, i.title AS ref_title,
+                             u.username AS reporter_name, u.id AS reporter_id,
+                             owner.username AS target_name, owner.id AS target_id,
+                             r.reason, r.status, r.created_at
+                      FROM reports r
+                      JOIN items i ON r.item_id=i.id
+                      JOIN users u ON r.user_id=u.id
+                      JOIN users owner ON i.user_id=owner.id
+                      UNION ALL
+                      SELECT mr.id, 'message' AS report_type, mr.message_id, 'Üzenet' AS ref_title,
+                             rep.username AS reporter_name, rep.id AS reporter_id,
+                             snd.username AS target_name, snd.id AS target_id,
+                             mr.reason, mr.status, mr.created_at
+                      FROM message_reports mr
+                      JOIN uzenetek m ON mr.message_id=m.id
+                      JOIN users rep ON mr.reporter_user_id=rep.id
+                      JOIN users snd ON m.sender_id=snd.id
+                      ORDER BY created_at DESC");
+
+                _reportsListView.Items.Clear();
+                foreach (var r in reports)
+                {
+                    _reportsListView.Items.Add(new ReportViewModel
+                    {
+                        Id = int.Parse(r["id"].ToString()),
+                        ReportType = r["report_type"].ToString(),
+                        RefId = r["ref_id"].ToString(),
+                        RefTitle = r["ref_title"].ToString(),
+                        ReporterName = r["reporter_name"].ToString(),
+                        ReporterId = int.Parse(r["reporter_id"].ToString()),
+                        TargetName = r["target_name"].ToString(),
+                        TargetId = int.Parse(r["target_id"].ToString()),
+                        Reason = r["reason"].ToString(),
+                        Status = r["status"].ToString(),
+                        CreatedAt = DateTime.Parse(r["created_at"].ToString())
+                    });
+                }
+            }
+            catch { _reportsListView.Items.Clear(); }
+        }
+
+        // ==================== BESZÉLGETÉSEK ====================
+        private UIElement BuildConversationsTab()
+        {
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(280) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            var leftDock = new DockPanel();
+            var leftTop = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0x0A, 0x0A, 0x0A)),
+                Padding = new Thickness(10)
+            };
+            DockPanel.SetDock(leftTop, Dock.Top);
+            leftTop.Child = new TextBlock { Text = "Beszélgetések", Foreground = Accent, FontWeight = FontWeights.Bold, FontSize = 14 };
+            leftDock.Children.Add(leftTop);
+
+            _convPartnersList = new ListBox
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0x05, 0x05, 0x05)),
+                Foreground = TextFg,
+                BorderThickness = new Thickness(0)
+            };
+            leftDock.Children.Add(_convPartnersList);
+            Grid.SetColumn(leftDock, 0);
+
+            var sep = new Border { Background = Border1, Width = 1 };
+            Grid.SetColumn(sep, 1);
+
+            var rightDock = new DockPanel();
+            var chatHeader = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0x0A, 0x0A, 0x0A)),
+                Padding = new Thickness(16, 12, 16, 12)
+            };
+            DockPanel.SetDock(chatHeader, Dock.Top);
+            chatHeader.Child = new TextBlock { Text = "Üzenetek", Foreground = Accent, FontWeight = FontWeights.Bold, FontSize = 14 };
+            rightDock.Children.Add(chatHeader);
+
+            _convMsgScroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(16) };
+            _convMessagesPanel = new StackPanel();
+            _convMsgScroll.Content = _convMessagesPanel;
+            rightDock.Children.Add(_convMsgScroll);
+
+            Grid.SetColumn(rightDock, 2);
+
+            grid.Children.Add(leftDock);
+            grid.Children.Add(sep);
+            grid.Children.Add(rightDock);
+            return grid;
+        }
+
+        private async Task LoadConversationsAsync()
+        {
+            try
+            {
+                var partners = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
+                    @"SELECT LEAST(u1.id, u2.id) AS user1, GREATEST(u1.id, u2.id) AS user2,
+                             u1.username AS user1_name, u2.username AS user2_name,
+                             MAX(m.sent_at) AS last_msg
+                      FROM uzenetek m
+                      JOIN users u1 ON (u1.id=m.sender_id OR u1.id=m.receiver_id)
+                      JOIN users u2 ON (u2.id=m.sender_id OR u2.id=m.receiver_id)
+                      WHERE u1.id < u2.id
+                      GROUP BY user1, user2, user1_name, user2_name
+                      ORDER BY last_msg DESC");
+
+                _convPartnersList.Items.Clear();
+                foreach (var r in partners)
+                {
+                    int u1 = int.Parse(r["user1"].ToString());
+                    int u2 = int.Parse(r["user2"].ToString());
+                    string n1 = r["user1_name"].ToString();
+                    string n2 = r["user2_name"].ToString();
+                    int partnerId = u1 == MainWindow.LoggedInUserId ? u2 : u1;
+                    string partnerName = u1 == MainWindow.LoggedInUserId ? n2 : n1;
+
+                    var pvm = new PartnerViewModel
+                    {
+                        Id = partnerId,
+                        Username = partnerName,
+                        LastMessageAt = DateTime.Parse(r["last_msg"].ToString())
+                    };
+
+                    var itemBorder = new Border
+                    {
+                        Padding = new Thickness(12, 8, 12, 8),
+                        Cursor = Cursors.Hand,
+                        Tag = pvm
+                    };
+
+                    var row = new StackPanel { Orientation = Orientation.Horizontal };
+                    var avatar = new Border
+                    {
+                        Width = 36,
+                        Height = 36,
+                        CornerRadius = new CornerRadius(18),
+                        Background = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00)),
+                        Margin = new Thickness(0, 0, 10, 0)
+                    };
+                    avatar.Child = new TextBlock
+                    {
+                        Text = pvm.AvatarInitial,
+                        Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
+                        FontWeight = FontWeights.Bold,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center
+                    };
+                    row.Children.Add(avatar);
+
+                    var nameStack = new StackPanel();
+                    nameStack.Children.Add(new TextBlock
+                    {
+                        Text = partnerName,
+                        Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
+                        FontWeight = FontWeights.Normal,
+                        FontSize = 14
+                    });
+                    nameStack.Children.Add(new TextBlock
+                    {
+                        Text = pvm.LastMessageTimeFormatted,
+                        Foreground = new SolidColorBrush(Color.FromRgb(0x8A, 0x7A, 0x65)),
+                        FontSize = 11
+                    });
+                    row.Children.Add(nameStack);
+
+                    itemBorder.Child = row;
+
+                    var listBoxItem = new ListBoxItem
+                    {
+                        Content = itemBorder,
+                        Background = Brushes.Transparent,
+                        Tag = pvm
+                    };
+                    listBoxItem.Selected += (s, e) =>
+                    {
+                        if (listBoxItem.Tag is PartnerViewModel p)
+                        {
+                            _convSelectedUser1 = MainWindow.LoggedInUserId;
+                            _convSelectedUser2 = p.Id;
+                            _convUser1Name = MainWindow.LoggedInUsername;
+                            _convUser2Name = p.Username;
+                            _ = LoadConversationMessagesAsync();
+                        }
+                    };
+
+                    _convPartnersList.Items.Add(listBoxItem);
+                }
+            }
+            catch { }
+        }
+
+        private async Task LoadConversationMessagesAsync()
+        {
+            _convMessagesPanel.Children.Clear();
+            if (!_convSelectedUser1.HasValue || !_convSelectedUser2.HasValue) return;
+            try
+            {
+                var msgs = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
+                    "SELECT id, sender_id, message, sent_at FROM uzenetek WHERE (sender_id=@p0 AND receiver_id=@p1) OR (sender_id=@p2 AND receiver_id=@p3) ORDER BY sent_at ASC",
+                    new object[] { _convSelectedUser1, _convSelectedUser2, _convSelectedUser2, _convSelectedUser1 });
+
+                foreach (var m in msgs)
+                {
+                    bool own = int.Parse(m["sender_id"].ToString()) == MainWindow.LoggedInUserId;
+                    var bubble = new Border
+                    {
+                        CornerRadius = new CornerRadius(12),
+                        Padding = new Thickness(12, 8, 12, 8),
+                        MaxWidth = 400,
+                        Margin = new Thickness(0, 3, 0, 3),
+                        HorizontalAlignment = own ? HorizontalAlignment.Right : HorizontalAlignment.Left
+                    };
+                    bubble.Background = own
+                        ? (Brush)new LinearGradientBrush(Color.FromRgb(0xFF, 0x8C, 0x00), Color.FromRgb(0xC8, 0x50, 0x00), 45)
+                        : (Brush)new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E));
+                    var stack = new StackPanel();
+                    stack.Children.Add(new TextBlock
+                    {
+                        Text = m["message"].ToString(),
+                        TextWrapping = TextWrapping.Wrap,
+                        Foreground = Brushes.White,
+                        FontSize = 13
+                    });
+                    stack.Children.Add(new TextBlock
+                    {
+                        Text = DateTime.Parse(m["sent_at"].ToString()).ToString("HH:mm"),
+                        Foreground = new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF)),
+                        FontSize = 10,
+                        HorizontalAlignment = HorizontalAlignment.Right,
+                        Margin = new Thickness(0, 4, 0, 0)
+                    });
+                    bubble.Child = stack;
+                    _convMessagesPanel.Children.Add(bubble);
+                }
+                _convMsgScroll.ScrollToBottom();
+            }
+            catch { }
+        }
+
+        // ==================== VIZSGALOCK ====================
+        private UIElement BuildVizsgalockTab()
+        {
+            var sv = new ScrollViewer();
+            var stack = new StackPanel { Margin = new Thickness(20), MaxWidth = 500 };
+
+            stack.Children.Add(new TextBlock
+            {
+                Text = "⚠️ VIZSGALOCK",
+                FontSize = 22,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x44, 0x44)),
+                Margin = new Thickness(0, 0, 0, 16)
+            });
+
+            var vlToggleBtnLocal = MainWindow.MakeRedGhostButton("VIZSGALOCK ÁTKAPCSOLÁSA");
+            vlToggleBtnLocal.Height = 50; vlToggleBtnLocal.FontSize = 18;
+            vlToggleBtnLocal.Click += async (s8, e8) => await ToggleVizsgalockAsync();
+            _vlToggleBtn = vlToggleBtnLocal;
+            stack.Children.Add(vlToggleBtnLocal);
+
+            stack.Children.Add(new TextBlock
+            {
+                Text = "Kivételek",
+                FontSize = 14,
+                FontWeight = FontWeights.Bold,
+                Foreground = TextFg,
+                Margin = new Thickness(0, 20, 0, 8)
+            });
+
+            _vlExceptionsList = new ListView
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0x0F, 0x0F, 0x0F)),
+                Foreground = TextFg,
+                MaxHeight = 200,
+                BorderThickness = new Thickness(0)
+            };
+            var gv = new GridView();
+            gv.Columns.Add(new GridViewColumn { Header = "ID", Width = 60, DisplayMemberBinding = new Binding("Id") });
+            gv.Columns.Add(new GridViewColumn { Header = "Felhasználónév", Width = 200, DisplayMemberBinding = new Binding("Username") });
+            _vlExceptionsList.View = gv;
+            _vlExceptionsList.MouseDoubleClick += async (s9, e9) =>
+            {
+                if (_vlExceptionsList.SelectedItem is UserViewModel u)
+                {
+                    await _mw.ApiExecuteAsync("DELETE FROM vizsgalock_exceptions WHERE user_id=@p0", new object[] { u.Id });
+                    await LoadVizsgalockStatusAsync();
+                }
+            };
+            stack.Children.Add(_vlExceptionsList);
+
+            var addRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
+            _vlUserCombo = new ComboBox
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x24, 0x18)),
+                Foreground = TextFg,
+                Width = 250,
+                Height = 35
+            };
+            addRow.Children.Add(_vlUserCombo);
+            var addBtn = MainWindow.MakeRedGhostButton("+ HOZZÁAD");
+            addBtn.Click += async (s10, e10) =>
+            {
+                if (_vlUserCombo.SelectedItem != null)
+                {
+                    var uid = (int)_vlUserCombo.SelectedValue;
+                    await _mw.ApiExecuteAsync("INSERT IGNORE INTO vizsgalock_exceptions (user_id) VALUES (@p0)", new object[] { uid });
+                    await LoadVizsgalockStatusAsync();
+                }
+            };
+            addRow.Children.Add(addBtn);
+            stack.Children.Add(addRow);
+
+            sv.Content = stack;
+            return sv;
+        }
+
+        private async Task LoadVizsgalockStatusAsync()
+        {
+            try
+            {
+                _vlLocked = await _mw.CheckVizsgalockAsync();
+                if (_vlToggleBtn != null)
+                {
+                    _vlToggleBtn.Content = _vlLocked ? "⚠️ VIZSGALOCK: ON ⚠️" : "VIZSGALOCK: OFF";
+                    _vlToggleBtn.Foreground = _vlLocked
+                        ? new SolidColorBrush(Color.FromRgb(0xFF, 0x00, 0x00))
+                        : new SolidColorBrush(Color.FromRgb(0xFF, 0x44, 0x44));
+                }
+
+                var exceptions = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
+                    "SELECT u.id, u.username FROM vizsgalock_exceptions ve JOIN users u ON ve.user_id=u.id ORDER BY u.username");
+                _vlExceptionsList?.Items.Clear();
+                foreach (var e in exceptions)
+                    _vlExceptionsList?.Items.Add(new UserViewModel { Id = int.Parse(e["id"].ToString()), Username = e["username"].ToString() });
+
+                var available = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
+                    "SELECT u.id, u.username FROM users u WHERE u.id NOT IN (SELECT user_id FROM admins) AND u.id NOT IN (SELECT user_id FROM vizsgalock_exceptions) ORDER BY u.username");
+                _vlUserCombo?.Items.Clear();
+                foreach (var a in available)
+                    _vlUserCombo?.Items.Add(new { Id = int.Parse(a["id"].ToString()), Name = a["username"].ToString() });
+                if (_vlUserCombo != null)
+                {
+                    _vlUserCombo.DisplayMemberPath = "Name";
+                    _vlUserCombo.SelectedValuePath = "Id";
+                }
+            }
+            catch { }
+        }
+
+        private async Task ToggleVizsgalockAsync()
+        {
+            if (MessageBox.Show("Biztosan átkapcsolod a VIZSGALOCK állapotát?", "Megerősítés",
+                MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+            {
+                await _mw.ApiExecuteAsync(
+                    "UPDATE vizsgalock_settings SET is_locked=@p0 WHERE id=1",
+                    new object[] { !_vlLocked });
+                await LoadVizsgalockStatusAsync();
+            }
+        }
+
+        private async Task PurgeAsync()
+        {
+            if (MessageBox.Show(
+                "Ez véglegesen TÖRLI az összes nem-admin felhasználót!\n(kivéve: gabi, martin, cuci, admin)\n\nBiztosan folytatod?",
+                "⚠️ VIZSGAPURGE", MessageBoxButton.YesNo, MessageBoxImage.Error) == MessageBoxResult.Yes)
+            {
+                try
+                {
+                    int affected = await _mw.ApiExecuteAsync(
+                        "DELETE FROM users WHERE LOWER(username) NOT IN ('gabi','martin','cuci','admin') AND id NOT IN (SELECT user_id FROM admins)",
+                        null, "delete");
+                    MessageBox.Show($"Purge kész! Törölt felhasználók: {affected}", "Kész",
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                    await LoadDashboardAsync();
+                }
+                catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
+            }
+        }
+
+        // ==================== SEGÉDESZKÖZÖK ====================
+        private UIElement BuildPaginationPanel(Action loadAction, Func<int> getPage, Action<int> setPage, Func<int> getTotal)
+        {
+            var panel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 10, 0, 10)
+            };
+            var prevBtn = MainWindow.MakeGhostButton("◄ ELŐZŐ", 12);
+            prevBtn.Click += (s, e) => { if (getPage() > 1) { setPage(getPage() - 1); loadAction(); } };
+            panel.Children.Add(prevBtn);
+
+            panel.Children.Add(new TextBlock
+            {
+                Text = $" {getPage()} / {getTotal()} ",
+                Foreground = Accent,
+                FontSize = 14,
+                FontWeight = FontWeights.Bold,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(16, 0, 16, 0)
+            });
+
+            var nextBtn = MainWindow.MakeGhostButton("KÖVETKEZŐ ►", 12);
+            nextBtn.Click += (s, e) => { if (getPage() < getTotal()) { setPage(getPage() + 1); loadAction(); } };
+            panel.Children.Add(nextBtn);
+
+            return panel;
         }
     }
 
@@ -1535,7 +2662,7 @@ namespace cucisstuff
             var saveBtn = MainWindow.MakeOrangeButton("Mentés", 15);
             saveBtn.Width = 200;
             saveBtn.HorizontalAlignment = HorizontalAlignment.Left;
-            saveBtn.Click += async (s, e) => await SaveAsync();
+            saveBtn.Click += async (s2, e2) => await SaveAsync();
             stack.Children.Add(saveBtn);
 
             stack.Children.Add(new TextBlock
@@ -1549,7 +2676,7 @@ namespace cucisstuff
 
             var myItemsPanel = new StackPanel();
             stack.Children.Add(myItemsPanel);
-            Loaded += async (s, e) => await LoadMyItemsAsync(myItemsPanel);
+            Loaded += async (s3, e3) => await LoadMyItemsAsync(myItemsPanel);
 
             sv.Content = stack;
             Content = sv;
@@ -1561,8 +2688,7 @@ namespace cucisstuff
             {
                 var items = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
                     "SELECT id, title, price, sold, created_at FROM items WHERE user_id = @p0 ORDER BY created_at DESC",
-                    new object[] { MainWindow.LoggedInUserId }
-                );
+                    new object[] { MainWindow.LoggedInUserId });
 
                 foreach (var r in items)
                 {
@@ -1607,14 +2733,14 @@ namespace cucisstuff
                         var soldBtn = MainWindow.MakeGhostButton("Megjelölés elkeltként", 12);
                         soldBtn.Margin = new Thickness(8, 0, 8, 0);
                         string capturedId = iid;
-                        soldBtn.Click += async (s, e) => { await MarkAsSoldAsync(capturedId); panel.Children.Clear(); await LoadMyItemsAsync(panel); };
+                        soldBtn.Click += async (s4, e4) => { await MarkAsSoldAsync(capturedId); panel.Children.Clear(); await LoadMyItemsAsync(panel); };
                         Grid.SetColumn(soldBtn, 1);
                         rowGrid.Children.Add(soldBtn);
                     }
 
                     var delBtn = MainWindow.MakeRedGhostButton("Törlés", 12);
                     string capturedId2 = iid;
-                    delBtn.Click += async (s, e) => { await DeleteItemAsync(capturedId2); panel.Children.Clear(); await LoadMyItemsAsync(panel); };
+                    delBtn.Click += async (s5, e5) => { await DeleteItemAsync(capturedId2); panel.Children.Clear(); await LoadMyItemsAsync(panel); };
                     Grid.SetColumn(delBtn, 2);
                     rowGrid.Children.Add(delBtn);
 
@@ -1634,8 +2760,7 @@ namespace cucisstuff
                 {
                     await _mw.ApiExecuteAsync(
                         "UPDATE items SET sold=1 WHERE id=@p0 AND user_id=@p1",
-                        new object[] { itemId, MainWindow.LoggedInUserId }
-                    );
+                        new object[] { itemId, MainWindow.LoggedInUserId });
                 }
                 catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
             }
@@ -1650,8 +2775,7 @@ namespace cucisstuff
                 {
                     await _mw.ApiExecuteAsync(
                         "DELETE FROM items WHERE id=@p0 AND user_id=@p1",
-                        new object[] { itemId, MainWindow.LoggedInUserId }
-                    );
+                        new object[] { itemId, MainWindow.LoggedInUserId });
                 }
                 catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
             }
@@ -1663,8 +2787,7 @@ namespace cucisstuff
             {
                 var users = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
                     "SELECT username, email FROM users WHERE id = @p0",
-                    new object[] { MainWindow.LoggedInUserId }
-                );
+                    new object[] { MainWindow.LoggedInUserId });
                 if (users.Count > 0)
                 {
                     _unameBox.Text = users[0]["username"].ToString();
@@ -1687,15 +2810,13 @@ namespace cucisstuff
             {
                 var check = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
                     "SELECT id FROM users WHERE (username=@p0 OR email=@p1) AND id!=@p2",
-                    new object[] { uname, email, MainWindow.LoggedInUserId }
-                );
+                    new object[] { uname, email, MainWindow.LoggedInUserId });
                 if (check.Count > 0)
                 { MessageBox.Show("A felhasználónév vagy email már foglalt!"); return; }
 
                 await _mw.ApiExecuteAsync(
                     "UPDATE users SET username=@p0, email=@p1 WHERE id=@p2",
-                    new object[] { uname, email, MainWindow.LoggedInUserId }
-                );
+                    new object[] { uname, email, MainWindow.LoggedInUserId });
 
                 if (!string.IsNullOrWhiteSpace(pwd) && pwd.Length >= 6)
                 {
@@ -1703,13 +2824,11 @@ namespace cucisstuff
                     var pwdResult = await _mw.ApiCallAsync(
                         "INSERT INTO passwords (password_hash) VALUES (@p0)",
                         new object[] { hash },
-                        "insert"
-                    );
+                        "insert");
                     long pwdId = pwdResult.GetProperty("lastId").GetInt64();
                     await _mw.ApiExecuteAsync(
                         "UPDATE users SET password_id=@p0 WHERE id=@p1",
-                        new object[] { pwdId, MainWindow.LoggedInUserId }
-                    );
+                        new object[] { pwdId, MainWindow.LoggedInUserId });
                 }
 
                 MainWindow.LoggedInUsername = uname;
@@ -1798,7 +2917,7 @@ namespace cucisstuff
             stack.Children.Add(_priceBox);
 
             var submitBtn = MainWindow.MakeOrangeButton("Hirdetés feladása", 15);
-            submitBtn.Click += async (s, e) => await SubmitAsync();
+            submitBtn.Click += async (s2, e2) => await SubmitAsync();
             stack.Children.Add(submitBtn);
 
             sv.Content = stack;
@@ -1841,8 +2960,7 @@ namespace cucisstuff
                 await _mw.ApiCallAsync(
                     "INSERT INTO items (id,user_id,title,description,price) VALUES(@p0,@p1,@p2,@p3,@p4)",
                     new object[] { itemId, MainWindow.LoggedInUserId, title, desc, price },
-                    "insert"
-                );
+                    "insert");
 
                 string uploadDir = Path.Combine("uploads", itemId);
                 Directory.CreateDirectory(uploadDir);
@@ -1857,254 +2975,13 @@ namespace cucisstuff
                     await _mw.ApiCallAsync(
                         "INSERT INTO item_images(item_id,image_path,image_filename,is_primary,sort_order) VALUES(@p0,@p1,@p2,@p3,@p4)",
                         new object[] { itemId, fpath, fname, i == 0, i },
-                        "insert"
-                    );
+                        "insert");
                 }
 
                 MessageBox.Show("Hirdetés sikeresen feladva!", "Siker", MessageBoxButton.OK, MessageBoxImage.Information);
                 _mw.NavigateToMain();
             }
             catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
-        }
-    }
-
-    // ============================================
-    // ADMIN OLDAL
-    // ============================================
-    public class AdminPage : Page
-    {
-        private readonly MainWindow _mw;
-        private TabControl _tabs;
-
-        public AdminPage(MainWindow mw)
-        {
-            _mw = mw;
-            Build();
-            Loaded += async (s, e) => await LoadDataAsync();
-        }
-
-        private void Build()
-        {
-            Background = new SolidColorBrush(Color.FromRgb(0x05, 0x05, 0x05));
-            var dock = new DockPanel();
-
-            var topBar = new Border
-            {
-                Background = new SolidColorBrush(Color.FromRgb(0x0A, 0x0A, 0x0A)),
-                Padding = new Thickness(10)
-            };
-            DockPanel.SetDock(topBar, Dock.Top);
-
-            var topRow = new StackPanel { Orientation = Orientation.Horizontal };
-            var backBtn = MainWindow.MakeGhostButton("← Vissza");
-            backBtn.Click += (s, e) => _mw.NavigateToMain();
-            topRow.Children.Add(backBtn);
-
-            topRow.Children.Add(new TextBlock
-            {
-                Text = "ADMIN TERMINAL",
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                FontWeight = FontWeights.Bold,
-                FontSize = 18,
-                Margin = new Thickness(20, 0, 0, 0),
-                VerticalAlignment = VerticalAlignment.Center
-            });
-
-            var vlBtn = MainWindow.MakeRedGhostButton("⚠ VIZSGALOCK");
-            vlBtn.Margin = new Thickness(20, 0, 0, 0);
-            vlBtn.Click += async (s, e) => await ToggleVizsgalockAsync();
-            topRow.Children.Add(vlBtn);
-
-            var purgeBtn = MainWindow.MakeRedGhostButton("⚠ VIZSGAPURGE");
-            purgeBtn.Margin = new Thickness(10, 0, 0, 0);
-            purgeBtn.Click += async (s, e) => await PurgeAsync();
-            topRow.Children.Add(purgeBtn);
-
-            topBar.Child = topRow;
-            dock.Children.Add(topBar);
-
-            _tabs = new TabControl
-            {
-                Margin = new Thickness(10),
-                Background = new SolidColorBrush(Color.FromRgb(0x05, 0x05, 0x05)),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00))
-            };
-
-            _tabs.Items.Add(MakeTab("◧ TERMÉKEK"));
-            _tabs.Items.Add(MakeTab("◈ FELHASZNÁLÓK"));
-            _tabs.Items.Add(MakeTab("📦 RENDELÉSEK"));
-            _tabs.Items.Add(MakeTab("⚠ REPORTOK"));
-
-            dock.Children.Add(_tabs);
-            Content = dock;
-        }
-
-        private TabItem MakeTab(string header)
-        {
-            var tab = new TabItem
-            {
-                Header = header,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x1F)),
-                Background = new SolidColorBrush(Color.FromRgb(0x0F, 0x0F, 0x0F)),
-                FontWeight = FontWeights.Bold
-            };
-            tab.Content = new DataGrid
-            {
-                Background = new SolidColorBrush(Color.FromRgb(0x0F, 0x0F, 0x0F)),
-                Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(0x29, 0xFF, 0x8C, 0x00)),
-                BorderThickness = new Thickness(1),
-                AutoGenerateColumns = true,
-                IsReadOnly = true,
-                CanUserAddRows = false,
-                CanUserDeleteRows = false,
-                SelectionMode = DataGridSelectionMode.Single,
-                RowBackground = new SolidColorBrush(Color.FromRgb(0x0F, 0x0F, 0x0F)),
-                AlternatingRowBackground = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A))
-            };
-            return tab;
-        }
-
-        private DataGrid GetGrid(int idx) => (DataGrid)((TabItem)_tabs.Items[idx]).Content;
-
-        private async Task LoadDataAsync()
-        {
-            try
-            {
-                // Termékek
-                var items = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
-                    @"SELECT i.id, i.title, u.username AS elado, i.price AS ar,
-                             CASE WHEN i.sold THEN 'Elkelt' ELSE 'Aktív' END AS allapot,
-                             i.created_at AS letrehozva
-                      FROM items i JOIN users u ON i.user_id=u.id
-                      ORDER BY i.created_at DESC"
-                );
-                GetGrid(0).ItemsSource = items.Select(i => new
-                {
-                    id = i["id"],
-                    title = i["title"],
-                    elado = i["elado"],
-                    ar = i["ar"],
-                    allapot = i["allapot"],
-                    letrehozva = i["letrehozva"]
-                }).ToList();
-
-                // Felhasználók
-                var users = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
-                    @"SELECT u.id, u.username, u.email,
-                             CASE WHEN a.user_id IS NOT NULL THEN 'Admin' ELSE 'User' END AS szerepkor,
-                             COUNT(i.id) AS hirdetesek,
-                             u.created_at AS regisztralt
-                      FROM users u
-                      LEFT JOIN admins a ON u.id=a.user_id
-                      LEFT JOIN items i ON u.id=i.user_id
-                      GROUP BY u.id, u.username, u.email, a.user_id, u.created_at
-                      ORDER BY u.created_at DESC"
-                );
-                GetGrid(1).ItemsSource = users.Select(u => new
-                {
-                    id = u["id"],
-                    username = u["username"],
-                    email = u["email"],
-                    szerepkor = u["szerepkor"],
-                    hirdetesek = u["hirdetesek"],
-                    regisztralt = u["regisztralt"]
-                }).ToList();
-
-                // Rendelések
-                var orders = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
-                    @"SELECT o.id, i.title AS termek, b.username AS vevo, s.username AS elado,
-                             i.price AS ar, o.status AS allapot,
-                             o.payment_method AS fizetes, o.created_at AS letrehozva
-                      FROM orders o
-                      JOIN items i ON o.item_id=i.id
-                      JOIN users b ON o.buyer_id=b.id
-                      JOIN users s ON o.seller_id=s.id
-                      ORDER BY o.created_at DESC"
-                );
-                GetGrid(2).ItemsSource = orders.Select(o => new
-                {
-                    id = o["id"],
-                    termek = o["termek"],
-                    vevo = o["vevo"],
-                    elado = o["elado"],
-                    ar = o["ar"],
-                    allapot = o["allapot"],
-                    fizetes = o["fizetes"],
-                    letrehozva = o["letrehozva"]
-                }).ToList();
-
-                // Reportok
-                try
-                {
-                    var reports = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
-                        @"SELECT r.id, 'termek' AS tipus, r.item_id,
-                                 i.title AS targy, rep.username AS bejelento,
-                                 own.username AS celpont, r.reason AS ok,
-                                 r.status AS allapot, r.created_at AS letrehozva
-                          FROM reports r
-                          JOIN items i ON r.item_id=i.id
-                          JOIN users rep ON r.user_id=rep.id
-                          JOIN users own ON i.user_id=own.id
-                          ORDER BY r.created_at DESC"
-                    );
-                    GetGrid(3).ItemsSource = reports.Select(r => new
-                    {
-                        id = r["id"],
-                        tipus = r["tipus"],
-                        item_id = r["item_id"],
-                        targy = r["targy"],
-                        bejelento = r["bejelento"],
-                        celpont = r["celpont"],
-                        ok = r["ok"],
-                        allapot = r["allapot"],
-                        letrehozva = r["letrehozva"]
-                    }).ToList();
-                }
-                catch { GetGrid(3).ItemsSource = null; }
-            }
-            catch (Exception ex) { MessageBox.Show("Adatbázis hiba: " + ex.Message); }
-        }
-
-        private async Task ToggleVizsgalockAsync()
-        {
-            if (MessageBox.Show("Biztosan átkapcsolod a VIZSGALOCK állapotát?", "Megerősítés",
-                MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
-            {
-                try
-                {
-                    bool cur = await _mw.CheckVizsgalockAsync();
-                    await _mw.ApiExecuteAsync(
-                        "UPDATE vizsgalock_settings SET is_locked=@p0 WHERE id=1",
-                        new object[] { !cur }
-                    );
-                    MessageBox.Show($"VIZSGALOCK: {(!cur ? "BEKAPCSOLVA" : "KIKAPCSOLVA")}",
-                        "Info", MessageBoxButton.OK, MessageBoxImage.Information);
-                }
-                catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
-            }
-        }
-
-        private async Task PurgeAsync()
-        {
-            if (MessageBox.Show(
-                "Ez véglegesen TÖRLI az összes nem-admin felhasználót (kivéve: gabi, martin, cuci, admin)!\nBiztosan?",
-                "VIZSGAPURGE", MessageBoxButton.YesNo, MessageBoxImage.Error) == MessageBoxResult.Yes)
-            {
-                try
-                {
-                    await _mw.ApiExecuteAsync(
-                        @"DELETE FROM users
-                          WHERE LOWER(username) NOT IN ('gabi','martin','cuci','admin')
-                            AND id NOT IN (SELECT user_id FROM admins)",
-                        null,
-                        "delete"
-                    );
-                    MessageBox.Show("Purge kész!", "Kész", MessageBoxButton.OK, MessageBoxImage.Information);
-                    await LoadDataAsync();
-                }
-                catch (Exception ex) { MessageBox.Show("Hiba: " + ex.Message); }
-            }
         }
     }
 
@@ -2164,7 +3041,7 @@ namespace cucisstuff
                 Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE8)),
                 BorderThickness = new Thickness(0)
             };
-            _partnersList.SelectionChanged += async (s, e) =>
+            _partnersList.SelectionChanged += async (s2, e2) =>
             {
                 if (_partnersList.SelectedItem is PartnerViewModel p)
                 {
@@ -2220,13 +3097,13 @@ namespace cucisstuff
                 Padding = new Thickness(14, 10, 14, 10),
                 VerticalAlignment = VerticalAlignment.Center
             };
-            _msgInput.KeyDown += async (s, e) => { if (e.Key == Key.Return && !Keyboard.IsKeyDown(Key.LeftShift)) { await SendAsync(); e.Handled = true; } };
+            _msgInput.KeyDown += async (s3, e3) => { if (e3.Key == Key.Return && !Keyboard.IsKeyDown(Key.LeftShift)) { await SendAsync(); e3.Handled = true; } };
             Grid.SetColumn(_msgInput, 0);
 
             var sendBtn = MainWindow.MakeOrangeButton("➤");
             sendBtn.Width = 44; sendBtn.Height = 44;
             sendBtn.Margin = new Thickness(8, 0, 0, 0);
-            sendBtn.Click += async (s, e) => await SendAsync();
+            sendBtn.Click += async (s4, e4) => await SendAsync();
             Grid.SetColumn(sendBtn, 1);
 
             inputGrid.Children.Add(_msgInput);
@@ -2269,8 +3146,7 @@ namespace cucisstuff
                       WHERE u.id != @p3
                       GROUP BY u.id, u.username
                       ORDER BY last_msg DESC",
-                    new object[] { MainWindow.LoggedInUserId, MainWindow.LoggedInUserId, MainWindow.LoggedInUserId, MainWindow.LoggedInUserId }
-                );
+                    new object[] { MainWindow.LoggedInUserId, MainWindow.LoggedInUserId, MainWindow.LoggedInUserId, MainWindow.LoggedInUserId });
 
                 foreach (var r in partners)
                 {
@@ -2331,7 +3207,7 @@ namespace cucisstuff
                 item.Child = row;
 
                 var li = new ListBoxItem { Content = item, Background = Brushes.Transparent, Tag = p };
-                li.Selected += async (s, e) => { if (li.Tag is PartnerViewModel pv) { _partnerId = pv.Id; await LoadMessagesAsync(pv.Id); } };
+                li.Selected += async (s5, e5) => { if (li.Tag is PartnerViewModel pv) { _partnerId = pv.Id; await LoadMessagesAsync(pv.Id); } };
                 _partnersList.Items.Add(li);
             }
         }
@@ -2343,8 +3219,7 @@ namespace cucisstuff
             {
                 await _mw.ApiExecuteAsync(
                     "UPDATE uzenetek SET is_read=1 WHERE sender_id=@p0 AND receiver_id=@p1 AND is_read=0",
-                    new object[] { partnerId, MainWindow.LoggedInUserId }
-                );
+                    new object[] { partnerId, MainWindow.LoggedInUserId });
 
                 var messages = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
                     @"SELECT id, sender_id, message, sent_at
@@ -2352,8 +3227,7 @@ namespace cucisstuff
                       WHERE (sender_id=@p0 AND receiver_id=@p1)
                          OR (sender_id=@p2 AND receiver_id=@p3)
                       ORDER BY sent_at ASC",
-                    new object[] { MainWindow.LoggedInUserId, partnerId, partnerId, MainWindow.LoggedInUserId }
-                );
+                    new object[] { MainWindow.LoggedInUserId, partnerId, partnerId, MainWindow.LoggedInUserId });
 
                 foreach (var r in messages)
                 {
@@ -2373,7 +3247,7 @@ namespace cucisstuff
             var outer = new Grid { Margin = new Thickness(0, 3, 0, 3) };
             var bubble = new Border
             {
-                CornerRadius = new CornerRadius(isOwn ? 14 : 14),
+                CornerRadius = new CornerRadius(14),
                 Padding = new Thickness(14, 10, 14, 10),
                 MaxWidth = 400,
                 HorizontalAlignment = isOwn ? HorizontalAlignment.Right : HorizontalAlignment.Left
@@ -2415,8 +3289,7 @@ namespace cucisstuff
                 await _mw.ApiCallAsync(
                     "INSERT INTO uzenetek(id,sender_id,receiver_id,message) VALUES(@p0,@p1,@p2,@p3)",
                     new object[] { msgId, MainWindow.LoggedInUserId, _partnerId.Value, _msgInput.Text },
-                    "insert"
-                );
+                    "insert");
                 _msgInput.Clear();
                 await LoadMessagesAsync(_partnerId.Value);
                 await LoadPartnersAsync();
@@ -2520,7 +3393,7 @@ namespace cucisstuff
             Grid.SetRow(submitBtn, 4);
             Grid.SetColumnSpan(submitBtn, 2);
             formGrid.Children.Add(submitBtn);
-            submitBtn.Click += async (s, e) => await SubmitAsync();
+            submitBtn.Click += async (s2, e2) => await SubmitAsync();
 
             stack.Children.Add(formGrid);
             sv.Content = stack;
@@ -2552,8 +3425,7 @@ namespace cucisstuff
                     @"SELECT i.id, i.title, i.price, i.sold, i.user_id, u.username
                       FROM items i JOIN users u ON i.user_id=u.id
                       WHERE i.id=@p0",
-                    new object[] { _itemId }
-                );
+                    new object[] { _itemId });
 
                 if (items.Count > 0)
                 {
@@ -2607,13 +3479,11 @@ namespace cucisstuff
                       VALUES(@p0,@p1,@p2,@p3,'pending',
                         @p4,@p5,@p6,@p7,@p8,@p9,'cod')",
                     new object[] { orderId, MainWindow.LoggedInUserId, _item.SellerId, _itemId, name, email, phone, zip, city, addr },
-                    "insert"
-                );
+                    "insert");
 
                 await _mw.ApiExecuteAsync(
                     "UPDATE items SET sold=1 WHERE id=@p0",
-                    new object[] { _itemId }
-                );
+                    new object[] { _itemId });
 
                 MessageBox.Show("Rendelés leadva!", "Siker", MessageBoxButton.OK, MessageBoxImage.Information);
                 _mw.NavigateToMain();
