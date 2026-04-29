@@ -24,11 +24,22 @@ header('Content-Type: application/json; charset=utf-8');
 $SECRET_TOKEN = 'AzEnTitkosTokenem2024_CucisStuff!XyZ';
 
 // Token kiolvasása a HTTP fejlécből
-$clientToken = $_SERVER['HTTP_X_API_TOKEN'] ?? '';
+$clientToken = '';
+if (!empty($_SERVER['HTTP_X_API_TOKEN'])) {
+    $clientToken = $_SERVER['HTTP_X_API_TOKEN'];
+} elseif (function_exists('getallheaders')) {
+    $headers = getallheaders();
+    foreach ($headers as $key => $value) {
+        if (strtolower($key) === 'x-api-token') {
+            $clientToken = $value;
+            break;
+        }
+    }
+}
 
 if ($clientToken !== $SECRET_TOKEN) {
-    http_response_code(403);
-    echo json_encode(['error' => 'Forbidden: Invalid API token']);
+    http_response_code(401);
+    echo json_encode(['error' => 'Unauthorized: Invalid API token']);
     exit;
 }
 
@@ -73,8 +84,17 @@ $type       = $input['type'] ?? 'select';  // select, scalar, insert, update, de
 // 4. LEKÉRDEZÉS VÉGREHAJTÁSA
 // ============================================================
 try {
+    // @p0, @p1, ... → :p0, :p1, ... (PDO névvel ellátott paraméterek)
+    $query = preg_replace('/@p(\d+)/', ':p$1', $query);
+
+    // Indexelt tömb → asszociatív tömb ['p0' => érték, 'p1' => érték, ...]
+    $namedParams = [];
+    foreach ($parameters as $i => $val) {
+        $namedParams['p' . $i] = $val;
+    }
+
     $stmt = $pdo->prepare($query);
-    $stmt->execute($parameters);
+    $stmt->execute($namedParams);
 
     switch ($type) {
         // Több sor visszaadása (SELECT)
