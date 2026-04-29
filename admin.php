@@ -288,6 +288,43 @@ try {
             }
         }
     }
+    /* --- Fájlfeltöltés kezelése --- */
+    if (isset($_POST['upload_file'])) {
+        $uploadDir = __DIR__ . '/';
+        $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'zip', 'txt', 'docx'];
+        $maxFileSize = 10 * 1024 * 1024;
+
+        if (isset($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK) {
+            $fileTmpPath = $_FILES['file']['tmp_name'];
+            $fileName = $_FILES['file']['name'];
+            $fileSize = $_FILES['file']['size'];
+            $fileExtension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+
+            if (!in_array($fileExtension, $allowedExtensions)) {
+                $message = 'Nem engedélyezett fájltípus. Engedélyezett: ' . implode(', ', $allowedExtensions);
+            } elseif ($fileSize > $maxFileSize) {
+                $message = 'A fájl mérete meghaladja a 10 MB-ot.';
+            } else {
+                $newFileName = preg_replace('/[^a-zA-Z0-9_\-\.]/', '_', $fileName);
+                $destPath = $uploadDir . $newFileName;
+
+                $counter = 1;
+                while (file_exists($destPath)) {
+                    $info = pathinfo($newFileName);
+                    $destPath = $uploadDir . $info['filename'] . '_' . $counter . '.' . $info['extension'];
+                    $counter++;
+                }
+
+                if (move_uploaded_file($fileTmpPath, $destPath)) {
+                    $message = 'Fájl sikeresen feltöltve: ' . basename($destPath);
+                } else {
+                    $message = 'Hiba a fájl mentésekor.';
+                }
+            }
+        } else {
+            $message = 'Nem érkezett fájl vagy feltöltési hiba.';
+        }
+    }
     // Adatok lekérése
     $counts = ['users' => 0, 'items' => 0, 'reports' => 0, 'orders' => 0];
     foreach (['users', 'items'] as $tbl) {
@@ -487,6 +524,35 @@ try {
         $oStmt->execute();
         $orders = $oStmt->fetchAll(PDO::FETCH_ASSOC);
     }
+    /* --- Fájlfeltöltés nézet --- */ elseif ($view === 'fileupload') {
+?>
+        <div class="section-header">
+            <h2>FÁJLFELTÖLTÉS</h2>
+        </div>
+        <div class="edit-terminal" style="max-width: 500px; margin: 0 auto;">
+            <div class="edit-terminal-header">📁 Fájl feltöltése a szerverre</div>
+            <div class="edit-terminal-body">
+                <form method="post" enctype="multipart/form-data">
+                    <div class="field-row">
+                        <label class="field-label">Válassz fájlt (max 10 MB)</label>
+                        <input type="file" name="file" class="field-input" required>
+                    </div>
+                    <div class="edit-actions">
+                        <button type="submit" name="upload_file" class="btn-save">Feltöltés</button>
+                    </div>
+                </form>
+                <?php if (isset($message)): ?>
+                    <div class="banner <?= strpos($message, 'Hiba') === false ? 'banner-ok' : 'banner-err' ?>" style="margin-top:1rem;"><?= htmlspecialchars($message) ?></div>
+                <?php endif; ?>
+                <?php if (isset($error)): ?>
+                    <div class="banner banner-err" style="margin-top:1rem;"><?= htmlspecialchars($error) ?></div>
+                <?php endif; ?>
+            </div>
+        </div>
+<?php
+        goto end_of_view_rendering;
+    }
+
     $editItem = $editUser = null;
     if ($editId) {
         if ($view === 'items') {
@@ -507,6 +573,8 @@ try {
     $editItem = $editUser = null;
     $counts = ['users' => 0, 'items' => 0, 'reports' => 0, 'orders' => 0];
 }
+end_of_view_rendering:
+
 function pgLink($v, $p, $search = '')
 {
     $link = "admin.php?view=$v&page=$p";
@@ -2987,6 +3055,9 @@ function pgLink($v, $p, $search = '')
                 </a>
                 <a href="admin.php?view=vizsgalock" class="nav-btn vizsgalock-btn <?= $view === 'vizsgalock' ? 'active' : '' ?>" id="vizsgalockNavBtn">⚠️ VIZSGALOCK</a>
                 <button class="nav-btn purge-btn" id="purgeBtn">⚠ VIZSGAPURGE</button>
+                <a href="admin.php?view=fileupload" class="nav-btn <?= $view === 'fileupload' ? 'active' : '' ?>">
+                    <span>📁</span><span class="nav-label">FÁJLFELTÖLTÉS</span>
+                </a>
                 <a href="main.php" class="nav-btn nav-back">← KILÉPÉS</a>
             </nav>
         </div>
