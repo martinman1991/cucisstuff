@@ -977,7 +977,7 @@ namespace cucisstuff
                 var items = await _mw.ApiSelectAsync<Dictionary<string, JsonElement>>(
                     @"SELECT i.id, i.title, i.price, i.description, i.created_at, i.sold,
                              i.user_id, u.username AS seller_name,
-                             (SELECT image_path FROM item_images WHERE item_id=i.id AND is_primary=1 LIMIT 1) AS first_image
+                             (SELECT item_id FROM item_images WHERE item_id=i.id LIMIT 1) AS first_image
                       FROM items i
                       JOIN users u ON i.user_id = u.id
                       WHERE i.sold = FALSE
@@ -1037,26 +1037,21 @@ namespace cucisstuff
 
             var stack = new StackPanel { Margin = new Thickness(8) };
 
-            if (!string.IsNullOrEmpty(item.FirstImagePath) && File.Exists(item.FirstImagePath))
+            if (!string.IsNullOrEmpty(item.FirstImagePath))
             {
                 try
                 {
-                    var bmp = new BitmapImage();
-                    bmp.BeginInit();
-                    bmp.UriSource = new Uri(Path.GetFullPath(item.FirstImagePath), UriKind.Absolute);
-                    bmp.CacheOption = BitmapCacheOption.OnLoad;
-                    bmp.DecodePixelWidth = 164;
-                    bmp.EndInit();
-                    bmp.Freeze();
-                    stack.Children.Add(new Image
+                    string imageUrl = "https://cuci.local.pepa.hu/" + item.FirstImagePath.Replace("\\", "/").TrimStart('/');
+                    var img = new Image
                     {
-                        Source = bmp,
                         Width = 164,
                         Height = 164,
                         Stretch = Stretch.UniformToFill,
                         Margin = new Thickness(-8, -8, -8, 4),
-                        HorizontalAlignment = HorizontalAlignment.Center
-                    });
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        Source = new BitmapImage(new Uri(imageUrl, UriKind.Absolute))
+                    };
+                    stack.Children.Add(img);
                 }
                 catch { stack.Children.Add(MakeImagePlaceholder()); }
             }
